@@ -1,0 +1,272 @@
+@import 'tailwindcss';
+
+/* El modo oscuro se activa con [data-theme="dark"] en <html> (ver index.html y use-theme). */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* =========================================================
+   TOKENS DE DISEÑO — única fuente de verdad visual.
+   Paleta base (brief): Azul Pacífico #10263D · Verde petróleo #167D83 ·
+   Cobre #C18A58 · Marfil #F5F1E8 · Blanco frío #F8FAFC · Grafito #17212F.
+   Los tonos "-ink" (texto) están ajustados para contraste AA sobre su fondo:
+   el cobre y el verde petróleo puros no alcanzan 4.5:1 como texto pequeño.
+   ========================================================= */
+:root {
+  color-scheme: light;
+
+  /* Superficies */
+  --canvas: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f3f5f8;
+  --sand: #f5f1e8;
+  --sand-ink: #6b5a3e;
+
+  /* Texto y bordes */
+  --ink: #17212f;
+  --ink-muted: #556275;
+  --ink-subtle: #7a8697;
+  --line: #e3e8ef;
+  --line-strong: #cbd3de;
+
+  /* Acción principal */
+  --brand: #10263d;
+  --brand-hover: #1b3a59;
+  --brand-ink: #f8fafc;
+
+  /* Acentos */
+  --teal: #167d83;
+  --teal-ink: #0f6a70;
+  --teal-soft: #e3f2f2;
+  --copper: #c18a58;
+  --copper-ink: #8a5a2e;
+  --copper-soft: #f6ece0;
+
+  /* Semánticos (significado idéntico en todas las pantallas) */
+  --success: #2f8a55;
+  --success-ink: #1e6b3e;
+  --success-soft: #e5f3ea;
+  --warning: #d9a23b;
+  --warning-ink: #8f5b0a;
+  --warning-soft: #fbf0d9;
+  --danger: #d92d20;
+  --danger-ink: #b42318;
+  --danger-soft: #fdecea;
+  --info: #3b6fc4;
+  --info-ink: #2455a4;
+  --info-soft: #e6eefa;
+  --neutral: #8795a8;
+  --neutral-ink: #475467;
+  --neutral-soft: #edf0f4;
+
+  /* Navegación lateral */
+  --side: #10263d;
+  --side-ink: #dbe4ee;
+  --side-muted: #8fa3b8;
+  --side-hover: rgb(245 241 232 / 0.07);
+  --side-active: rgb(245 241 232 / 0.11);
+  --side-line: rgb(245 241 232 / 0.1);
+
+  /* Gráficos */
+  --chart-1: #167d83;
+  --chart-2: #10263d;
+  --chart-3: #c18a58;
+  --chart-4: #9aabbd;
+  --chart-5: #d92d20;
+  --chart-grid: #e8edf3;
+
+  --ring: #167d83;
+  --sh-card: 0 1px 2px rgb(16 38 61 / 0.05);
+  --sh-pop: 0 14px 36px -10px rgb(16 38 61 / 0.28), 0 2px 8px rgb(16 38 61 / 0.08);
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --canvas: #0a141f;
+  --surface: #0f1d2c;
+  --surface-2: #142638;
+  --sand: #1c2a38;
+  --sand-ink: #d9c9a8;
+
+  --ink: #e8eef4;
+  --ink-muted: #9dafc1;
+  --ink-subtle: #6f8297;
+  --line: #223548;
+  --line-strong: #345069;
+
+  --brand: #167d83;
+  --brand-hover: #1b9097;
+  --brand-ink: #ffffff;
+
+  --teal: #35b6bc;
+  --teal-ink: #4cc3c9;
+  --teal-soft: rgb(53 182 188 / 0.14);
+  --copper: #d9a674;
+  --copper-ink: #e3b98f;
+  --copper-soft: rgb(217 166 116 / 0.14);
+
+  --success: #4fc07f;
+  --success-ink: #66d393;
+  --success-soft: rgb(79 192 127 / 0.13);
+  --warning: #f2be63;
+  --warning-ink: #f4c874;
+  --warning-soft: rgb(242 190 99 / 0.13);
+  --danger: #f0746a;
+  --danger-ink: #ff8f83;
+  --danger-soft: rgb(240 116 106 / 0.14);
+  --info: #6f9bea;
+  --info-ink: #93b8f5;
+  --info-soft: rgb(111 155 234 / 0.15);
+  --neutral: #8397ad;
+  --neutral-ink: #b0bece;
+  --neutral-soft: rgb(131 151 173 / 0.14);
+
+  --side: #0b1b2c;
+  --side-ink: #dbe4ee;
+  --side-muted: #7f95ab;
+  --side-hover: rgb(245 241 232 / 0.06);
+  --side-active: rgb(245 241 232 / 0.1);
+  --side-line: rgb(245 241 232 / 0.08);
+
+  --chart-1: #35b6bc;
+  --chart-2: #8fb4d9;
+  --chart-3: #d9a674;
+  --chart-4: #4e657c;
+  --chart-5: #f0746a;
+  --chart-grid: #1d3043;
+
+  --ring: #4cc3c9;
+  --sh-card: 0 1px 2px rgb(0 0 0 / 0.35);
+  --sh-pop: 0 18px 44px -10px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.35);
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-sand: var(--sand);
+  --color-sand-ink: var(--sand-ink);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-subtle: var(--ink-subtle);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-ink: var(--brand-ink);
+  --color-teal: var(--teal);
+  --color-teal-ink: var(--teal-ink);
+  --color-teal-soft: var(--teal-soft);
+  --color-copper: var(--copper);
+  --color-copper-ink: var(--copper-ink);
+  --color-copper-soft: var(--copper-soft);
+  --color-success: var(--success);
+  --color-success-ink: var(--success-ink);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-ink: var(--warning-ink);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-ink: var(--danger-ink);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-ink: var(--info-ink);
+  --color-info-soft: var(--info-soft);
+  --color-neutral: var(--neutral);
+  --color-neutral-ink: var(--neutral-ink);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-side: var(--side);
+  --color-side-ink: var(--side-ink);
+  --color-side-muted: var(--side-muted);
+  --color-side-hover: var(--side-hover);
+  --color-side-active: var(--side-active);
+  --color-side-line: var(--side-line);
+
+  /* Jerarquía de radios: controles < tarjetas < paneles destacados */
+  --radius-control: 0.625rem;
+  --radius-card: 0.875rem;
+  --radius-panel: 1.125rem;
+
+  --shadow-card: var(--sh-card);
+  --shadow-pop: var(--sh-pop);
+
+  --animate-pop: pop 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-fade: fade 0.16s ease-out;
+  --animate-shimmer: shimmer 1.4s ease-in-out infinite;
+
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(-3px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes shimmer {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+}
+
+/* ---------- Base ---------- */
+@layer base {
+  html {
+    background-color: var(--canvas);
+    -webkit-text-size-adjust: 100%;
+    scroll-padding-top: 5rem;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    font-feature-settings: 'cv11', 'ss03';
+    -webkit-font-smoothing: antialiased;
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+  h1, h2, h3, h4 { letter-spacing: -0.015em; text-wrap: balance; }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px; }
+  ::selection { background: color-mix(in srgb, var(--teal) 28%, transparent); }
+  ::placeholder { color: var(--ink-subtle); }
+  button, [role='button'], summary, select, input[type='checkbox'], input[type='radio'] { cursor: pointer; }
+  button:disabled, select:disabled { cursor: not-allowed; }
+  /* Cifras tabulares en cualquier importe */
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum', 'cv11', 'ss03'; }
+  input[type='number']::-webkit-inner-spin-button { opacity: 0.4; }
+}
+
+/* ---------- Motivo escalonado (sutil, inspirado en la arquitectura de la costa histórica) ---------- */
+.pattern-steps {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cpath d='M0 48h14V34h14V20h14V6h14' fill='none' stroke='%23F5F1E8' stroke-opacity='.075' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-size: 56px 56px;
+}
+
+/* ---------- Impresión del cronograma ---------- */
+.print-only { display: none; }
+@media print {
+  @page { margin: 14mm; }
+  html, body { background: #fff !important; color: #000 !important; }
+  .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  [data-app-shell] { padding: 0 !important; }
+  main { padding: 0 !important; }
+  .print-card { border: 0 !important; box-shadow: none !important; background: #fff !important; }
+  table { font-size: 11px; }
+  tr { break-inside: avoid; }
+  a { color: inherit !important; text-decoration: none !important; }
+}
+
+/* ---------- Movimiento reducido: las animaciones nunca son imprescindibles ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
