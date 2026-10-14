@@ -2,7 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'motion/react';
 import { Check, ChevronDown, Circle, Search, UserPlus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefinitionList } from '@/components/data-display/definition-list';
 import { LimitMeter } from '@/components/data-display/limit-meter';
@@ -12,7 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
+import { DatePicker } from '@/components/ui/date-picker';
+import { FormSection } from '@/components/ui/form-section';
 import { Input, Textarea } from '@/components/ui/input';
+import { NumericInput } from '@/components/ui/numeric-input';
 import { Meter } from '@/components/ui/meter';
 import { Modal } from '@/components/ui/modal';
 import { Stepper } from '@/components/ui/stepper';
@@ -52,7 +55,7 @@ export default function RequestPage() {
     defaultValues: { clienteId: inicial, monto: 2000, plazo: 12, desembolso: CFG.hoy, observaciones: '' },
     mode: 'onChange'
   });
-  const { register, setValue, trigger, watch, formState: { errors, isDirty } } = form;
+  const { register, control, setValue, trigger, watch, formState: { errors, isDirty } } = form;
   const valores = watch();
 
   const cliente = getCliente(db, valores.clienteId);
@@ -94,10 +97,15 @@ export default function RequestPage() {
         {cliente
           ? <div className="mt-4 flex items-center gap-3"><Avatar nombre={cliente.nombre} tipo={cliente.tipo} /><div className="min-w-0"><p className="truncate text-sm font-medium text-ink">{cliente.nombre}</p><p className="num text-xs text-ink-muted">{cliente.tipo} · {cliente.doc}</p></div></div>
           : <p className="mt-4 rounded-control bg-surface-2 px-3 py-2.5 text-sm text-ink-muted">Selecciona un cliente para comenzar.</p>}
-        <DefinitionList compact className="mt-3" items={[
+        <div className="mt-4 rounded-control bg-surface-2 px-4 py-3">
+          <p className="text-[0.8125rem] text-ink-muted">Cuota mensual estimada</p>
+          <p className="num mt-0.5 text-2xl font-semibold text-ink">{sim ? money(sim.cuota) : '—'}</p>
+          <p className="num mt-0.5 text-[0.8125rem] text-ink-muted">{sim ? `${valores.plazo} cuotas · total ${money(sim.total)}` : 'Completa monto y plazo'}</p>
+        </div>
+        <DefinitionList compact className="mt-2" items={[
           { label: 'Capital solicitado', value: money(montoNum) }, { label: 'Tasa aplicada', value: `TEA ${(CFG.tea * 100).toFixed(0)} %` },
-          { label: 'Cuota estimada', value: sim ? money(sim.cuota) : '—', strong: true }, { label: 'Intereses estimados', value: sim ? money(sim.interes) : '—' },
-          { label: 'Total contractual', value: sim ? money(sim.total) : '—', strong: true }, { label: 'Primer vencimiento', value: sim ? fecha(sim.primera) : '—' },
+          { label: 'Intereses estimados', value: sim ? money(sim.interes) : '—' }, { label: 'Total contractual', value: sim ? money(sim.total) : '—' },
+          { label: 'Primer vencimiento', value: sim ? fecha(sim.primera) : '—' },
           { label: 'Capital acumulado tras el préstamo', value: money(deuda + montoNum) }
         ]} />
         <div className="mt-4">
@@ -166,19 +174,33 @@ export default function RequestPage() {
                   {paso === 2 && (
                     <>
                       <h2 className="text-lg font-semibold text-ink">Condiciones del préstamo</h2>
-                      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                        <Field label="Monto solicitado" error={errors.monto?.message} hint={`Mínimo ${money(CFG.minMonto)}. Disponible: ${money(capacidadDisponible(deuda))}`}>
-                          <Input type="number" inputMode="decimal" step="100" min={CFG.minMonto} prefix="S/" {...register('monto', { valueAsNumber: true })} />
-                        </Field>
-                        <Field label={`Plazo en meses (${CFG.plazoMin}–${CFG.plazoMax})`} error={errors.plazo?.message}>
-                          <Input type="number" inputMode="numeric" min={CFG.plazoMin} max={CFG.plazoMax} step="1" suffix="meses" {...register('plazo', { valueAsNumber: true })} />
-                        </Field>
-                        <Field label="Fecha de desembolso" error={errors.desembolso?.message}><Input type="date" {...register('desembolso')} /></Field>
-                        <Field label="Primera cuota (un mes después)"><Input readOnly value={valores.desembolso ? fecha(addMonths(valores.desembolso, 1)) : '—'} /></Field>
-                        <Field label="Tasa efectiva anual"><Input readOnly value={`${(CFG.tea * 100).toFixed(0)} %`} /></Field>
-                        <Field label="Asesor responsable"><Input readOnly value={usuario.nombre} /></Field>
+                      <div className="mt-5 space-y-5">
+                        <FormSection title="Importe y plazo">
+                          <Controller name="monto" control={control} render={({ field }) => (
+                            <Field label="Monto solicitado" error={errors.monto?.message} hint={`Mínimo ${money(CFG.minMonto)}. Disponible: ${money(capacidadDisponible(deuda))}`}>
+                              <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={field.onChange} onBlur={field.onBlur} decimals={2} prefix="S/" placeholder="0.00" />
+                            </Field>
+                          )} />
+                          <Controller name="plazo" control={control} render={({ field }) => (
+                            <Field label={`Plazo (${CFG.plazoMin}–${CFG.plazoMax} meses)`} error={errors.plazo?.message}>
+                              <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={field.onChange} onBlur={field.onBlur} suffix="meses" />
+                            </Field>
+                          )} />
+                        </FormSection>
+                        <FormSection title="Fechas" description="La primera cuota vence un mes después del desembolso.">
+                          <Controller name="desembolso" control={control} render={({ field }) => (
+                            <Field label="Fecha de desembolso" error={errors.desembolso?.message}>
+                              <DatePicker name={field.name} ref={field.ref} value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
+                            </Field>
+                          )} />
+                          <Field label="Primera cuota" hint="Calculada automáticamente"><Input derived value={valores.desembolso ? fecha(addMonths(valores.desembolso, 1)) : '—'} /></Field>
+                        </FormSection>
+                        <FormSection title="Condiciones y responsable">
+                          <Field label="Tasa efectiva anual" hint="Fijada por política"><Input derived value={`${(CFG.tea * 100).toFixed(0)} %`} /></Field>
+                          <Field label="Asesor responsable" hint="Usuario en sesión"><Input derived value={usuario.nombre} /></Field>
+                        </FormSection>
+                        <Field label="Observaciones" optional><Textarea rows={2} {...register('observaciones')} /></Field>
                       </div>
-                      <Field label="Observaciones" optional className="mt-4"><Textarea rows={2} {...register('observaciones')} /></Field>
                     </>
                   )}
 

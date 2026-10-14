@@ -237,7 +237,9 @@
   button:disabled, select:disabled { cursor: not-allowed; }
   /* Cifras tabulares en cualquier importe */
   .num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum', 'cv11', 'ss03'; }
-  input[type='number']::-webkit-inner-spin-button { opacity: 0.4; }
+  /* Sin flechas nativas de incremento: los campos numéricos usan NumericInput o teclado */
+  input[type='number'] { appearance: textfield; -moz-appearance: textfield; }
+  input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 }
 
 /* ---------- Motivo escalonado (sutil, inspirado en la arquitectura de la costa histórica) ---------- */

@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from 'motion/react';
+import { motion } from 'motion/react';
 import { ArrowUpRight, CalendarClock, CircleAlert, FilePlus2, Plus, ShieldCheck } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -38,11 +38,12 @@ const Figura = ({ etiqueta, resumen, children, className }: { etiqueta: string; 
   </figure>
 );
 
-function Stat({ label, valor, pie, tono }: { label: string; valor: ReactNode; pie?: ReactNode; tono?: 'danger' }) {
+/** `principal`: métricas financieras centrales (mayor presencia). El resto son indicadores operativos, más compactos. */
+function Stat({ label, valor, pie, tono, principal, className }: { label: string; valor: ReactNode; pie?: ReactNode; tono?: 'danger'; principal?: boolean; className?: string }) {
   return (
-    <motion.div variants={fadeUp} className="flex min-w-0 flex-col gap-1 bg-surface p-4 sm:p-5">
-      <p className="text-[0.8125rem] text-ink-muted">{label}</p>
-      <p className={cn('truncate text-xl font-semibold text-ink sm:text-[1.375rem]', tono === 'danger' && 'text-danger-ink')}>{valor}</p>
+    <motion.div variants={fadeUp} className={cn('flex min-w-0 flex-col gap-1 bg-surface p-4', principal ? 'max-sm:col-span-2 sm:p-5' : 'sm:p-4', className)}>
+      <p className="text-[0.8125rem] font-medium text-ink-muted">{label}</p>
+      <p className={cn('num truncate font-semibold text-ink', principal ? 'text-[1.625rem] leading-8' : 'text-lg leading-7', tono === 'danger' && 'text-danger-ink')}>{valor}</p>
       <div className="min-h-5 text-xs text-ink-muted">{pie}</div>
     </motion.div>
   );
@@ -52,7 +53,6 @@ export default function DashboardPage() {
   const db = useDb();
   const { usuario } = useAuth();
   const navigate = useNavigate();
-  const reducir = useReducedMotion();
   const cargando = useSimulatedLoading(240);
   const [alcance, setAlcance] = useState<Alcance>('mis');
   const [meses, setMeses] = useState<number>(6);
@@ -87,33 +87,41 @@ export default function DashboardPage() {
           }
           actions={
             <>
-              <Select aria-label="Alcance de los indicadores" value={alcance} onChange={(e) => setAlcance(e.target.value as Alcance)} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
-                {ALCANCES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
-              </Select>
-              <Select aria-label="Periodo de los gráficos" value={meses} onChange={(e) => setMeses(Number(e.target.value))} className="min-w-0 flex-1 sm:w-40 sm:flex-none">
-                {PERIODOS.map((p) => <option key={p} value={p}>Últimos {p} meses</option>)}
-              </Select>
               <Button variant="primary" onClick={() => navigate('/solicitud')}><FilePlus2 className="size-4" />Nueva solicitud</Button>
               <Button onClick={() => setRegistrar(true)}><Plus className="size-4" />Registrar cliente</Button>
             </>
           }
         />
+        <div role="group" aria-label="Filtros del dashboard" className="-mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-2.5">
+          <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+            <span className="shrink-0 text-[0.8125rem] font-medium text-ink-muted">Cartera</span>
+            <Select aria-label="Alcance de los indicadores" value={alcance} onChange={(e) => setAlcance(e.target.value as Alcance)} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
+              {ALCANCES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+            </Select>
+          </label>
+          <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+            <span className="shrink-0 text-[0.8125rem] font-medium text-ink-muted">Período</span>
+            <Select aria-label="Periodo de los gráficos" value={meses} onChange={(e) => setMeses(Number(e.target.value))} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
+              {PERIODOS.map((p) => <option key={p} value={p}>Últimos {p} meses</option>)}
+            </Select>
+          </label>
+        </div>
       </motion.div>
 
       {/* Banda de indicadores: líneas finas en lugar de tarjetas idénticas */}
-      <motion.div variants={stagger(0.04)} className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card lg:grid-cols-6">
-        <Stat label="Total desembolsado" valor={<AnimatedNumber value={d.totalDesembolsado} format={money} />}
+      <motion.div variants={stagger(0.04)} className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3 xl:grid-cols-[repeat(3,minmax(0,1.3fr))_repeat(3,minmax(0,1fr))]">
+        <Stat principal label="Total desembolsado" valor={<AnimatedNumber value={d.totalDesembolsado} format={money} />}
           pie={<span className="flex flex-wrap items-center gap-1.5"><span className="num">Este mes: {money(d.desembolsadoMes)}</span><Trend valor={d.variacionDesembolsos} /></span>} />
+        <Stat principal label="Capital pendiente" valor={<AnimatedNumber value={d.capitalPendiente} format={money} />}
+          pie={<span className="flex flex-wrap items-center gap-1.5"><Trend valor={d.variacionCapital} modo="neutral" />{d.variacionCapital !== null && <span>vs. cierre de {mesPrev}</span>}</span>} />
+        <Stat principal label="Cuotas vencidas" tono={d.vencidas.length ? 'danger' : undefined} valor={<AnimatedNumber value={d.vencidas.length} format={entero} />} pie={d.vencidas.length ? `${money(d.montoVencido)} en cuotas programadas` : 'Sin cuotas vencidas'} />
         <Stat label="Préstamos activos" valor={<AnimatedNumber value={d.prestamosActivos} format={entero} />} pie={`${d.prestamosTotales} en total · ${d.prestamosFinalizados} finalizados`} />
         <Stat label="Clientes registrados" valor={<AnimatedNumber value={d.clientes} format={entero} />} pie={d.clientesNuevosMes ? `${d.clientesNuevosMes} nuevo${d.clientesNuevosMes === 1 ? '' : 's'} este mes` : alcanceLabel} />
-        <Stat label="Capital pendiente" valor={<AnimatedNumber value={d.capitalPendiente} format={money} />}
-          pie={<span className="flex flex-wrap items-center gap-1.5"><Trend valor={d.variacionCapital} modo="neutral" />{d.variacionCapital !== null && <span>vs. cierre de {mesPrev}</span>}</span>} />
-        <Stat label="Cuotas vencidas" tono={d.vencidas.length ? 'danger' : undefined} valor={<AnimatedNumber value={d.vencidas.length} format={entero} />} pie={d.vencidas.length ? `${money(d.montoVencido)} en cuotas programadas` : 'Sin cuotas vencidas'} />
-        <Stat label={`Vencen en ${CFG.diasProxVenc} días`} valor={<AnimatedNumber value={d.proximasVentana.cantidad} format={entero} />} pie={d.proximasVentana.cantidad ? `${money(d.proximasVentana.monto)} en cuotas programadas` : 'Sin vencimientos cercanos'} />
+        <Stat className="max-sm:col-span-2" label={`Vencen en ${CFG.diasProxVenc} días`} valor={<AnimatedNumber value={d.proximasVentana.cantidad} format={entero} />} pie={d.proximasVentana.cantidad ? `${money(d.proximasVentana.monto)} en cuotas programadas` : 'Sin vencimientos cercanos'} />
       </motion.div>
 
       <div className="grid gap-5 lg:grid-cols-12 [&>*]:min-w-0">
-        <motion.div variants={fadeUp} className="lg:col-span-8">
+        <motion.div variants={fadeUp} className="lg:col-span-7 xl:col-span-8">
           <Card className="h-full">
             <CardHeader title="Evolución del capital pendiente" description="Capital de las cuotas sin cobertura histórica, sin intereses futuros" />
             <CardBody className="pt-3">
@@ -125,13 +133,13 @@ export default function DashboardPage() {
                 </div>
               </div>
               <Figura etiqueta="Evolución del capital pendiente" resumen={`Capital pendiente al cierre de cada mes: ${resumenCapital}.`} className="mt-5">
-                <ResponsiveContainer width="100%" height={248}>
+                <ResponsiveContainer width="100%" height={224}>
                   <AreaChart data={d.serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                     <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
                     <XAxis dataKey="mes" tickFormatter={mesCorto} tickLine={false} axisLine={false} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} tickMargin={8} interval="preserveStartEnd" />
                     <YAxis tickFormatter={moneyCompacto} tickLine={false} axisLine={false} width={64} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} domain={[0, 'auto']} />
                     <Tooltip cursor={{ stroke: 'var(--line-strong)' }} content={<ChartTooltip etiqueta={(l) => mesLargo(String(l))} />} />
-                    <Area type="monotone" dataKey="capitalPendiente" name="Capital pendiente" stroke="var(--chart-1)" strokeWidth={2.5} fill="var(--chart-1)" fillOpacity={0.12} dot={{ r: 3, fill: 'var(--surface)', stroke: 'var(--chart-1)', strokeWidth: 2 }} activeDot={{ r: 5 }} isAnimationActive={!reducir} animationDuration={600} />
+                    <Area type="monotone" dataKey="capitalPendiente" name="Capital pendiente" stroke="var(--chart-1)" strokeWidth={2.5} fill="var(--chart-1)" fillOpacity={0.12} dot={{ r: 3, fill: 'var(--surface)', stroke: 'var(--chart-1)', strokeWidth: 2 }} activeDot={{ r: 5 }} isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
               </Figura>
@@ -140,7 +148,7 @@ export default function DashboardPage() {
           </Card>
         </motion.div>
 
-        <motion.div variants={fadeUp} className="lg:col-span-4">
+        <motion.div variants={fadeUp} className="lg:col-span-5 xl:col-span-4">
           <Card className="h-full">
             <CardHeader title="Estado de la cartera" description={`${totalEstados} préstamos · ${alcanceLabel}`} />
             <CardBody>
@@ -151,7 +159,7 @@ export default function DashboardPage() {
                   <Figura etiqueta="Distribución de la cartera por estado" resumen={d.estados.map((e) => `${e.estado}: ${e.cantidad} préstamos`).join('; ')} className="relative mx-auto h-48 w-48">
                     <ResponsiveContainer width="100%" height={192}>
                       <PieChart>
-                        <Pie data={d.estados} dataKey="cantidad" nameKey="estado" innerRadius={62} outerRadius={88} paddingAngle={d.estados.filter((e) => e.cantidad).length > 1 ? 3 : 0} stroke="none" isAnimationActive={!reducir} animationDuration={600}>
+                        <Pie data={d.estados} dataKey="cantidad" nameKey="estado" innerRadius={62} outerRadius={88} paddingAngle={d.estados.filter((e) => e.cantidad).length > 1 ? 3 : 0} stroke="none" isAnimationActive={false}>
                           {d.estados.map((e) => <Cell key={e.estado} fill={COLOR_ESTADO[e.estado]} />)}
                         </Pie>
                       </PieChart>
@@ -163,10 +171,10 @@ export default function DashboardPage() {
                   <ul className="mt-5 space-y-2.5">
                     {d.estados.map((e) => (
                       <li key={e.estado} className="flex items-center gap-3 text-sm">
-                        <i aria-hidden className="size-2.5 rounded-full" style={{ background: COLOR_ESTADO[e.estado] }} />
-                        <span className="flex-1 text-ink-muted">{e.estado}</span>
+                        <i aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: COLOR_ESTADO[e.estado] }} />
+                        <span className="min-w-0 flex-1 text-ink-muted">{e.estado}</span>
                         <span className="num font-semibold text-ink">{e.cantidad}</span>
-                        <span className="num w-28 text-right text-xs text-ink-muted">{e.estado === 'Finalizado' ? '—' : money(e.capital)}</span>
+                        <span className="num w-24 shrink-0 text-right text-xs text-ink-muted">{e.estado === 'Finalizado' ? '—' : money(e.capital)}</span>
                       </li>
                     ))}
                   </ul>
@@ -178,18 +186,18 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-12 [&>*]:min-w-0">
-        <motion.div variants={fadeUp} className="lg:col-span-7">
+        <motion.div variants={fadeUp} className="lg:col-span-6 xl:col-span-7">
           <Card className="h-full">
             <CardHeader title="Préstamos registrados por mes" description={`Capital registrado, últimos ${meses} meses (S/)`} />
             <CardBody className="pt-3">
               <Figura etiqueta="Capital registrado por mes" resumen={d.serie.map((p) => `${mesCorto(p.mes)}: ${money(p.desembolsos)}`).join('. ')}>
-                <ResponsiveContainer width="100%" height={248}>
+                <ResponsiveContainer width="100%" height={224}>
                   <BarChart data={d.serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={4}>
                     <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
                     <XAxis dataKey="mes" tickFormatter={mesCorto} tickLine={false} axisLine={false} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} tickMargin={8} />
                     <YAxis tickFormatter={moneyCompacto} tickLine={false} axisLine={false} width={64} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} />
                     <Tooltip cursor={{ fill: 'var(--surface-2)' }} content={<ChartTooltip etiqueta={(l) => mesLargo(String(l))} />} />
-                    <Bar dataKey="desembolsos" name="Capital registrado" fill="var(--chart-2)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={!reducir} animationDuration={500} />
+                    <Bar dataKey="desembolsos" name="Capital registrado" fill="var(--chart-2)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={false} />
                   </BarChart>
                 </ResponsiveContainer>
               </Figura>
@@ -200,7 +208,7 @@ export default function DashboardPage() {
           </Card>
         </motion.div>
 
-        <motion.div variants={fadeUp} className="lg:col-span-5">
+        <motion.div variants={fadeUp} className="lg:col-span-6 xl:col-span-5">
           <Card className="h-full">
             <CardHeader title="Atención prioritaria" description="Cuotas vencidas, de la más antigua a la más reciente"
               action={d.vencidas.length ? <span className="num rounded-full bg-danger-soft px-2.5 py-0.5 text-xs font-medium text-danger-ink">{d.vencidas.length}</span> : undefined} />
@@ -229,7 +237,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3 [&>*]:min-w-0">
+      <div className="grid gap-5 lg:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
         <motion.div variants={fadeUp}>
           <Card className="h-full">
             <CardHeader title="Próximos vencimientos" />
@@ -273,7 +281,7 @@ export default function DashboardPage() {
           </Card>
         </motion.div>
 
-        <motion.div variants={fadeUp}>
+        <motion.div variants={fadeUp} className="lg:col-span-2 xl:col-span-1">
           <Card className="h-full">
             <CardHeader title="Actividad reciente" />
             <CardBody className="pt-3">
