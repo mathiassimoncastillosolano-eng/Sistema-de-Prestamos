@@ -1,7 +1,7 @@
 /* Consultas derivadas sobre el estado (puras, sin React). Reutilizables por vistas, búsqueda y analíticas. */
-import type { Cliente, Db, EstadoPrestamo, Pago, Prestamo } from '@/types';
+import type { Cliente, Cuota, Db, EstadoCuota, EstadoPrestamo, Prestamo } from '@/types';
 import { CFG } from './config';
-import { capacidadDisponible, capitalPendienteCliente, resumen } from './finance';
+import { capacidadDisponible, capitalPendienteCliente, estadoCuota, resumen } from './finance';
 import { normalizar } from './utils';
 
 export const getCliente = (db: Db, id: string) => db.clientes.find((c) => c.id === id);
@@ -16,7 +16,7 @@ export type EstadoCliente = 'Con cuotas vencidas' | 'Cerca del límite' | 'Al d�
 export function estadoCliente(db: Db, c: Cliente): EstadoCliente {
   const ps = prestamosDe(db, c.id).map(resumen);
   if (ps.some((r) => r.estado === 'Con cuotas vencidas')) return 'Con cuotas vencidas';
-  if (!ps.some((r) => r.estado !== 'Cancelado')) return 'Sin préstamos activos';
+  if (!ps.some((r) => r.estado !== 'Finalizado')) return 'Sin préstamos activos';
   if (deudaCliente(db, c.id) >= CFG.limite * CFG.alertaLimite) return 'Cerca del límite';
   return 'Al día';
 }
@@ -35,7 +35,7 @@ export const filasClientes = (db: Db): FilaCliente[] =>
     const deuda = deudaCliente(db, cliente.id);
     return {
       cliente, deuda, uso: usoLimite(deuda), disponible: capacidadDisponible(deuda), estado: estadoCliente(db, cliente),
-      prestamosActivos: prestamosDe(db, cliente.id).filter((p) => resumen(p).estado !== 'Cancelado').length
+      prestamosActivos: prestamosDe(db, cliente.id).filter((p) => resumen(p).estado !== 'Finalizado').length
     };
   });
 
@@ -52,19 +52,24 @@ export const filasPrestamos = (db: Db): FilaPrestamo[] =>
     return { prestamo, cliente: getCliente(db, prestamo.clienteId), resumen: r, estado: r.estado };
   });
 
-export interface MovimientoPago extends Pago {
-  prestamoId: string;
-  clienteNombre: string;
+/* ---------- Cuotas (solo consulta) ---------- */
+export interface FilaCuota {
+  prestamo: Prestamo;
+  cliente: Cliente | undefined;
+  cuota: Cuota;
+  estado: EstadoCuota;
 }
 
-/** Todos los pagos de la cartera, del más reciente al más antiguo. */
-export function movimientos(db: Db): MovimientoPago[] {
-  const out = db.prestamos.flatMap((p) => {
-    const nombre = getCliente(db, p.clienteId)?.nombre ?? p.clienteId;
-    return p.pagos.map((g) => ({ ...g, prestamoId: p.id, clienteNombre: nombre }));
+/** Todas las cuotas programadas de la cartera, con su estado informativo calculado. Es una vista de consulta. */
+export const filasCuotas = (db: Db): FilaCuota[] =>
+  db.prestamos.flatMap((prestamo) => {
+    const cliente = getCliente(db, prestamo.clienteId);
+    return prestamo.cronograma.map((cuota) => ({ prestamo, cliente, cuota, estado: estadoCuota(cuota) }));
   });
-  return out.sort((a, b) => (a.fecha === b.fecha ? Number(b.op.slice(3)) - Number(a.op.slice(3)) : a.fecha < b.fecha ? 1 : -1));
-}
+
+/** Historial administrativo (altas y registros) vinculado a una entidad. */
+export const actividadDe = (db: Db, entidad: 'cliente' | 'prestamo', id: string) =>
+  db.actividad.filter((a) => a.ref?.entidad === entidad && a.ref.id === id);
 
 /* ---------- Búsqueda global ---------- */
 export type ResultadoBusqueda =

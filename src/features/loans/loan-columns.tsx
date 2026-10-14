@@ -23,7 +23,7 @@ export function columnasPrestamo({ mostrarCliente = true }: { mostrarCliente?: b
   cols.push(
     { id: 'capital', header: 'Capital', accessorFn: (f) => f.prestamo.capital, meta: { derecha: true }, cell: ({ row: { original: f } }) => money(f.prestamo.capital) },
     { id: 'capitalPend', header: 'Cap. pendiente', accessorFn: (f) => f.resumen.capitalPend, meta: { derecha: true }, cell: ({ row: { original: f } }) => money(f.resumen.capitalPend) },
-    { id: 'pendiente', header: 'Pend. contractual', accessorFn: (f) => f.resumen.pendiente, meta: { derecha: true }, cell: ({ row: { original: f } }) => money(f.resumen.pendiente) },
+    { id: 'pendiente', header: 'Contractual pend.', accessorFn: (f) => f.resumen.pendiente, meta: { derecha: true }, cell: ({ row: { original: f } }) => money(f.resumen.pendiente) },
     { id: 'proxima', header: 'Próx. venc.', accessorFn: (f) => f.resumen.proxima?.fecha ?? '9999', cell: ({ row: { original: f } }) => <span className="whitespace-nowrap">{f.resumen.proxima ? fecha(f.resumen.proxima.fecha) : '—'}</span> },
     { id: 'desembolso', header: 'Desembolso', accessorFn: (f) => f.prestamo.desembolso, cell: ({ row: { original: f } }) => <span className="whitespace-nowrap">{fecha(f.prestamo.desembolso)}</span> },
     { id: 'estado', header: 'Estado', accessorFn: (f) => f.estado, filterFn: 'equals', cell: ({ row: { original: f } }) => <StatusBadge estado={f.estado} /> }
@@ -41,7 +41,7 @@ export function TarjetaPrestamo({ f, mostrarCliente = true }: { f: FilaPrestamo;
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
         <div><dt className="text-xs text-ink-muted">Capital</dt><dd className="num text-ink">{money(f.prestamo.capital)}</dd></div>
         <div><dt className="text-xs text-ink-muted">Cap. pendiente</dt><dd className="num text-ink">{money(f.resumen.capitalPend)}</dd></div>
-        <div><dt className="text-xs text-ink-muted">Pend. contractual</dt><dd className="num font-medium text-ink">{money(f.resumen.pendiente)}</dd></div>
+        <div><dt className="text-xs text-ink-muted">Contractual pend.</dt><dd className="num font-medium text-ink">{money(f.resumen.pendiente)}</dd></div>
         <div><dt className="text-xs text-ink-muted">Próx. vencimiento</dt><dd className="text-ink">{f.resumen.proxima ? fecha(f.resumen.proxima.fecha) : '—'}</dd></div>
       </dl>
     </Link>

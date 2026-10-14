@@ -1,7 +1,7 @@
 /* Esquemas Zod reutilizables. Las reglas financieras NO se reescriben aquí: se delega en lib/finance.ts. */
 import { z } from 'zod';
-import { MEDIOS_PAGO, type Prestamo, type TipoCliente } from '@/types';
-import { validarPago, validarSolicitud } from './finance';
+import type { TipoCliente } from '@/types';
+import { validarSolicitud } from './finance';
 
 /* ---------- Clientes ---------- */
 export const TIPOS_CLIENTE: { value: TipoCliente; label: string }[] = [
@@ -70,23 +70,3 @@ export const solicitudSchema = (deudaDe: (clienteId: string) => number) =>
       }
     });
 export type SolicitudForm = z.infer<ReturnType<typeof solicitudSchema>>;
-
-/* ---------- Pagos ---------- */
-export const pagoSchema = (prestamoDe: (id: string) => Prestamo | undefined) =>
-  z
-    .object({
-      prestamoId: z.string().min(1, 'Selecciona un préstamo.'),
-      modo: z.enum(['cuota', 'anticipada']),
-      cuotaN: z.string(),
-      monto: z.number({ error: 'Ingresa un importe válido.' }),
-      fecha: z.string().min(1, 'Indica la fecha del pago.'),
-      medio: z.enum(MEDIOS_PAGO),
-      ref: z.string().trim()
-    })
-    .superRefine((v, ctx) => {
-      const p = prestamoDe(v.prestamoId);
-      if (!p) return;
-      const r = validarPago(p, { monto: v.monto, fecha: v.fecha, ref: v.ref, tipo: v.modo === 'anticipada' ? 'Cancelación anticipada' : 'Pago de cuota' });
-      if (!r.ok) ctx.addIssue({ code: 'custom', path: [r.campo === 'prestamoId' ? 'prestamoId' : r.campo], message: r.error });
-    });
-export type PagoForm = z.infer<ReturnType<typeof pagoSchema>>;

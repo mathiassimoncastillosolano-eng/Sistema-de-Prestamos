@@ -18,13 +18,12 @@ import { CFG } from '@/lib/config';
 import { fecha } from '@/lib/dates';
 import { r2 } from '@/lib/finance';
 import { money } from '@/lib/format';
-import { deudaCliente, estadoCliente, filasPrestamos, getCliente, movimientos } from '@/lib/selectors';
+import { deudaCliente, estadoCliente, filasPrestamos, getCliente } from '@/lib/selectors';
 import { Landmark } from 'lucide-react';
-import { PaymentHistory } from '@/features/payments/payment-history';
 import { TarjetaPrestamo, columnasPrestamo } from '@/features/loans/loan-columns';
 
 const columnas = columnasPrestamo({ mostrarCliente: false });
-type Tab = 'prestamos' | 'pagos' | 'datos';
+type Tab = 'prestamos' | 'datos';
 
 export default function ClientDetailPage() {
   const { id = '' } = useParams();
@@ -33,7 +32,6 @@ export default function ClientDetailPage() {
   const [tab, setTab] = useState<Tab>('prestamos');
   const c = getCliente(db, id);
   const prestamos = useMemo(() => filasPrestamos(db).filter((f) => f.prestamo.clienteId === id), [db, id]);
-  const pagos = useMemo(() => movimientos(db).filter((m) => prestamos.some((f) => f.prestamo.id === m.prestamoId)), [db, prestamos]);
 
   if (!c) return <EmptyState icon={SearchX} title="Cliente no encontrado" description="Vuelve al listado y busca de nuevo." action={<Button asChild variant="primary"><Link to="/clientes">Ver clientes</Link></Button>} />;
 
@@ -67,18 +65,17 @@ export default function ClientDetailPage() {
 
       <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3">
         <div className="bg-surface p-5"><p className="text-[0.8125rem] text-ink-muted">Capital pendiente</p><p className="mt-1 text-xl font-semibold text-ink"><AnimatedNumber value={deuda} format={money} duration={0.5} /></p><p className="mt-1 text-xs text-ink-muted">Base del límite de endeudamiento</p></div>
-        <div className="bg-surface p-5"><p className="text-[0.8125rem] text-ink-muted">Pendiente contractual</p><p className="mt-1 text-xl font-semibold text-ink"><AnimatedNumber value={pendiente} format={money} duration={0.5} /></p><p className="mt-1 text-xs text-ink-muted">Capital + intereses pactados</p></div>
+        <div className="bg-surface p-5"><p className="text-[0.8125rem] text-ink-muted">Importe contractual pendiente</p><p className="mt-1 text-xl font-semibold text-ink"><AnimatedNumber value={pendiente} format={money} duration={0.5} /></p><p className="mt-1 text-xs text-ink-muted">Capital + intereses pactados, según cronograma</p></div>
         <div className="bg-surface p-5"><p className="text-[0.8125rem] text-ink-muted">Capacidad disponible</p><p className="mt-1 text-xl font-semibold text-ink"><AnimatedNumber value={disponible} format={money} duration={0.5} /></p>
           <div className="mt-2"><LimitMeter deuda={deuda} showText={false} label="Uso del límite" /></div><p className="mt-1.5 text-xs text-ink-muted">{Math.round((deuda / CFG.limite) * 100)} % del límite de {money(CFG.limite)} (toda la empresa)</p></div>
       </div>
 
       <Card className="mt-5 overflow-hidden">
         <TabsNav<Tab> aria-label="Secciones del expediente" value={tab} onValueChange={setTab}
-          items={[{ value: 'prestamos', label: `Préstamos · ${prestamos.length}` }, { value: 'pagos', label: `Pagos · ${pagos.length}` }, { value: 'datos', label: 'Datos' }]}
+          items={[{ value: 'prestamos', label: `Préstamos · ${prestamos.length}` }, { value: 'datos', label: 'Datos' }]}
           panels={{
             prestamos: <DataTable data={prestamos} columns={columnas} getRowId={(f) => f.prestamo.id} textoBusqueda={() => ''} ordenInicial={[{ id: 'desembolso', desc: true }]} alAbrir={(f) => navigate(`/prestamos/${f.prestamo.id}`)}
               tarjeta={(f) => <TarjetaPrestamo f={f} mostrarCliente={false} />} etiqueta="Préstamos del cliente" unidad="préstamos" vacio={<EmptyState icon={Landmark} title="Sin préstamos" description="Este cliente aún no tiene préstamos." action={<Button variant="primary" onClick={() => navigate(`/solicitud/${c.id}`)}>Crear solicitud</Button>} />} />,
-            pagos: <PaymentHistory pagos={pagos} mostrarPrestamo etiqueta="Pagos del cliente" vacioTexto="Aún no hay pagos registrados." />,
             datos: <div className="px-5 py-2"><DefinitionList items={datos} /></div>
           }} />
       </Card>

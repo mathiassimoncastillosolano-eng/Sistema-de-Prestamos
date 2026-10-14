@@ -1,6 +1,8 @@
 # NEXORA FINANCE
 
-Gestión de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20), solicitudes, préstamos con cronograma, pagos y cancelación anticipada.
+Registro y consulta de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20), solicitudes, préstamos con cronograma, consulta de cuotas y PDF del cronograma.
+
+> **Alcance: este sistema NO realiza ni registra pagos.** No hay pagos, abonos, amortizaciones, cancelaciones anticipadas ni liquidaciones: ni en la interfaz ni en los servicios (hay pruebas que lo comprueban).
 
 > **Prototipo exclusivamente frontend.** Todos los datos son ficticios, viven en `localStorage` y no hay backend. La consulta de DNI/RUC es **simulada** (no consulta RENIEC ni SUNAT) y el acceso es una **autenticación de demostración** que no ofrece seguridad real.
 
@@ -12,7 +14,7 @@ npm run dev        # desarrollo  → http://localhost:5173
 npm run build      # tsc -b + vite build
 npm run preview    # sirve dist/
 npm run typecheck  # TypeScript estricto
-npm test           # Vitest (71 pruebas)
+npm test           # Vitest (82 pruebas)
 ```
 
 Acceso de demostración: usuario `asesor` · contraseña `demo1234` (el login tiene un botón que las rellena). Requiere Node 20+ (probado con Node 22).
@@ -34,8 +36,8 @@ src/
   components/ui/    design system: button, field, modal, sheet, tabs, toast, stepper…
   components/layout/ shell, sidebar, header, búsqueda global, notificaciones
   components/data-display/  DataTable, StatusBadge, AnimatedNumber, tooltips de gráficos…
-  features/         dashboard · clients · loans · payments · auth
-  lib/              config · finance · analytics · selectors · validation · format · dates · motion
+  features/         dashboard · clients · loans · installments · auth
+  lib/              config · finance · analytics · selectors · validation · format · dates · motion · pdf
   services/         store (estado + persistencia) · actions (escrituras) · identity (consulta simulada) · storage
   mocks/seed.ts     datos de demostración
   styles/index.css  tokens de diseño (claro/oscuro), impresión, movimiento reducido
@@ -48,7 +50,17 @@ Separación de responsabilidades: las reglas financieras viven **solo** en `lib/
 
 ## Reglas financieras (conservadas)
 
-Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda la empresa (el capital amortizado libera capacidad) · TEA 30 % · plazo 1–60 meses · primera cuota un mes después del desembolso · sin cobro inicial · cancelación anticipada = total contractual − pagos previos, conservando el cronograma original. Parámetros en `src/lib/config.ts`.
+Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda la empresa · TEA 30 % · plazo 1–60 meses · primera cuota un mes después del desembolso · sin cobro inicial. Parámetros en `src/lib/config.ts`.
+
+### Estados y capital pendiente (sin pagos)
+
+- Estado de cuota **calculado** desde fechas: *Pendiente*, *Próxima a vencer* (10 días), *Vencida*. Nunca se asigna a mano.
+- Los datos mock incluyen un **registro histórico importado, de solo lectura**, que respalda las cuotas *Cubierta (histórico)* y permite calcular capital pendiente y préstamos *Finalizados*. La interfaz no puede crear ni modificar ese registro.
+- Un préstamo nuevo no tiene cobertura: su capital pendiente es el capital original y **no disminuye con el paso del tiempo**; sus cuotas vencidas figuran como *Vencida*.
+
+## PDF
+
+`Descargar PDF` (detalle del préstamo) genera «Ficha y cronograma del préstamo» en el navegador con jsPDF + autotable (carga diferida). A4, cabecera de tabla repetida en cada página, filas sin partir, totales al final y numeración «Página X de Y». Es informativo; no afirma validez legal. **No existe envío por correo**: no hay integración; «Mensaje para el cliente» solo prepara texto para copiar.
 
 **Garantía de no regresión:** `npm run fixtures:legacy` ejecuta el código original (`legacy/`) y guarda sus resultados; `tests/finance.test.ts` y `tests/seed.test.ts` exigen que la versión TypeScript produzca cronogramas, pagos, resúmenes y estados **idénticos**.
 
@@ -62,7 +74,7 @@ Tokens en `src/styles/index.css` (paleta Azul Pacífico / Verde petróleo / Cobr
 
 ## Qué se verificó (y qué no)
 
-Verificado: `tsc` estricto sin errores; `vite build` correcto; **71 pruebas Vitest** pasan; recorrido manual automatizado con Playwright/Chromium (escritorio 1440, tableta 820, móvil 390) de: login, alta de cliente, solicitudes con bloqueo por límite/mínimo/plazo, pago, referencia duplicada, cancelación anticipada, búsqueda por teclado, ordenación/paginación/filtros, tema persistente, restaurar datos, persistencia al recargar, drawer móvil; 0 errores de consola y 0 desbordes horizontales en las 7 pantallas × 3 tamaños.
+Verificado: `tsc` estricto sin errores; `vite build` correcto; **82 pruebas Vitest** pasan; PDF de 1, 12 y 60 cuotas generados y revisados visualmente (60 cuotas = 3 páginas); descarga real del PDF en Chromium; recorrido manual automatizado con Playwright/Chromium (escritorio 1440, tableta 820, móvil 390) de: login, alta de cliente, solicitudes con bloqueo por límite/mínimo/plazo, pago, referencia duplicada, cancelación anticipada, búsqueda por teclado, ordenación/paginación/filtros, tema persistente, restaurar datos, persistencia al recargar, drawer móvil; 0 errores de consola y 0 desbordes horizontales en las 7 pantallas × 3 tamaños.
 
 **No verificado:** Firefox/Safari y dispositivos reales (solo Chromium); lectores de pantalla; auditoría automática de accesibilidad (se siguieron prácticas —etiquetas, foco, roles, `aria-live`, foco en modales— y se calcularon los contrastes de los pares principales, pero no se pasó axe/Lighthouse); la vista de impresión se implementó con CSS `@media print` y no se revisó visualmente. Las pruebas de navegador fueron ejecuciones ad hoc, no forman parte del repositorio (sí lo son las de Vitest).
 
@@ -72,4 +84,4 @@ Se conservan los 15 clientes y 16 préstamos originales (mismos ID e importes). 
 
 ## Pendiente / siguientes pasos sugeridos
 
-Resolver la discrepancia de la TEA; backend real (sustituir `services/store.ts` y `actions.ts` por llamadas a API, y autenticación/autorización de servidor); el chunk de gráficos pesa ~400 kB (115 kB gzip) y se carga solo en el dashboard; añadir pruebas E2E al repositorio (Playwright).
+Resolver la discrepancia de la TEA; decidir cómo tratar las cuotas vencidas de préstamos sin registro histórico (hoy figuran *Vencida*); backend real (sustituir `services/store.ts` y `actions.ts` por llamadas a API, y autenticación/autorización de servidor); el chunk de gráficos pesa ~400 kB (115 kB gzip) y se carga solo en el dashboard; añadir pruebas E2E al repositorio (Playwright).

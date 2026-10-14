@@ -25,3 +25,21 @@ Detectados con pruebas en navegador real:
 
 ## 4. Equivalencia funcional demostrada
 `tests/fixtures/legacy.json` se genera ejecutando el código original. Las pruebas comprueban igualdad exacta de: 10 cronogramas (incluidas fechas de fin de mes y año bisiesto), 6 casos de `addMonths`, los 16 préstamos originales (cronograma, pagos, resumen, estado de cada cuota) y el límite de endeudamiento por cliente.
+
+
+## 5. Remasterización de alcance: retiro de la operativa de pagos (iteración 3)
+**Decisión:** el sistema solo registra y consulta préstamos. Se retiró todo lo que registraba o ejecutaba pagos.
+
+| Área | Antes | Ahora |
+|---|---|---|
+| Rutas / menú | `/pagos`, `/pagos/:id`, «Pagos y cancelaciones» | Eliminadas (`#/pagos` da «página no encontrada»). Nueva `/cuotas` («Cuotas y cronogramas», solo consulta: filtros por estado, periodo, agencia y búsqueda) |
+| Servicios | `registrarPago`, `validarPago`, `aplicarPagoAPrestamo` | Eliminados. `importarHistorico` queda solo para la semilla mock |
+| Modelo | `Pago`, `MedioPago`, `abonado`, `cubierta`, estados «Pagada»/«Cancelado» | `RegistroHistorico` (solo lectura), `cubierto`, «Cubierta (histórico)», «Finalizado» |
+| Dashboard | «Pagos recibidos», barras de pagos, botón «Registrar pago» | Retirados; sustituidos por capital pendiente y capital registrado por mes |
+| Detalle de préstamo | Botones de pago/cancelación, historial de pagos, «Avance de pago» | Condiciones, historial administrativo, cronograma de solo consulta |
+| PDF | Solo `window.print()` (sin generador) | Generador real (jsPDF + autotable) con paginación verificada |
+| Almacenamiento | `nexora-db-v4` | `nexora-db-v5` (no se migran datos locales anteriores) |
+
+**Verificado:** 82 pruebas, `tsc` limpio, build, recorrido en Chromium (escritorio 1440 y móvil 390) sin desbordes, sin errores de consola y sin términos de pago visibles; PDF descargado de verdad.
+
+**Decisiones abiertas para negocio:** (1) las cuotas vencidas de préstamos sin registro histórico figuran «Vencida» (el estado se calcula por fecha; no se inventan pagos); (2) la discrepancia de TEA de la sección 2 sigue sin resolver; (3) no existe rol de gerente en el prototipo (un único usuario de demostración): no se inventó; (4) no hay integración de correo.

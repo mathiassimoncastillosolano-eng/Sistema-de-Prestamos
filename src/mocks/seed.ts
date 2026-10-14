@@ -1,13 +1,15 @@
 /* =========================================================
-   DATOS MOCK — todos ficticios. Los 15 clientes y 16 préstamos originales se conservan
+   DATOS MOCK — todos ficticios. Incluyen un REGISTRO HISTÓRICO importado (solo lectura) que respalda las
+   cuotas "Cubierta (histórico)"; la aplicación no permite crear pagos.
+   Los 15 clientes y 16 préstamos originales se conservan
    (mismos IDs, importes y cronogramas); se añaden clientes y préstamos para poder
    probar búsquedas, filtros, paginación y gráficos.
    ========================================================= */
 import { AGENCIAS, CFG, USUARIO_DEMO } from '@/lib/config';
 import { addDays, addMonths } from '@/lib/dates';
 import { money } from '@/lib/format';
-import { aplicarPagoAPrestamo, generarCronograma, resumen } from '@/lib/finance';
-import type { Actividad, Cliente, Db, MedioPago, Pago, Prestamo } from '@/types';
+import { generarCronograma, importarHistorico } from '@/lib/finance';
+import type { Actividad, Cliente, Db, Prestamo, RegistroHistorico } from '@/types';
 
 const NOMBRES = [
   'Rosa Elena Quispe Huamán', 'Luis Alberto Cárdenas Rojas', 'Marta Flores Ccori', 'Jorge Salas Vidal',
@@ -33,8 +35,6 @@ const PRESTAMOS_EXTRA: readonly FilaPrestamo[] = [
   [19, 4000, 12, 11, 0, 0], [20, 2500, 12, 3, 1, 0], [21, 1200, 6, 7, 0, 2], [22, 7000, 36, 6, 1, 0],
   [23, 3500, 18, 5, 0, 1], [4, 3000, 12, 2, 1, 0], [11, 1800, 12, 1, 0, 0]
 ];
-
-const MEDIOS_EXTRA: MedioPago[] = ['Transferencia', 'Yape', 'Efectivo', 'Plin', 'Depósito en ventanilla'];
 
 const EXTRA_CLIENTES: Cliente[] = [
   { id: 'C016', nombre: 'Andrea Villanueva Cruz', tipo: 'DNI', doc: '47283915', agencia: 'Lima Centro', telefono: '987345120', asesor: 'Camila Ortiz', alta: addMonths(CFG.hoy, -8) },
@@ -72,52 +72,39 @@ export function construirSemilla(): Db {
   const clientes = construirClientes();
   let op = 100;
 
-  /** Registra el pago de las primeras `k` cuotas, cada una en su fecha de vencimiento. */
-  const pagarCuotas = (inicial: Prestamo, k: number, extra: boolean): Prestamo => {
+  /** Importa como histórico la cobertura de las primeras `k` cuotas, cada una en su fecha de vencimiento. */
+  const importarCuotas = (inicial: Prestamo, k: number): Prestamo => {
     let p = inicial;
-    const base = inicial.cronograma;
-    base.slice(0, k).forEach((cu) => {
-      ++op;
-      const medio: MedioPago = extra ? (MEDIOS_EXTRA[op % MEDIOS_EXTRA.length] as MedioPago) : 'Efectivo';
-      const pago: Pago = {
-        op: 'OP-' + op, fecha: cu.fecha, monto: cu.cuota, tipo: 'Pago de cuota',
-        usuario: p.asesor, medio, ref: extra && medio !== 'Efectivo' ? 'REF-' + op : ''
-      };
-      p = aplicarPagoAPrestamo(p, pago);
+    inicial.cronograma.slice(0, k).forEach((cu) => {
+      const reg: RegistroHistorico = { op: 'HIS-' + ++op, fecha: cu.fecha, monto: cu.cuota, usuario: p.asesor };
+      p = importarHistorico(p, reg);
     });
     return p;
   };
 
-  const construir = (filas: readonly FilaPrestamo[], desde: number, extra: boolean): Prestamo[] =>
+  const construir = (filas: readonly FilaPrestamo[], desde: number): Prestamo[] =>
     filas.map((s, i) => {
       const [ci, capital, plazo, meses, ai, atraso] = s;
       const c = clientes[ci] as Cliente;
       const inicial: Prestamo = {
         id: 'PR-' + (desde + i), clienteId: c.id, agencia: c.agencia, capital, plazo, tea: CFG.tea,
         desembolso: addMonths(CFG.hoy, -meses), asesor: ASESORES[ai] as string,
-        cronograma: generarCronograma(capital, plazo, addMonths(CFG.hoy, -meses)), pagos: [], observaciones: ''
+        cronograma: generarCronograma(capital, plazo, addMonths(CFG.hoy, -meses)), historico: [], observaciones: ''
       };
-      return pagarCuotas(inicial, Math.max(0, Math.min(plazo, meses) - atraso), extra);
+      return importarCuotas(inicial, Math.max(0, Math.min(plazo, meses) - atraso));
     });
 
-  const prestamos = [...construir(SEMILLA_PRESTAMOS, 1001, false), ...construir(PRESTAMOS_EXTRA, 1001 + SEMILLA_PRESTAMOS.length, true)];
+  const prestamos = [...construir(SEMILLA_PRESTAMOS, 1001), ...construir(PRESTAMOS_EXTRA, 1001 + SEMILLA_PRESTAMOS.length)];
 
-  /* Un préstamo con cancelación anticipada (regla: total contractual − abonado; el cronograma original se conserva). */
+  /* Un préstamo finalizado por plazo: todas sus cuotas figuran cubiertas en el registro histórico importado. */
   {
     const c = clientes[7] as Cliente;
-    const meses = 6;
-    const desembolso = addMonths(CFG.hoy, -meses);
-    let p: Prestamo = {
-      id: 'PR-' + (1001 + prestamos.length), clienteId: c.id, agencia: c.agencia, capital: 2000, plazo: 12, tea: CFG.tea,
-      desembolso, asesor: ASESORES[1], cronograma: generarCronograma(2000, 12, desembolso), pagos: [], observaciones: 'Cancelado anticipadamente por el cliente.'
+    const desembolso = addMonths(CFG.hoy, -7);
+    const base: Prestamo = {
+      id: 'PR-' + (1001 + prestamos.length), clienteId: c.id, agencia: c.agencia, capital: 2000, plazo: 6, tea: CFG.tea,
+      desembolso, asesor: ASESORES[1], cronograma: generarCronograma(2000, 6, desembolso), historico: [], observaciones: ''
     };
-    p = pagarCuotas(p, 3, true);
-    const pendiente = resumen(p).pendiente;
-    p = aplicarPagoAPrestamo(p, {
-      op: 'OP-' + ++op, fecha: addMonths(CFG.hoy, -1), monto: pendiente, tipo: 'Cancelación anticipada',
-      usuario: p.asesor, medio: 'Transferencia', ref: 'REF-' + op
-    });
-    prestamos.push(p);
+    prestamos.push(importarCuotas(base, 6));
   }
 
   /* Coherencia: ningún cliente figura dado de alta después de su primer desembolso. */
@@ -126,10 +113,10 @@ export function construirSemilla(): Db {
     if (primero && c.alta > primero) c.alta = addDays(primero, -14);
   });
 
-  return { v: 4, clientes, prestamos, actividad: actividadReciente(clientes, prestamos), contador: op + 1 };
+  return { v: 5, clientes, prestamos, actividad: actividadReciente(clientes, prestamos) };
 }
 
-/** El feed de actividad se deriva de los propios registros (altas, desembolsos y pagos), nunca se inventa aparte. */
+/** El feed de actividad se deriva de los propios registros (altas y registros de préstamos), nunca se inventa aparte. */
 function actividadReciente(clientes: Cliente[], prestamos: Prestamo[]): Actividad[] {
   type Evento = Actividad & { dia: string };
   const eventos: Evento[] = [];
@@ -137,12 +124,7 @@ function actividadReciente(clientes: Cliente[], prestamos: Prestamo[]): Activida
   const dinero = money;
   clientes.forEach((c) => eventos.push({ dia: c.alta, t: '', usuario: c.asesor, tipo: 'Cliente registrado', desc: 'Alta de ' + c.nombre, ref: { entidad: 'cliente', id: c.id } }));
   prestamos.forEach((p) => {
-    eventos.push({ dia: p.desembolso, t: '', usuario: p.asesor, tipo: 'Préstamo desembolsado', desc: `${p.id} por ${dinero(p.capital)} a ${cliente(p.clienteId)?.nombre ?? p.clienteId}`, ref: { entidad: 'prestamo', id: p.id } });
-    p.pagos.forEach((g) => eventos.push({
-      dia: g.fecha, t: '', usuario: g.usuario,
-      tipo: g.tipo === 'Cancelación anticipada' ? 'Cancelación anticipada' : 'Pago registrado',
-      desc: `${g.op} por ${dinero(g.monto)} en ${p.id}`, ref: { entidad: 'prestamo', id: p.id }
-    }));
+    eventos.push({ dia: p.desembolso, t: '', usuario: p.asesor, tipo: 'Préstamo registrado', desc: `${p.id} por ${dinero(p.capital)} a ${cliente(p.clienteId)?.nombre ?? p.clienteId}`, ref: { entidad: 'prestamo', id: p.id } });
   });
   eventos.sort((a, b) => (a.dia < b.dia ? 1 : a.dia > b.dia ? -1 : 0));
   return eventos.slice(0, 40).map(({ dia, ...e }, i) => ({ ...e, t: `${dia} ${String(9 + (i % 8)).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}` }));

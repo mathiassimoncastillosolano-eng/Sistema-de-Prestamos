@@ -25,8 +25,12 @@ export interface Cliente {
   dniTitular?: string;
 }
 
-export type EstadoCuota = 'Pagada' | 'Vencida' | 'Próxima a vencer' | 'Pendiente' | 'Cubierta por cancelación';
-export type EstadoPrestamo = 'Vigente' | 'Con cuotas vencidas' | 'Cancelado';
+/**
+ * Estados informativos de una cuota. Se CALCULAN desde las fechas y desde el registro histórico importado;
+ * nunca se asignan a mano. 'Cubierta (histórico)' solo aparece si el registro histórico lo respalda.
+ */
+export type EstadoCuota = 'Vencida' | 'Próxima a vencer' | 'Pendiente' | 'Cubierta (histórico)';
+export type EstadoPrestamo = 'Vigente' | 'Con cuotas vencidas' | 'Finalizado';
 
 export interface Cuota {
   n: number;
@@ -35,25 +39,21 @@ export interface Cuota {
   interes: number;
   /** Importe contractual de la cuota (capital + interés). */
   cuota: number;
-  abonado: number;
+  /**
+   * Importe cubierto según el REGISTRO HISTÓRICO importado (solo lectura). La aplicación no
+   * permite registrar pagos: este valor nunca se modifica desde la interfaz.
+   */
+  cubierto: number;
   /** Saldo de capital tras esta cuota, según el cronograma original. */
   saldo: number;
-  /** true si fue cubierta por una cancelación anticipada (el cronograma original se conserva). */
-  cubierta: boolean;
 }
 
-export type TipoPago = 'Pago de cuota' | 'Cancelación anticipada';
-export const MEDIOS_PAGO = ['Efectivo', 'Transferencia', 'Yape', 'Plin', 'Depósito en ventanilla'] as const;
-export type MedioPago = (typeof MEDIOS_PAGO)[number];
-
-export interface Pago {
+/** Movimiento histórico importado (solo lectura, informativo). No existe operativa de pagos en el sistema. */
+export interface RegistroHistorico {
   op: string;
   fecha: string;
   monto: number;
-  tipo: TipoPago;
   usuario: string;
-  medio: MedioPago;
-  ref: string;
 }
 
 export interface Prestamo {
@@ -66,7 +66,8 @@ export interface Prestamo {
   desembolso: string;
   asesor: string;
   cronograma: Cuota[];
-  pagos: Pago[];
+  /** Registro histórico importado: respalda las cuotas 'Cubierta (histórico)'. Solo lectura. */
+  historico: RegistroHistorico[];
   observaciones: string;
 }
 
@@ -85,19 +86,18 @@ export interface Actividad {
 }
 
 export interface Db {
-  v: 4;
+  v: 5;
   clientes: Cliente[];
   prestamos: Prestamo[];
   actividad: Actividad[];
-  /** Contador de operaciones (OP-n). */
-  contador: number;
 }
 
 export interface ResumenPrestamo {
   /** Total contractual: capital + intereses pactados. */
   total: number;
-  abonado: number;
-  /** Pendiente contractual: total − abonado. */
+  /** Importe cubierto según el registro histórico importado. */
+  cubierto: number;
+  /** Pendiente contractual: total − cubierto histórico. */
   pendiente: number;
   /** Intereses pactados: total − capital. */
   interes: number;

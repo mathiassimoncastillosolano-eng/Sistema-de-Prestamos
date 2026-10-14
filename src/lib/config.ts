@@ -50,7 +50,7 @@ export const USUARIO_DEMO = {
 export const AGENCIAS = ['Lima Centro', 'Arequipa', 'Cusco'] as const;
 
 export const STORAGE_KEYS = {
-  db: 'nexora-db-v4',
+  db: 'nexora-db-v5',
   tema: 'nx-tema',
   side: 'nx-side',
   sesion: 'nx-sesion'

@@ -13,7 +13,7 @@ const oyentes = new Set<Listener>();
 
 function esDbValida(d: unknown): d is Db {
   const x = d as Partial<Db> | null;
-  return !!x && x.v === 4 && Array.isArray(x.clientes) && Array.isArray(x.prestamos) && Array.isArray(x.actividad) && typeof x.contador === 'number';
+  return !!x && x.v === 5 && Array.isArray(x.clientes) && Array.isArray(x.prestamos) && Array.isArray(x.actividad);
 }
 
 function cargar(): Db {

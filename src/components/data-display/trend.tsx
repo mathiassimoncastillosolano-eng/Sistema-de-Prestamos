@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 interface Props {
   /** Variación porcentual; null = no calculable (no se muestra nada inventado). */
   valor: number | null;
-  /** 'up-good': subir es positivo (pagos). 'neutral': solo informativo (capital pendiente). */
+  /** 'up-good': subir es positivo (p. ej. desembolsos). 'neutral': solo informativo (capital pendiente). */
   modo?: 'up-good' | 'neutral';
   className?: string;
 }

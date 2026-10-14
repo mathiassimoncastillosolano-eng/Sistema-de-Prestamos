@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'motion/react';
-import { ArrowUpRight, CalendarClock, CircleAlert, FilePlus2, Plus, ReceiptText, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, CalendarClock, CircleAlert, FilePlus2, Plus, ShieldCheck } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -28,7 +28,7 @@ import { ClientFormSheet } from '@/features/clients/client-form-sheet';
 const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const fechaHora = (t: string) => `${fecha(t.slice(0, 10))} · ${t.slice(11)}`;
 
-const COLOR_ESTADO: Record<string, string> = { Vigente: 'var(--success)', 'Con cuotas vencidas': 'var(--danger)', Cancelado: 'var(--neutral)' };
+const COLOR_ESTADO: Record<string, string> = { Vigente: 'var(--success)', 'Con cuotas vencidas': 'var(--danger)', Finalizado: 'var(--neutral)' };
 
 /** Resumen textual de un gráfico para lectores de pantalla. */
 const Figura = ({ etiqueta, resumen, children, className }: { etiqueta: string; resumen: string; children: ReactNode; className?: string }) => (
@@ -95,7 +95,6 @@ export default function DashboardPage() {
               </Select>
               <Button variant="primary" onClick={() => navigate('/solicitud')}><FilePlus2 className="size-4" />Nueva solicitud</Button>
               <Button onClick={() => setRegistrar(true)}><Plus className="size-4" />Registrar cliente</Button>
-              <Button onClick={() => navigate('/pagos')}><ReceiptText className="size-4" />Registrar pago</Button>
             </>
           }
         />
@@ -105,18 +104,18 @@ export default function DashboardPage() {
       <motion.div variants={stagger(0.04)} className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card lg:grid-cols-6">
         <Stat label="Total desembolsado" valor={<AnimatedNumber value={d.totalDesembolsado} format={money} />}
           pie={<span className="flex flex-wrap items-center gap-1.5"><span className="num">Este mes: {money(d.desembolsadoMes)}</span><Trend valor={d.variacionDesembolsos} /></span>} />
-        <Stat label="Préstamos activos" valor={<AnimatedNumber value={d.prestamosActivos} format={entero} />} pie={`${d.prestamosTotales} en total · ${d.prestamosCancelados} cancelados`} />
+        <Stat label="Préstamos activos" valor={<AnimatedNumber value={d.prestamosActivos} format={entero} />} pie={`${d.prestamosTotales} en total · ${d.prestamosFinalizados} finalizados`} />
         <Stat label="Clientes registrados" valor={<AnimatedNumber value={d.clientes} format={entero} />} pie={d.clientesNuevosMes ? `${d.clientesNuevosMes} nuevo${d.clientesNuevosMes === 1 ? '' : 's'} este mes` : alcanceLabel} />
-        <Stat label="Pagos recibidos este mes" valor={<AnimatedNumber value={d.pagosMes} format={money} />}
-          pie={<span className="flex flex-wrap items-center gap-1.5"><Trend valor={d.variacionPagos} />{d.variacionPagos !== null && <span>vs. mismo tramo de {mesPrev}</span>}</span>} />
-        <Stat label="Cuotas vencidas" tono={d.vencidas.length ? 'danger' : undefined} valor={<AnimatedNumber value={d.vencidas.length} format={entero} />} pie={d.vencidas.length ? `${money(d.montoVencido)} por cobrar` : 'Todo al día'} />
-        <Stat label={`Vencen en ${CFG.diasProxVenc} días`} valor={<AnimatedNumber value={d.proximasVentana.cantidad} format={entero} />} pie={d.proximasVentana.cantidad ? `${money(d.proximasVentana.monto)} esperados` : 'Sin vencimientos cercanos'} />
+        <Stat label="Capital pendiente" valor={<AnimatedNumber value={d.capitalPendiente} format={money} />}
+          pie={<span className="flex flex-wrap items-center gap-1.5"><Trend valor={d.variacionCapital} modo="neutral" />{d.variacionCapital !== null && <span>vs. cierre de {mesPrev}</span>}</span>} />
+        <Stat label="Cuotas vencidas" tono={d.vencidas.length ? 'danger' : undefined} valor={<AnimatedNumber value={d.vencidas.length} format={entero} />} pie={d.vencidas.length ? `${money(d.montoVencido)} en cuotas programadas` : 'Sin cuotas vencidas'} />
+        <Stat label={`Vencen en ${CFG.diasProxVenc} días`} valor={<AnimatedNumber value={d.proximasVentana.cantidad} format={entero} />} pie={d.proximasVentana.cantidad ? `${money(d.proximasVentana.monto)} en cuotas programadas` : 'Sin vencimientos cercanos'} />
       </motion.div>
 
       <div className="grid gap-5 lg:grid-cols-12 [&>*]:min-w-0">
         <motion.div variants={fadeUp} className="lg:col-span-8">
           <Card className="h-full">
-            <CardHeader title="Capital pendiente de cobro" description="Capital de las cuotas aún abiertas, sin intereses futuros" />
+            <CardHeader title="Evolución del capital pendiente" description="Capital de las cuotas sin cobertura histórica, sin intereses futuros" />
             <CardBody className="pt-3">
               <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
                 <p className="text-3xl font-semibold text-ink sm:text-4xl"><AnimatedNumber value={d.capitalPendiente} format={money} duration={0.9} /></p>
@@ -167,7 +166,7 @@ export default function DashboardPage() {
                         <i aria-hidden className="size-2.5 rounded-full" style={{ background: COLOR_ESTADO[e.estado] }} />
                         <span className="flex-1 text-ink-muted">{e.estado}</span>
                         <span className="num font-semibold text-ink">{e.cantidad}</span>
-                        <span className="num w-28 text-right text-xs text-ink-muted">{e.estado === 'Cancelado' ? '—' : money(e.capital)}</span>
+                        <span className="num w-28 text-right text-xs text-ink-muted">{e.estado === 'Finalizado' ? '—' : money(e.capital)}</span>
                       </li>
                     ))}
                   </ul>
@@ -181,23 +180,20 @@ export default function DashboardPage() {
       <div className="grid gap-5 lg:grid-cols-12 [&>*]:min-w-0">
         <motion.div variants={fadeUp} className="lg:col-span-7">
           <Card className="h-full">
-            <CardHeader title="Desembolsos y pagos recibidos" description={`Por mes, últimos ${meses} meses (S/)`} />
+            <CardHeader title="Préstamos registrados por mes" description={`Capital registrado, últimos ${meses} meses (S/)`} />
             <CardBody className="pt-3">
-              <Figura etiqueta="Desembolsos y pagos recibidos por mes" resumen={d.serie.map((p) => `${mesCorto(p.mes)}: desembolsos ${money(p.desembolsos)}, pagos ${money(p.pagos)}`).join('. ')}>
+              <Figura etiqueta="Capital registrado por mes" resumen={d.serie.map((p) => `${mesCorto(p.mes)}: ${money(p.desembolsos)}`).join('. ')}>
                 <ResponsiveContainer width="100%" height={248}>
                   <BarChart data={d.serie} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barGap={4}>
                     <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
                     <XAxis dataKey="mes" tickFormatter={mesCorto} tickLine={false} axisLine={false} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} tickMargin={8} />
                     <YAxis tickFormatter={moneyCompacto} tickLine={false} axisLine={false} width={64} tick={{ fill: 'var(--ink-muted)', fontSize: 12 }} />
                     <Tooltip cursor={{ fill: 'var(--surface-2)' }} content={<ChartTooltip etiqueta={(l) => mesLargo(String(l))} />} />
-                    <Bar dataKey="desembolsos" name="Desembolsos" fill="var(--chart-2)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={!reducir} animationDuration={500} />
-                    <Bar dataKey="pagos" name="Pagos recibidos" fill="var(--chart-3)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={!reducir} animationDuration={500} />
+                    <Bar dataKey="desembolsos" name="Capital registrado" fill="var(--chart-2)" radius={[4, 4, 0, 0]} maxBarSize={22} isAnimationActive={!reducir} animationDuration={500} />
                   </BarChart>
                 </ResponsiveContainer>
               </Figura>
               <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-ink-muted">
-                <span className="flex items-center gap-1.5"><i aria-hidden className="size-2.5 rounded-sm bg-[var(--chart-2)]" />Desembolsos</span>
-                <span className="flex items-center gap-1.5"><i aria-hidden className="size-2.5 rounded-sm bg-[var(--chart-3)]" />Pagos recibidos</span>
                 <span>El mes en curso está incompleto.</span>
               </div>
             </CardBody>
@@ -210,7 +206,7 @@ export default function DashboardPage() {
               action={d.vencidas.length ? <span className="num rounded-full bg-danger-soft px-2.5 py-0.5 text-xs font-medium text-danger-ink">{d.vencidas.length}</span> : undefined} />
             <CardBody className="pt-2">
               {d.vencidas.length === 0 ? (
-                <EmptyState icon={ShieldCheck} title="Sin cuotas vencidas" description="Esta cartera está al día." className="py-8" />
+                <EmptyState icon={ShieldCheck} title="Sin cuotas vencidas" description="No hay cuotas vencidas en este alcance." className="py-8" />
               ) : (
                 <ul className="divide-y divide-line">
                   {d.vencidas.slice(0, 5).map((o) => (
@@ -221,7 +217,7 @@ export default function DashboardPage() {
                           <span className="block truncate text-sm font-medium text-ink">{o.cliente?.nombre ?? o.prestamo.clienteId}</span>
                           <span className="block truncate text-xs text-ink-muted">{o.prestamo.id} · cuota {o.cuota.n} · {diasEntre(CFG.hoy, o.cuota.fecha)} días de atraso</span>
                         </span>
-                        <span className="num text-sm font-semibold text-ink">{money(o.falta)}</span>
+                        <span className="num text-sm font-semibold text-ink">{money(o.importe)}</span>
                       </Link>
                     </li>
                   ))}
@@ -247,7 +243,7 @@ export default function DashboardPage() {
                           <span className="block truncate text-sm font-medium text-ink">{o.cliente?.nombre ?? o.prestamo.clienteId}</span>
                           <span className="block truncate text-xs text-ink-muted">{fecha(o.cuota.fecha)} · {o.prestamo.id} · cuota {o.cuota.n}</span>
                         </span>
-                        <span className="num text-sm font-semibold text-ink">{money(o.falta)}</span>
+                        <span className="num text-sm font-semibold text-ink">{money(o.importe)}</span>
                       </Link>
                     </li>
                   ))}

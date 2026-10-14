@@ -7,11 +7,11 @@ type Tono = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
 /** Significado de color único para toda la app: verde = al día, ámbar = atención, rojo = vencido, azul = informativo, gris = inactivo. */
 const TONOS: Record<Estado, Tono> = {
-  Vigente: 'success', Pagada: 'success', 'Al día': 'success',
+  Vigente: 'success', 'Al día': 'success',
   'Con cuotas vencidas': 'danger', Vencida: 'danger',
   'Próxima a vencer': 'warning', 'Cerca del límite': 'warning',
-  Pendiente: 'neutral', Cancelado: 'neutral', 'Sin préstamos activos': 'neutral',
-  'Cubierta por cancelación': 'info'
+  Pendiente: 'neutral', Finalizado: 'neutral', 'Sin préstamos activos': 'neutral',
+  'Cubierta (histórico)': 'info'
 };
 
 export const tonoDeEstado = (e: Estado): Tono => TONOS[e];

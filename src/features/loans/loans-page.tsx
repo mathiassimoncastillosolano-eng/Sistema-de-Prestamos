@@ -40,7 +40,7 @@ export default function LoansPage() {
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="w-full lg:max-w-sm"><Input type="search" aria-label="Buscar préstamos" placeholder="Buscar por código, cliente o documento" prefix={<Search className="size-4" />} value={q} onChange={(e) => setQ(e.target.value)} /></div>
         <Segmented aria-label="Estado del préstamo" value={estado} onValueChange={setEstado}
-          options={[{ value: '', label: `Todos · ${cuenta('')}` }, { value: 'Vigente', label: `Vigentes · ${cuenta('Vigente')}` }, { value: 'Con cuotas vencidas', label: `Con vencidas · ${cuenta('Con cuotas vencidas')}` }, { value: 'Cancelado', label: `Cancelados · ${cuenta('Cancelado')}` }]} />
+          options={[{ value: '', label: `Todos · ${cuenta('')}` }, { value: 'Vigente', label: `Vigentes · ${cuenta('Vigente')}` }, { value: 'Con cuotas vencidas', label: `Con vencidas · ${cuenta('Con cuotas vencidas')}` }, { value: 'Finalizado', label: `Finalizados · ${cuenta('Finalizado')}` }]} />
         <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-ink">
           <input type="checkbox" checked={solo} onChange={(e) => setSolo(e.target.checked)} className="size-4 accent-[var(--teal)]" />Solo mis préstamos
         </label>

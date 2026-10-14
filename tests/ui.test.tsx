@@ -1,10 +1,9 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import App from '@/app/App';
 import { STORAGE_KEYS } from '@/lib/config';
-import { resumen } from '@/lib/finance';
-import { getDb, restaurarDb } from '@/services/store';
+import { restaurarDb } from '@/services/store';
 
 /** Pruebas de interfaz: la app real, con enrutado, estado y persistencia (sin mocks de la lógica). */
 const abrir = (hash: string, sesion = true) => {
@@ -35,8 +34,8 @@ describe('acceso de demostración', () => {
 describe('todas las rutas renderizan sin errores', () => {
   const rutas: [string, RegExp][] = [
     ['#/', /hola, camila/i], ['#/clientes', /^clientes$/i], ['#/clientes/C013', /inversiones andes/i], ['#/solicitud', /nueva solicitud/i],
-    ['#/prestamos', /^préstamos$/i], ['#/prestamos/PR-1003', /^PR-1003/], ['#/pagos', /pagos y cancelaciones/i], ['#/pagos/PR-1003', /pagos y cancelaciones/i],
-    ['#/clientes/C999', /cliente no encontrado/i], ['#/prestamos/PR-0000', /préstamo no encontrado/i], ['#/no-existe', /página no encontrada/i]
+    ['#/prestamos', /^préstamos$/i], ['#/prestamos/PR-1003', /^PR-1003/], ['#/cuotas', /^cuotas y cronogramas$/i],
+    ['#/pagos', /página no encontrada/i], ['#/pagos/PR-1003', /página no encontrada/i], ['#/clientes/C999', /cliente no encontrado/i], ['#/prestamos/PR-0000', /préstamo no encontrado/i], ['#/no-existe', /página no encontrada/i]
   ];
   it.each(rutas)('%s', async (hash, titulo) => {
     abrir(hash);
@@ -45,22 +44,47 @@ describe('todas las rutas renderizan sin errores', () => {
   });
 });
 
-describe('regresiones detectadas en pruebas de navegador', () => {
-  it('escribir en el importe de un pago no provoca un bucle de renderizado (DataTable con referencias estables)', async () => {
-    const user = userEvent.setup();
-    abrir('#/pagos/PR-1001');
-    const importe = await screen.findByLabelText('Importe');
-    await user.clear(importe);
-    await user.type(importe, '123.45');
-    expect(importe).toHaveValue(123.45);
-    expect(await screen.findByText(/saldo tras la operación/i)).toBeInTheDocument();
+describe('alcance: la interfaz no ofrece operativa de pagos', () => {
+  const PAGOS = /registrar pago|pagar|abono|cancelaci[oó]n anticipada|liquidar|marcar como pagad/i;
+
+  it('el menú lateral no tiene accesos a pagos y sí a cuotas y cronogramas', async () => {
+    abrir('#/');
+    await screen.findByRole('heading', { name: /hola, camila/i }, { timeout: 4000 });
+    const nav = screen.getAllByRole('navigation')[0]!;
+    expect(within(nav).queryByText(PAGOS)).not.toBeInTheDocument();
+    expect(within(nav).queryByText(/pagos/i)).not.toBeInTheDocument();
+    expect(within(nav).getByText(/cuotas y cronogramas/i)).toBeInTheDocument();
   });
 
-  it('el formulario de pagos sigue la URL cuando solo cambia ?modo=anticipada estando ya en la pantalla', async () => {
-    abrir('#/pagos/PR-1001');
-    await screen.findByLabelText('Cuota a pagar');
-    await act(async () => { window.location.hash = '#/pagos/PR-1001?modo=anticipada'; });
-    expect(await screen.findByRole('group', { name: /cálculo de la cancelación anticipada/i })).toBeInTheDocument();
+  it.each(['#/', '#/prestamos/PR-1003', '#/clientes/C001', '#/cuotas'])('%s no muestra botones ni acciones de pago', async (hash) => {
+    abrir(hash);
+    await screen.findAllByRole('heading', {}, { timeout: 4000 });
+    for (const b of screen.queryAllByRole('button')) expect(b.textContent ?? '', b.outerHTML).not.toMatch(PAGOS);
+    for (const l of screen.queryAllByRole('link')) expect(l.textContent ?? '', l.outerHTML).not.toMatch(PAGOS);
+  });
+
+  it('el detalle del préstamo ofrece descarga de PDF y cronograma de solo consulta', async () => {
+    abrir('#/prestamos/PR-1003');
+    expect(await screen.findByRole('button', { name: /descargar pdf/i }, { timeout: 4000 })).toBeInTheDocument();
+    // jsdom no cumple (min-width: 768px): se renderiza la presentación móvil (lista) del mismo cronograma
+    expect(screen.getByRole('list', { name: /cronograma de cuotas/i })).toBeInTheDocument();
+    expect(screen.queryByText(/historial de pagos/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/abonado/i)).not.toBeInTheDocument();
+  });
+});
+
+describe('consulta de cuotas', () => {
+  it('filtra por estado y por búsqueda de forma funcional', async () => {
+    const user = userEvent.setup();
+    abrir('#/cuotas');
+    await screen.findByRole('heading', { name: /cuotas y cronogramas/i }, { timeout: 4000 });
+    await user.selectOptions(screen.getByLabelText('Estado de la cuota'), 'Vencida');
+    const lista = await screen.findByRole('list', { name: /cuotas programadas/i });
+    const filas = within(lista).getAllByRole('listitem');
+    expect(filas.length).toBeGreaterThan(0);
+    filas.forEach((f) => expect(f).toHaveTextContent(/vencida/i));
+    await user.type(screen.getByLabelText(/buscar por préstamo/i), 'zzzzzz');
+    expect(await screen.findByText(/no hay cuotas con estos filtros/i)).toBeInTheDocument();
   });
 });
 
@@ -74,16 +98,5 @@ describe('flujos funcionales', () => {
     await user.click(screen.getByRole('button', { name: 'Continuar' }));
     expect((await screen.findAllByText(/capacidad disponible/i)).length).toBeGreaterThan(0);
     expect(screen.getByText('Condiciones del préstamo')).toBeInTheDocument();
-  });
-
-  it('pago de cuota: confirma, actualiza el saldo y muestra el resultado', async () => {
-    const user = userEvent.setup();
-    abrir('#/pagos/PR-1001');
-    const antes = resumen(getDb().prestamos.find((p) => p.id === 'PR-1001')!).pendiente;
-    await user.click(await screen.findByRole('button', { name: /revisar y confirmar/i }));
-    const dialogo = await screen.findByRole('dialog');
-    await user.click(within(dialogo).getByRole('button', { name: 'Confirmar' }));
-    expect(await screen.findByText('Operación registrada', {}, { timeout: 4000 })).toBeInTheDocument();
-    await waitFor(() => expect(resumen(getDb().prestamos.find((p) => p.id === 'PR-1001')!).pendiente).toBeLessThan(antes));
   });
 });

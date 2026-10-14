@@ -16,7 +16,7 @@ const ClientDetailPage = lazy(() => import('@/features/clients/client-detail-pag
 const RequestPage = lazy(() => import('@/features/loans/request-page'));
 const LoansPage = lazy(() => import('@/features/loans/loans-page'));
 const LoanDetailPage = lazy(() => import('@/features/loans/loan-detail-page'));
-const PaymentsPage = lazy(() => import('@/features/payments/payments-page'));
+const InstallmentsPage = lazy(() => import('@/features/installments/installments-page'));
 
 function Rutas() {
   const { autenticado } = useAuth();
@@ -31,8 +31,7 @@ function Rutas() {
         <Route path="solicitud/:clienteId" element={<RequestPage />} />
         <Route path="prestamos" element={<LoansPage />} />
         <Route path="prestamos/:id" element={<LoanDetailPage />} />
-        <Route path="pagos" element={<PaymentsPage />} />
-        <Route path="pagos/:id" element={<PaymentsPage />} />
+        <Route path="cuotas" element={<InstallmentsPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff, Info, Landmark, ShieldCheck, TrendingUp } from 'lucide-react';
+import { Eye, EyeOff, FileText, Info, Landmark, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -22,7 +22,7 @@ type Valores = z.infer<typeof schema>;
 const puntos = [
   { icon: ShieldCheck, texto: 'Límite de endeudamiento aplicado en toda la empresa' },
   { icon: Landmark, texto: 'Cronogramas con TEA y cuotas iguales' },
-  { icon: TrendingUp, texto: 'Cancelación anticipada sobre el total pactado' }
+  { icon: FileText, texto: 'Cronograma y ficha del préstamo en PDF' }
 ];
 
 export default function LoginPage() {
@@ -42,7 +42,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-3 text-white"><BrandMark tile="light" /><BrandName /></div>
         <div className="max-w-lg">
           <h1 className="text-3xl font-semibold leading-tight text-white sm:text-4xl">{BRAND.lema}.</h1>
-          <p className="mt-4 text-[0.9375rem] leading-relaxed text-side-ink/80">Valida el endeudamiento, genera cronogramas y registra pagos con reglas de negocio claras y trazables.</p>
+          <p className="mt-4 text-[0.9375rem] leading-relaxed text-side-ink/80">Registra préstamos, valida el endeudamiento y consulta cronogramas con reglas de negocio claras y trazables.</p>
           <ul className="mt-8 hidden space-y-3.5 sm:block">
             {puntos.map((p) => (
               <li key={p.texto} className="flex items-center gap-3 text-sm">

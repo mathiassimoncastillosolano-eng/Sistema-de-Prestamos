@@ -4,8 +4,8 @@
    ========================================================= */
 import { CFG, USUARIO_DEMO } from '@/lib/config';
 import { money } from '@/lib/format';
-import { aplicarPagoAPrestamo, capitalPendienteCliente, generarCronograma, validarPago, validarSolicitud } from '@/lib/finance';
-import type { Actividad, ActividadRef, Cliente, Db, MedioPago, Pago, Prestamo, TipoPago } from '@/types';
+import { capitalPendienteCliente, generarCronograma, validarSolicitud } from '@/lib/finance';
+import type { Actividad, ActividadRef, Cliente, Db, Prestamo } from '@/types';
 import { commit, getDb } from './store';
 
 const siguienteNumero = (ids: string[], prefijo: string) =>
@@ -60,42 +60,11 @@ export function crearPrestamo(s: NuevaSolicitud): ResultadoPrestamo {
     id: 'PR-' + siguienteNumero(db.prestamos.map((p) => p.id), 'PR-').toString().padStart(4, '0'),
     clienteId: cliente.id, agencia: USUARIO_DEMO.agencia, capital: s.monto, plazo: s.plazo, tea: CFG.tea,
     desembolso: s.desembolso, asesor: USUARIO_DEMO.nombre,
-    cronograma: generarCronograma(s.monto, s.plazo, s.desembolso), pagos: [], observaciones: s.observaciones ?? ''
+    cronograma: generarCronograma(s.monto, s.plazo, s.desembolso), historico: [], observaciones: s.observaciones ?? ''
   };
   commit({
     ...db, prestamos: [...db.prestamos, prestamo],
-    actividad: conActividad(db, 'Préstamo desembolsado', `${prestamo.id} por ${money(s.monto)} a ${cliente.nombre}`, { entidad: 'prestamo', id: prestamo.id })
+    actividad: conActividad(db, 'Préstamo registrado', `${prestamo.id} por ${money(s.monto)} a ${cliente.nombre}`, { entidad: 'prestamo', id: prestamo.id })
   });
   return { ok: true, prestamo };
-}
-
-/* ---------- Pagos y cancelación anticipada ---------- */
-export interface NuevoPago {
-  prestamoId: string;
-  monto: number;
-  fecha: string;
-  medio: MedioPago;
-  ref?: string;
-  tipo: TipoPago;
-}
-
-export type ResultadoPago = { ok: true; operacion: Pago; prestamo: Prestamo } | { ok: false; error: string; campo?: string };
-
-/** Registra un pago simulado. No hay cobro real ni conexión bancaria. */
-export function registrarPago(n: NuevoPago): ResultadoPago {
-  const db = getDb();
-  const actual = db.prestamos.find((p) => p.id === n.prestamoId);
-  if (!actual) return { ok: false, error: 'El préstamo no existe.', campo: 'prestamoId' };
-  const v = validarPago(actual, n);
-  if (!v.ok) return v;
-
-  const operacion: Pago = { op: 'OP-' + db.contador, fecha: n.fecha, monto: v.monto, tipo: n.tipo, usuario: USUARIO_DEMO.nombre, medio: n.medio, ref: n.ref ?? '' };
-  const prestamo = aplicarPagoAPrestamo(actual, operacion);
-  const anticipada = n.tipo === 'Cancelación anticipada';
-  commit({
-    ...db, contador: db.contador + 1,
-    prestamos: db.prestamos.map((p) => (p.id === prestamo.id ? prestamo : p)),
-    actividad: conActividad(db, anticipada ? 'Cancelación anticipada' : 'Pago registrado', `${operacion.op} por ${money(v.monto)} en ${prestamo.id}`, { entidad: 'prestamo', id: prestamo.id })
-  });
-  return { ok: true, operacion, prestamo };
 }

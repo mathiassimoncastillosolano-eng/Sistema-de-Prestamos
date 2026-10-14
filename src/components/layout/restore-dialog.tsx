@@ -14,7 +14,7 @@ export function RestoreDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   };
   return (
     <Modal open={open} onOpenChange={onOpenChange} size="sm" title="Restaurar datos de demostración"
-      description="Se descartarán los clientes, préstamos y pagos creados en este navegador y se volverá a los datos iniciales."
+      description="Se descartarán los clientes y préstamos creados en este navegador y se volverá a los datos iniciales."
       footer={<><Button variant="secondary" onClick={() => onOpenChange(false)}>Cancelar</Button><Button variant="danger" onClick={restaurar}>Restaurar datos</Button></>} />
   );
 }

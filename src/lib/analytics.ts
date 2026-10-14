@@ -1,11 +1,11 @@
 /* =========================================================
-   ANALÍTICAS DEL DASHBOARD — todo se calcula desde los registros (clientes, préstamos, cuotas, pagos).
-   No existen cifras independientes: si cambia un pago, cambian los indicadores y los gráficos.
+   ANALÍTICAS DEL DASHBOARD — todo se calcula desde los registros (clientes, préstamos, cuotas, registro histórico).
+   No existen cifras independientes ni indicadores de pagos: el sistema no gestiona cobros.
    ========================================================= */
 import type { Cliente, Cuota, Db, EstadoPrestamo, Prestamo } from '@/types';
 import { CFG, USUARIO_DEMO } from './config';
 import { addDays, addMonths, finDeMes, mesDe } from './dates';
-import { capitalPendienteAl, cuotaAbierta, faltaCuota, r2, resumen } from './finance';
+import { capitalPendienteAl, cuotaAbierta, importePendienteCuota, r2, resumen } from './finance';
 import { deudaCliente } from './selectors';
 import { variacion } from './format';
 
@@ -20,7 +20,6 @@ export const PERIODOS = [3, 6, 12] as const;
 export interface PuntoMensual {
   mes: string;
   desembolsos: number;
-  pagos: number;
   capitalPendiente: number;
   /** El mes en curso aún no termina. */
   parcial: boolean;
@@ -30,7 +29,8 @@ export interface CuotaPendiente {
   prestamo: Prestamo;
   cliente: Cliente | undefined;
   cuota: Cuota;
-  falta: number;
+  /** Importe contractual de la cuota (informativo). */
+  importe: number;
 }
 
 export interface Dashboard {
@@ -43,12 +43,11 @@ export interface Dashboard {
   variacionDesembolsos: number | null;
   prestamosActivos: number;
   prestamosTotales: number;
-  prestamosCancelados: number;
+  prestamosFinalizados: number;
   clientes: number;
   clientesNuevosMes: number;
-  pagosMes: number;
-  variacionPagos: number | null;
   vencidas: CuotaPendiente[];
+  /** Importe contractual de las cuotas vencidas (informativo). */
   montoVencido: number;
   proximas: CuotaPendiente[];
   proximasVentana: { cantidad: number; monto: number };
@@ -68,7 +67,7 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number): Dash
 
   const ps = db.prestamos.filter(dePrestamo);
   const rs = ps.map((p) => ({ p, r: resumen(p) }));
-  const vigentes = rs.filter((x) => x.r.estado !== 'Cancelado');
+  const vigentes = rs.filter((x) => x.r.estado !== 'Finalizado');
   const cliente = (id: string) => db.clientes.find((c) => c.id === id);
 
   const hoy = CFG.hoy;
@@ -77,9 +76,6 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number): Dash
   const mismoDiaPrevio = addMonths(hoy, -1); // misma ventana de días, para comparar justo
   const cierrePrevio = finDeMes(inicioPrevio);
 
-  const pagos = ps.flatMap((p) => p.pagos);
-  const pagosMes = suma(pagos.filter((g) => enRango(g.fecha, inicioMes, hoy)).map((g) => g.monto));
-  const pagosPrevio = suma(pagos.filter((g) => enRango(g.fecha, inicioPrevio, mismoDiaPrevio)).map((g) => g.monto));
   const desembolsadoMes = suma(ps.filter((p) => enRango(p.desembolso, inicioMes, hoy)).map((p) => p.capital));
   const desembolsadoPrevio = suma(ps.filter((p) => enRango(p.desembolso, inicioPrevio, mismoDiaPrevio)).map((p) => p.capital));
 
@@ -87,7 +83,7 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number): Dash
   const capitalPendientePrevio = suma(ps.map((p) => capitalPendienteAl(p, cierrePrevio)));
 
   const abiertas: CuotaPendiente[] = vigentes.flatMap(({ p }) =>
-    p.cronograma.filter(cuotaAbierta).map((cuota) => ({ prestamo: p, cliente: cliente(p.clienteId), cuota, falta: faltaCuota(cuota) }))
+    p.cronograma.filter(cuotaAbierta).map((cuota) => ({ prestamo: p, cliente: cliente(p.clienteId), cuota, importe: importePendienteCuota(cuota) }))
   );
   const porFecha = (a: CuotaPendiente, b: CuotaPendiente) => a.cuota.fecha.localeCompare(b.cuota.fecha);
   const vencidas = abiertas.filter((o) => o.cuota.fecha < hoy).sort(porFecha);
@@ -101,13 +97,12 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number): Dash
     return {
       mes: ym,
       desembolsos: suma(ps.filter((p) => mesDe(p.desembolso) === ym).map((p) => p.capital)),
-      pagos: suma(pagos.filter((g) => mesDe(g.fecha) === ym).map((g) => g.monto)),
       capitalPendiente: suma(ps.map((p) => capitalPendienteAl(p, corte))),
       parcial: fin > hoy
     };
   });
 
-  const estados = (['Vigente', 'Con cuotas vencidas', 'Cancelado'] as const).map((estado) => {
+  const estados = (['Vigente', 'Con cuotas vencidas', 'Finalizado'] as const).map((estado) => {
     const grupo = rs.filter((x) => x.r.estado === estado);
     return { estado, cantidad: grupo.length, capital: suma(grupo.map((x) => x.r.capitalPend)) };
   });
@@ -121,11 +116,10 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number): Dash
   return {
     capitalPendiente, capitalPendientePrevio, variacionCapital: variacion(capitalPendiente, capitalPendientePrevio),
     totalDesembolsado: suma(ps.map((p) => p.capital)), desembolsadoMes, variacionDesembolsos: variacion(desembolsadoMes, desembolsadoPrevio),
-    prestamosActivos: vigentes.length, prestamosTotales: ps.length, prestamosCancelados: ps.length - vigentes.length,
+    prestamosActivos: vigentes.length, prestamosTotales: ps.length, prestamosFinalizados: ps.length - vigentes.length,
     clientes: clientesAlcance.length, clientesNuevosMes: clientesAlcance.filter((c) => enRango(c.alta, inicioMes, hoy)).length,
-    pagosMes, variacionPagos: variacion(pagosMes, pagosPrevio),
-    vencidas, montoVencido: suma(vencidas.map((o) => o.falta)),
-    proximas: futuras.slice(0, 5), proximasVentana: { cantidad: ventana.length, monto: suma(ventana.map((o) => o.falta)) },
+    vencidas, montoVencido: suma(vencidas.map((o) => o.importe)),
+    proximas: futuras.slice(0, 5), proximasVentana: { cantidad: ventana.length, monto: suma(ventana.map((o) => o.importe)) },
     serie, estados, clientesCercaLimite, mesPrevio: mesDe(inicioPrevio)
   };
 }

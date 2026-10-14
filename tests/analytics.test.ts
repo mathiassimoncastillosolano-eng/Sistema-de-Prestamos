@@ -14,20 +14,23 @@ describe('analíticas del dashboard (derivadas de los registros)', () => {
     }
   });
 
-  it('desembolsos y pagos de la serie suman lo que dicen los registros del periodo', () => {
+  it('los desembolsos de la serie suman lo que dicen los registros del periodo', () => {
     const d = calcularDashboard(db, 'empresa', 12);
-    const pagosSerie = Math.round(d.serie.reduce((a, p) => a + p.pagos, 0) * 100) / 100;
-    const pagosReal = Math.round(db.prestamos.flatMap((p) => p.pagos).filter((g) => g.fecha >= `${d.serie[0]!.mes}-01`).reduce((a, g) => a + g.monto, 0) * 100) / 100;
-    expect(pagosSerie).toBe(pagosReal);
     const desemSerie = d.serie.reduce((a, p) => a + p.desembolsos, 0);
     const desemReal = db.prestamos.filter((p) => p.desembolso >= `${d.serie[0]!.mes}-01`).reduce((a, p) => a + p.capital, 0);
     expect(desemSerie).toBe(desemReal);
   });
 
+  it('el dashboard no contiene indicadores de pagos', () => {
+    const d = calcularDashboard(db, 'empresa', 6);
+    expect(Object.keys(d).join(' ')).not.toMatch(/pago/i);
+    expect(Object.keys(d.serie[0]!).join(' ')).not.toMatch(/pago/i);
+  });
+
   it('el estado de la cartera suma todos los préstamos y la empresa agrega a los alcances', () => {
     const e = calcularDashboard(db, 'empresa', 6);
     expect(e.estados.reduce((a, x) => a + x.cantidad, 0)).toBe(db.prestamos.length);
-    expect(e.prestamosActivos + e.prestamosCancelados).toBe(db.prestamos.length);
+    expect(e.prestamosActivos + e.prestamosFinalizados).toBe(db.prestamos.length);
     expect(e.vencidas.length).toBe(db.prestamos.reduce((a, p) => a + resumen(p).vencidas, 0));
     const mis = calcularDashboard(db, 'mis', 6);
     expect(mis.capitalPendiente).toBeLessThanOrEqual(e.capitalPendiente);
@@ -37,7 +40,6 @@ describe('analíticas del dashboard (derivadas de los registros)', () => {
   it('no inventa tendencias: la variación es null cuando no hay base de comparación', () => {
     const d = calcularDashboard({ ...db, prestamos: [] }, 'empresa', 6);
     expect(d.variacionCapital).toBeNull();
-    expect(d.variacionPagos).toBeNull();
   });
 
   it('genera notificaciones y búsqueda con datos reales', () => {
