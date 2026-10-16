@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Eye, EyeOff, FileText, Info, Landmark, ShieldCheck } from 'lucide-react';
+import { CircleAlert, Eye, EyeOff, FileText, Info, Landmark, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -10,11 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/use-auth';
-import { BRAND, USUARIO_DEMO } from '@/lib/config';
+import { BRAND } from '@/lib/config';
 import { DUR, EASE } from '@/lib/motion';
+import { ApiError, mensajeDe } from '@/services/auth-api';
 
 const schema = z.object({
-  usuario: z.string().trim().min(1, 'Ingresa tu usuario.'),
+  correo: z.string().trim().min(1, 'Ingresa tu correo electrónico.').email('Ingresa un correo electrónico válido.'),
   clave: z.string().min(1, 'Ingresa tu contraseña.')
 });
 type Valores = z.infer<typeof schema>;
@@ -26,14 +27,20 @@ const puntos = [
 ];
 
 export default function LoginPage() {
-  const { entrar } = useAuth();
+  const { entrar, aviso } = useAuth();
   const [ver, setVer] = useState(false);
-  const [fallo, setFallo] = useState(false);
-  const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<Valores>({ resolver: zodResolver(schema), defaultValues: { usuario: '', clave: '' } });
+  const [fallo, setFallo] = useState<string | null>(null);
+  const { register, handleSubmit, resetField, setFocus, formState: { errors, isSubmitting } } = useForm<Valores>({ resolver: zodResolver(schema), defaultValues: { correo: '', clave: '' } });
 
   const enviar = async (v: Valores) => {
-    await new Promise((r) => setTimeout(r, 450)); // simula la latencia de un servicio
-    setFallo(!entrar(v.usuario, v.clave));
+    setFallo(null);
+    try {
+      await entrar(v.correo, v.clave);
+    } catch (e) {
+      setFallo(e instanceof ApiError ? e.message : mensajeDe('DESCONOCIDO'));
+      resetField('clave'); // la contraseña no se conserva tras un intento fallido
+      setFocus('clave');
+    }
   };
 
   return (
@@ -51,32 +58,27 @@ export default function LoginPage() {
             ))}
           </ul>
         </div>
-        <p className="hidden text-xs text-side-muted sm:block">Prototipo con datos ficticios · Sin backend</p>
+        <p className="hidden text-xs text-side-muted sm:block">Los datos de clientes y préstamos son ficticios (demostración)</p>
       </section>
 
       <section className="relative flex items-center justify-center bg-canvas p-6 sm:p-10">
         <ThemeToggle className="absolute right-4 top-4" />
         <motion.form onSubmit={handleSubmit(enviar)} noValidate className="w-full max-w-sm" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.slow, ease: EASE }}>
           <h2 className="text-2xl font-semibold text-ink">Iniciar sesión</h2>
-          <p className="mt-1 text-sm text-ink-muted">Acceso de demostración para asesores de préstamos.</p>
+          <p className="mt-1 text-sm text-ink-muted">Ingresa con tu correo electrónico y tu contraseña.</p>
 
           <div className="mt-7 space-y-4">
-            <Field label="Usuario" error={errors.usuario?.message}><Input autoComplete="username" autoFocus {...register('usuario')} /></Field>
+            <Field label="Correo electrónico" error={errors.correo?.message}><Input type="email" inputMode="email" autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus {...register('correo')} /></Field>
             <Field label="Contraseña" error={errors.clave?.message}>
               <Input type={ver ? 'text' : 'password'} autoComplete="current-password" {...register('clave')}
                 suffix={<button type="button" onClick={() => setVer((v) => !v)} aria-label={ver ? 'Ocultar contraseña' : 'Mostrar contraseña'} className="-mr-1 rounded p-1 text-ink-muted hover:text-ink">{ver ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>} />
             </Field>
           </div>
 
-          {fallo && <p role="alert" className="mt-4 rounded-control border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger-ink">Usuario o contraseña incorrectos. Usa las credenciales de demostración indicadas abajo.</p>}
+          {aviso && !fallo && <p role="status" className="mt-4 flex items-start gap-2 rounded-control border border-line bg-sand px-3 py-2.5 text-sm text-sand-ink"><Info className="mt-0.5 size-4 shrink-0" aria-hidden />{aviso}</p>}
+          {fallo && <p role="alert" className="mt-4 flex items-start gap-2 rounded-control border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger-ink"><CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />{fallo}</p>}
 
-          <Button type="submit" variant="primary" size="lg" className="mt-6 w-full" loading={isSubmitting}>Ingresar</Button>
-
-          <div className="mt-6 rounded-card border border-line bg-sand p-4 text-sm text-sand-ink">
-            <p className="flex items-start gap-2"><Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-              <span>Credenciales de demostración: <b className="font-semibold">{USUARIO_DEMO.usuario}</b> / <b className="font-semibold">{USUARIO_DEMO.clave}</b>. La autenticación es simulada y no ofrece seguridad real.</span></p>
-            <button type="button" onClick={() => { setValue('usuario', USUARIO_DEMO.usuario, { shouldValidate: true }); setValue('clave', USUARIO_DEMO.clave, { shouldValidate: true }); }} className="mt-2 text-sm font-medium underline underline-offset-4 hover:no-underline">Completar con las credenciales de demostración</button>
-          </div>
+          <Button type="submit" variant="primary" size="lg" className="mt-6 w-full" loading={isSubmitting}>{isSubmitting ? 'Verificando…' : 'Ingresar'}</Button>
         </motion.form>
       </section>
     </div>

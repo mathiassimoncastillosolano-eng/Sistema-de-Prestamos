@@ -1,15 +1,18 @@
 import { MotionConfig } from 'motion/react';
-import { lazy } from 'react';
-import { HashRouter, Route, Routes } from 'react-router-dom';
+import { lazy, useEffect } from 'react';
+import { HashRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppShell } from '@/components/layout/app-shell';
-import { Toaster } from '@/components/ui/toast';
+import { Toaster, toast } from '@/components/ui/toast';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import LoginPage from '@/features/auth/login-page';
+import { PantallaCarga, PantallaErrorSesion, PantallaRolNoReconocido } from '@/features/auth/session-screens';
 import NotFoundPage from '@/features/not-found';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
+import { RUTA_INICIO, type Modulo } from '@/lib/permissions';
 import { ThemeProvider } from '@/hooks/use-theme';
 
-/* Carga diferida por pantalla: el dashboard (gráficos) no pesa en el resto de rutas. */
+/* Carga diferida por pantalla: el dashboard (gráficos) no pesa en el resto de rutas.
+   Con la protección por rol, el código de un módulo prohibido ni siquiera se descarga. */
 const DashboardPage = lazy(() => import('@/features/dashboard/dashboard-page'));
 const ClientsPage = lazy(() => import('@/features/clients/clients-page'));
 const ClientDetailPage = lazy(() => import('@/features/clients/client-detail-page'));
@@ -18,20 +21,43 @@ const LoansPage = lazy(() => import('@/features/loans/loans-page'));
 const LoanDetailPage = lazy(() => import('@/features/loans/loan-detail-page'));
 const InstallmentsPage = lazy(() => import('@/features/installments/installments-page'));
 
+/** Guard de ruta: decide por URL (no por el menú). Sin permiso redirige al dashboard antes de montar el módulo. */
+function Protegida({ modulo }: { modulo: Modulo }) {
+  const { puede } = useAuth();
+  const permitido = puede(modulo);
+  useEffect(() => { if (!permitido) toast.info('Tu rol no tiene acceso a ese módulo.'); }, [permitido]);
+  return permitido ? <Outlet /> : <Navigate to={RUTA_INICIO} replace />;
+}
+
 function Rutas() {
-  const { autenticado } = useAuth();
-  if (!autenticado) return <LoginPage />;
+  const { fase, usuario } = useAuth();
+
+  if (fase === 'cargando') return <PantallaCarga />;
+  if (fase === 'error') return <PantallaErrorSesion />;
+  if (fase === 'anonimo' || !usuario) return <LoginPage />;
+  if (!usuario.rol) return <PantallaRolNoReconocido />;
+
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route index element={<DashboardPage />} />
-        <Route path="clientes" element={<ClientsPage />} />
-        <Route path="clientes/:id" element={<ClientDetailPage />} />
-        <Route path="solicitud" element={<RequestPage />} />
-        <Route path="solicitud/:clienteId" element={<RequestPage />} />
-        <Route path="prestamos" element={<LoansPage />} />
-        <Route path="prestamos/:id" element={<LoanDetailPage />} />
-        <Route path="cuotas" element={<InstallmentsPage />} />
+        <Route element={<Protegida modulo="dashboard" />}>
+          <Route index element={<DashboardPage />} />
+        </Route>
+        <Route element={<Protegida modulo="clientes" />}>
+          <Route path="clientes" element={<ClientsPage />} />
+          <Route path="clientes/:id" element={<ClientDetailPage />} />
+        </Route>
+        <Route element={<Protegida modulo="solicitud" />}>
+          <Route path="solicitud" element={<RequestPage />} />
+          <Route path="solicitud/:clienteId" element={<RequestPage />} />
+        </Route>
+        <Route element={<Protegida modulo="prestamos" />}>
+          <Route path="prestamos" element={<LoansPage />} />
+          <Route path="prestamos/:id" element={<LoanDetailPage />} />
+        </Route>
+        <Route element={<Protegida modulo="cuotas" />}>
+          <Route path="cuotas" element={<InstallmentsPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>

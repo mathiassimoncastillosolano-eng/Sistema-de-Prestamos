@@ -2,10 +2,11 @@
    ACCIONES / SERVICIOS SIMULADOS — escriben en el store reglas financieras incluidas.
    Cada acción revalida (nunca confía solo en el formulario) y devuelve un resultado explícito.
    ========================================================= */
-import { CFG, USUARIO_DEMO } from '@/lib/config';
+import { CFG } from '@/lib/config';
 import { money } from '@/lib/format';
 import { capitalPendienteCliente, generarCronograma, validarSolicitud } from '@/lib/finance';
 import type { Actividad, ActividadRef, Cliente, Db, Prestamo } from '@/types';
+import type { IdentidadOperativa } from '@/types/auth';
 import { commit, getDb } from './store';
 
 const siguienteNumero = (ids: string[], prefijo: string) =>
@@ -16,24 +17,24 @@ function marcaDeTiempo() {
   return `${CFG.hoy} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-const conActividad = (db: Db, tipo: string, desc: string, ref?: ActividadRef): Actividad[] =>
-  [{ t: marcaDeTiempo(), usuario: USUARIO_DEMO.nombre, tipo, desc, ref }, ...db.actividad].slice(0, 40);
+const conActividad = (db: Db, yo: IdentidadOperativa, tipo: string, desc: string, ref?: ActividadRef): Actividad[] =>
+  [{ t: marcaDeTiempo(), usuario: yo.nombre, tipo, desc, ref }, ...db.actividad].slice(0, 40);
 
 /* ---------- Clientes ---------- */
 export type NuevoCliente = Omit<Cliente, 'id' | 'agencia' | 'asesor' | 'alta'>;
 
 export type ResultadoCliente = { ok: true; cliente: Cliente } | { ok: false; error: string };
 
-export function registrarCliente(datos: NuevoCliente): ResultadoCliente {
+export function registrarCliente(yo: IdentidadOperativa, datos: NuevoCliente): ResultadoCliente {
   const db = getDb();
   if (db.clientes.some((c) => c.doc === datos.doc)) {
     return { ok: false, error: 'Este documento ya está registrado. Búscalo en la lista para no crear un duplicado.' };
   }
   const cliente: Cliente = {
     id: 'C' + String(siguienteNumero(db.clientes.map((c) => c.id), 'C')).padStart(3, '0'),
-    agencia: USUARIO_DEMO.agencia, asesor: USUARIO_DEMO.nombre, alta: CFG.hoy, ...datos
+    agencia: yo.agencia, asesor: yo.nombre, alta: CFG.hoy, ...datos
   };
-  commit({ ...db, clientes: [...db.clientes, cliente], actividad: conActividad(db, 'Cliente registrado', 'Alta de ' + cliente.nombre, { entidad: 'cliente', id: cliente.id }) });
+  commit({ ...db, clientes: [...db.clientes, cliente], actividad: conActividad(db, yo, 'Cliente registrado', 'Alta de ' + cliente.nombre, { entidad: 'cliente', id: cliente.id }) });
   return { ok: true, cliente };
 }
 
@@ -48,7 +49,7 @@ export interface NuevaSolicitud {
 
 export type ResultadoPrestamo = { ok: true; prestamo: Prestamo } | { ok: false; error: string };
 
-export function crearPrestamo(s: NuevaSolicitud): ResultadoPrestamo {
+export function crearPrestamo(yo: IdentidadOperativa, s: NuevaSolicitud): ResultadoPrestamo {
   const db = getDb();
   const cliente = db.clientes.find((c) => c.id === s.clienteId);
   if (!cliente) return { ok: false, error: 'El cliente seleccionado no existe.' };
@@ -58,13 +59,13 @@ export function crearPrestamo(s: NuevaSolicitud): ResultadoPrestamo {
 
   const prestamo: Prestamo = {
     id: 'PR-' + siguienteNumero(db.prestamos.map((p) => p.id), 'PR-').toString().padStart(4, '0'),
-    clienteId: cliente.id, agencia: USUARIO_DEMO.agencia, capital: s.monto, plazo: s.plazo, tea: CFG.tea,
-    desembolso: s.desembolso, asesor: USUARIO_DEMO.nombre,
+    clienteId: cliente.id, agencia: yo.agencia, capital: s.monto, plazo: s.plazo, tea: CFG.tea,
+    desembolso: s.desembolso, asesor: yo.nombre,
     cronograma: generarCronograma(s.monto, s.plazo, s.desembolso), historico: [], observaciones: s.observaciones ?? ''
   };
   commit({
     ...db, prestamos: [...db.prestamos, prestamo],
-    actividad: conActividad(db, 'Préstamo registrado', `${prestamo.id} por ${money(s.monto)} a ${cliente.nombre}`, { entidad: 'prestamo', id: prestamo.id })
+    actividad: conActividad(db, yo, 'Préstamo registrado', `${prestamo.id} por ${money(s.monto)} a ${cliente.nombre}`, { entidad: 'prestamo', id: prestamo.id })
   });
   return { ok: true, prestamo };
 }

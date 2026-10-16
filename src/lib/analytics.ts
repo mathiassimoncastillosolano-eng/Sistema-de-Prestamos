@@ -3,18 +3,26 @@
    No existen cifras independientes ni indicadores de pagos: el sistema no gestiona cobros.
    ========================================================= */
 import type { Cliente, Cuota, Db, EstadoPrestamo, Prestamo } from '@/types';
-import { CFG, USUARIO_DEMO } from './config';
+import type { IdentidadOperativa, Rol } from '@/types/auth';
+import { CFG } from './config';
 import { addDays, addMonths, finDeMes, mesDe } from './dates';
 import { capitalPendienteAl, cuotaAbierta, importePendienteCuota, r2, resumen } from './finance';
 import { deudaCliente } from './selectors';
 import { variacion } from './format';
 
 export type Alcance = 'mis' | 'agencia' | 'empresa';
-export const ALCANCES: { value: Alcance; label: string }[] = [
-  { value: 'mis', label: 'Mi cartera' },
-  { value: 'agencia', label: `Agencia ${USUARIO_DEMO.agencia}` },
-  { value: 'empresa', label: 'Toda la empresa' }
-];
+export interface OpcionAlcance { value: Alcance; label: string }
+
+/** Alcances disponibles según el perfil real: la gerencia no tiene cartera ni agencia propias. */
+export function alcancesPara(rol: Rol | null, agencia: string | null): OpcionAlcance[] {
+  const empresa: OpcionAlcance = { value: 'empresa', label: 'Toda la empresa' };
+  if (rol !== 'asesor') return [empresa];
+  return [
+    { value: 'mis', label: 'Mi cartera' },
+    ...(agencia ? [{ value: 'agencia' as const, label: `Agencia ${agencia}` }] : []),
+    empresa
+  ];
+}
 export const PERIODOS = [3, 6, 12] as const;
 
 export interface PuntoMensual {
@@ -61,9 +69,9 @@ export interface Dashboard {
 const suma = (xs: number[]) => r2(xs.reduce((a, b) => a + b, 0));
 const enRango = (f: string, desde: string, hasta: string) => f >= desde && f <= hasta;
 
-export function calcularDashboard(db: Db, alcance: Alcance, meses: number): Dashboard {
-  const dePrestamo = (p: Prestamo) => alcance === 'empresa' || (alcance === 'mis' ? p.asesor === USUARIO_DEMO.nombre : p.agencia === USUARIO_DEMO.agencia);
-  const deCliente = (c: Cliente) => alcance === 'empresa' || (alcance === 'mis' ? c.asesor === USUARIO_DEMO.nombre : c.agencia === USUARIO_DEMO.agencia);
+export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: IdentidadOperativa): Dashboard {
+  const dePrestamo = (p: Prestamo) => alcance === 'empresa' || (alcance === 'mis' ? p.asesor === yo.nombre : p.agencia === yo.agencia);
+  const deCliente = (c: Cliente) => alcance === 'empresa' || (alcance === 'mis' ? c.asesor === yo.nombre : c.agencia === yo.agencia);
 
   const ps = db.prestamos.filter(dePrestamo);
   const rs = ps.map((p) => ({ p, r: resumen(p) }));
@@ -133,8 +141,8 @@ export interface Notificacion {
   ruta: string;
 }
 
-export function calcularNotificaciones(db: Db): Notificacion[] {
-  const d = calcularDashboard(db, 'mis', 3);
+export function calcularNotificaciones(db: Db, yo: IdentidadOperativa): Notificacion[] {
+  const d = calcularDashboard(db, 'mis', 3, yo);
   const out: Notificacion[] = [];
   d.vencidas.slice(0, 3).forEach((o) =>
     out.push({

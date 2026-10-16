@@ -21,3 +21,6 @@ export const normalizar = (s: string) =>
     .trim();
 
 export const delay = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
+
+/** «Lima Centro» → «Agencia Lima Centro»; respeta nombres que ya empiezan por «Agencia». */
+export const etiquetaAgencia = (nombre: string) => (/^agencia\b/i.test(nombre.trim()) ? nombre.trim() : `Agencia ${nombre.trim()}`);

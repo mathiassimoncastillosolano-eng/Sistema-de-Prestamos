@@ -7,16 +7,17 @@ import { AnimatedNumber } from '@/components/data-display/animated-number';
 import { ChartTooltip } from '@/components/data-display/chart-tooltip';
 import { LimitMeter } from '@/components/data-display/limit-meter';
 import { Trend } from '@/components/data-display/trend';
+import { ModuleLink } from '@/components/layout/module-link';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useIdentidad, useUsuario } from '@/hooks/use-auth';
 import { useDb } from '@/hooks/use-db';
 import { useSimulatedLoading } from '@/hooks/use-simulated-loading';
-import { ALCANCES, PERIODOS, calcularDashboard, type Alcance } from '@/lib/analytics';
+import { PERIODOS, alcancesPara, calcularDashboard, type Alcance } from '@/lib/analytics';
 import { CFG } from '@/lib/config';
 import { diasEntre, fecha, fechaLarga, mesCorto, mesLargo, mesNombre } from '@/lib/dates';
 import { entero, money, moneyCompacto } from '@/lib/format';
@@ -51,14 +52,17 @@ function Stat({ label, valor, pie, tono, principal, className }: { label: string
 
 export default function DashboardPage() {
   const db = useDb();
-  const { usuario } = useAuth();
+  const usuario = useUsuario();
+  const yo = useIdentidad();
+  const { puede } = useAuth();
   const navigate = useNavigate();
   const cargando = useSimulatedLoading(240);
-  const [alcance, setAlcance] = useState<Alcance>('mis');
+  const alcances = useMemo(() => alcancesPara(usuario.rol, usuario.agencia?.nombre ?? null), [usuario.rol, usuario.agencia?.nombre]);
+  const [alcance, setAlcance] = useState<Alcance>(() => alcances[0]?.value ?? 'empresa');
   const [meses, setMeses] = useState<number>(6);
   const [registrar, setRegistrar] = useState(false);
-  const d = useMemo(() => calcularDashboard(db, alcance, meses), [db, alcance, meses]);
-  const alcanceLabel = ALCANCES.find((a) => a.value === alcance)?.label ?? '';
+  const d = useMemo(() => calcularDashboard(db, alcance, meses, yo), [db, alcance, meses, yo]);
+  const alcanceLabel = alcances.find((a) => a.value === alcance)?.label ?? '';
   const mesPrev = mesNombre(d.mesPrevio);
 
   if (cargando) {
@@ -86,17 +90,19 @@ export default function DashboardPage() {
             </>
           }
           actions={
-            <>
-              <Button variant="primary" onClick={() => navigate('/solicitud')}><FilePlus2 className="size-4" />Nueva solicitud</Button>
-              <Button onClick={() => setRegistrar(true)}><Plus className="size-4" />Registrar cliente</Button>
-            </>
+            (puede('solicitud') || puede('clientes')) ? (
+              <>
+                {puede('solicitud') && <Button variant="primary" onClick={() => navigate('/solicitud')}><FilePlus2 className="size-4" />Nueva solicitud</Button>}
+                {puede('clientes') && <Button onClick={() => setRegistrar(true)}><Plus className="size-4" />Registrar cliente</Button>}
+              </>
+            ) : undefined
           }
         />
         <div role="group" aria-label="Filtros del dashboard" className="-mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-2.5">
           <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
             <span className="shrink-0 text-[0.8125rem] font-medium text-ink-muted">Cartera</span>
             <Select aria-label="Alcance de los indicadores" value={alcance} onChange={(e) => setAlcance(e.target.value as Alcance)} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
-              {ALCANCES.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+              {alcances.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
             </Select>
           </label>
           <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
@@ -219,19 +225,19 @@ export default function DashboardPage() {
                 <ul className="divide-y divide-line">
                   {d.vencidas.slice(0, 5).map((o) => (
                     <li key={`${o.prestamo.id}-${o.cuota.n}`}>
-                      <Link to={`/prestamos/${o.prestamo.id}`} className="-mx-2 flex items-center gap-3 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-2">
+                      <ModuleLink modulo="prestamos" to={`/prestamos/${o.prestamo.id}`} className="-mx-2 flex items-center gap-3 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-2" planoClassName="-mx-2 flex items-center gap-3 px-2 py-2.5">
                         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-danger-soft text-danger-ink"><CircleAlert className="size-4" aria-hidden /></span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-ink">{o.cliente?.nombre ?? o.prestamo.clienteId}</span>
                           <span className="block truncate text-xs text-ink-muted">{o.prestamo.id} · cuota {o.cuota.n} · {diasEntre(CFG.hoy, o.cuota.fecha)} días de atraso</span>
                         </span>
                         <span className="num text-sm font-semibold text-ink">{money(o.importe)}</span>
-                      </Link>
+                      </ModuleLink>
                     </li>
                   ))}
                 </ul>
               )}
-              {d.vencidas.length > 5 && <Button asChild variant="link" className="mt-3 text-sm"><Link to="/prestamos">Ver préstamos con cuotas vencidas<ArrowUpRight className="size-4" /></Link></Button>}
+              {d.vencidas.length > 5 && puede('prestamos') && <Button asChild variant="link" className="mt-3 text-sm"><Link to="/prestamos">Ver préstamos con cuotas vencidas<ArrowUpRight className="size-4" /></Link></Button>}
             </CardBody>
           </Card>
         </motion.div>
@@ -246,13 +252,13 @@ export default function DashboardPage() {
                 <ul className="divide-y divide-line">
                   {d.proximas.map((o) => (
                     <li key={`${o.prestamo.id}-${o.cuota.n}`}>
-                      <Link to={`/prestamos/${o.prestamo.id}`} className="-mx-2 flex items-center gap-3 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-2">
+                      <ModuleLink modulo="prestamos" to={`/prestamos/${o.prestamo.id}`} className="-mx-2 flex items-center gap-3 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-2" planoClassName="-mx-2 flex items-center gap-3 px-2 py-2.5">
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-ink">{o.cliente?.nombre ?? o.prestamo.clienteId}</span>
                           <span className="block truncate text-xs text-ink-muted">{fecha(o.cuota.fecha)} · {o.prestamo.id} · cuota {o.cuota.n}</span>
                         </span>
                         <span className="num text-sm font-semibold text-ink">{money(o.importe)}</span>
-                      </Link>
+                      </ModuleLink>
                     </li>
                   ))}
                 </ul>
@@ -269,10 +275,10 @@ export default function DashboardPage() {
                 <ul className="space-y-4 pt-1">
                   {d.clientesCercaLimite.slice(0, 5).map((x) => (
                     <li key={x.cliente.id}>
-                      <Link to={`/clientes/${x.cliente.id}`} className="block rounded-control transition-colors hover:text-teal-ink">
+                      <ModuleLink modulo="clientes" to={`/clientes/${x.cliente.id}`} className="block rounded-control transition-colors hover:text-teal-ink">
                         <span className="mb-1.5 flex items-baseline justify-between gap-3"><span className="truncate text-sm font-medium text-ink">{x.cliente.nombre}</span><span className="num shrink-0 text-xs text-ink-muted">{money(x.deuda)}</span></span>
                         <LimitMeter deuda={x.deuda} label={x.cliente.nombre} showText={false} />
-                      </Link>
+                      </ModuleLink>
                     </li>
                   ))}
                 </ul>
@@ -292,7 +298,7 @@ export default function DashboardPage() {
                     <p className="text-sm text-ink"><b className="font-medium">{a.tipo}</b> · {a.desc}</p>
                     <p className="text-xs text-ink-muted">
                       {fechaHora(a.t)} · {a.usuario}
-                      {a.ref && <> · <Link to={rutaDeActividad(a.ref)} className="font-medium text-teal-ink underline-offset-4 hover:underline">Ver</Link></>}
+                      {a.ref && puede(a.ref.entidad === 'cliente' ? 'clientes' : 'prestamos') && <> · <Link to={rutaDeActividad(a.ref)} className="font-medium text-teal-ink underline-offset-4 hover:underline">Ver</Link></>}
                     </p>
                   </li>
                 ))}
@@ -302,7 +308,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      <ClientFormSheet open={registrar} onOpenChange={setRegistrar} />
+      {puede('clientes') && <ClientFormSheet open={registrar} onOpenChange={setRegistrar} />}
     </motion.div>
   );
 }

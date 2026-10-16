@@ -3,11 +3,11 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { Avatar } from '@/components/ui/avatar';
 import { Tip } from '@/components/ui/tooltip';
-import { useAuth } from '@/hooks/use-auth';
+import { useAuth, useUsuario } from '@/hooks/use-auth';
 import { DUR, EASE } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { BrandMark, BrandName } from './brand-mark';
-import { NAV_GROUPS } from './nav';
+import { gruposPara } from './nav';
 
 interface ContentProps {
   colapsado: boolean;
@@ -17,7 +17,9 @@ interface ContentProps {
 
 /** Contenido de la barra lateral. Se reutiliza en escritorio (colapsable) y en el drawer móvil. */
 export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps) {
-  const { usuario } = useAuth();
+  const usuario = useUsuario();
+  const { puede } = useAuth();
+  const grupos = gruposPara(puede);
   return (
     <div className="pattern-steps flex h-full flex-col bg-side text-side-ink">
       <div className={cn('flex h-16 shrink-0 items-center gap-3 px-[1.125rem]', colapsado && 'justify-center px-0')}>
@@ -26,7 +28,7 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
       </div>
 
       <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-3 pb-4 pt-2">
-        {NAV_GROUPS.map((g, gi) => (
+        {grupos.map((g, gi) => (
           <div key={g.titulo} className={cn(gi > 0 && 'mt-5')}>
             {colapsado ? (gi > 0 && <div aria-hidden className="mx-2 mb-3 h-px bg-side-line" />) : <p className="mb-1.5 px-3 text-xs font-medium text-side-muted">{g.titulo}</p>}
             <ul className="space-y-1">
@@ -70,7 +72,7 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
           {!colapsado && (
             <div className="min-w-0">
               <p className="truncate text-sm font-medium text-white">{usuario.nombre}</p>
-              <p className="truncate text-xs text-side-muted">{usuario.rol}</p>
+              <p className="truncate text-xs text-side-muted">{usuario.rolEtiqueta}</p>
             </div>
           )}
         </div>

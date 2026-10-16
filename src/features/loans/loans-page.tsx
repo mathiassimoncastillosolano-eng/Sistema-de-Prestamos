@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
-import { useAuth } from '@/hooks/use-auth';
+import { useUsuario } from '@/hooks/use-auth';
 import { useDb } from '@/hooks/use-db';
 import { useSimulatedLoading } from '@/hooks/use-simulated-loading';
 import { filasPrestamos } from '@/lib/selectors';
@@ -19,7 +19,7 @@ const columnas = columnasPrestamo();
 
 export default function LoansPage() {
   const db = useDb();
-  const { usuario } = useAuth();
+  const usuario = useUsuario();
   const navigate = useNavigate();
   const cargando = useSimulatedLoading(260);
   const [q, setQ] = useState('');

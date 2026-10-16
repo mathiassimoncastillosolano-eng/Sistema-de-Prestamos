@@ -5,7 +5,7 @@
    (mismos IDs, importes y cronogramas); se añaden clientes y préstamos para poder
    probar búsquedas, filtros, paginación y gráficos.
    ========================================================= */
-import { AGENCIAS, CFG, USUARIO_DEMO } from '@/lib/config';
+import { AGENCIAS, CFG } from '@/lib/config';
 import { addDays, addMonths } from '@/lib/dates';
 import { money } from '@/lib/format';
 import { generarCronograma, importarHistorico } from '@/lib/finance';
@@ -129,5 +129,3 @@ function actividadReciente(clientes: Cliente[], prestamos: Prestamo[]): Activida
   eventos.sort((a, b) => (a.dia < b.dia ? 1 : a.dia > b.dia ? -1 : 0));
   return eventos.slice(0, 40).map(({ dia, ...e }, i) => ({ ...e, t: `${dia} ${String(9 + (i % 8)).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}` }));
 }
-
-export const AGENCIA_DEMO = USUARIO_DEMO.agencia;

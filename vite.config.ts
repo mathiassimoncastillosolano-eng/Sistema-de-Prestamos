@@ -6,6 +6,11 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  server: {
+    // La API de autenticación se sirve bajo el mismo origen (/api): la cookie de sesión es de primera parte y no hace falta CORS.
+    // En producción lo hace el rewrite de vercel.json; aquí, este proxy hacia el backend local.
+    proxy: { '/api': { target: process.env.VITE_DEV_API_TARGET ?? 'http://localhost:8080', changeOrigin: false } }
+  },
   build: {
     target: 'es2022',
     rollupOptions: {

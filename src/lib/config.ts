@@ -1,5 +1,5 @@
 /* =========================================================
-   CONFIGURACIÓN CENTRAL — marca, parámetros financieros y usuario de demostración.
+   CONFIGURACIÓN CENTRAL — marca y parámetros financieros.
    Los parámetros de negocio se modifican aquí, nunca dentro de componentes.
    ========================================================= */
 
@@ -38,20 +38,10 @@ export const CFG = {
  */
 export const EJEMPLO_DOCUMENTO_REQUISITOS = { monto: 1000, plazo: 12, totalEsperado: 1300 } as const;
 
-/** Único perfil del prototipo. La autenticación es SIMULADA y no ofrece seguridad real. */
-export const USUARIO_DEMO = {
-  usuario: 'asesor',
-  clave: 'demo1234',
-  nombre: 'Camila Ortiz',
-  rol: 'Asesor de préstamos',
-  agencia: 'Lima Centro'
-} as const;
-
 export const AGENCIAS = ['Lima Centro', 'Arequipa', 'Cusco'] as const;
 
 export const STORAGE_KEYS = {
   db: 'nexora-db-v5',
   tema: 'nx-tema',
-  side: 'nx-side',
-  sesion: 'nx-sesion'
+  side: 'nx-side'
 } as const;

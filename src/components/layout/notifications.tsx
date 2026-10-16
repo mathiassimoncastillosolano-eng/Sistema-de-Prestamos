@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { DropdownContent, DropdownItem, DropdownLabel, DropdownMenu, DropdownTrigger } from '@/components/ui/dropdown';
+import { useIdentidad } from '@/hooks/use-auth';
 import { useDb } from '@/hooks/use-db';
 import { calcularNotificaciones } from '@/lib/analytics';
 import { cn } from '@/lib/utils';
@@ -14,7 +15,8 @@ const colores = { danger: 'bg-danger-soft text-danger-ink', warning: 'bg-warning
 export function Notifications() {
   const db = useDb();
   const navigate = useNavigate();
-  const lista = useMemo(() => calcularNotificaciones(db), [db]);
+  const yo = useIdentidad();
+  const lista = useMemo(() => calcularNotificaciones(db, yo), [db, yo]);
   return (
     <DropdownMenu>
       <DropdownTrigger asChild>

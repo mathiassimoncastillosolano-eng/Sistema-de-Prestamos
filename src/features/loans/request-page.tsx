@@ -20,7 +20,7 @@ import { Meter } from '@/components/ui/meter';
 import { Modal } from '@/components/ui/modal';
 import { Stepper } from '@/components/ui/stepper';
 import { toast } from '@/components/ui/toast';
-import { useAuth } from '@/hooks/use-auth';
+import { useIdentidad, useUsuario } from '@/hooks/use-auth';
 import { useDb } from '@/hooks/use-db';
 import { CFG } from '@/lib/config';
 import { addMonths, fecha } from '@/lib/dates';
@@ -39,7 +39,8 @@ const PASOS = [{ titulo: 'Cliente', descripcion: 'Quién solicita' }, { titulo: 
 export default function RequestPage() {
   const { clienteId: param } = useParams();
   const db = useDb();
-  const { usuario } = useAuth();
+  const usuario = useUsuario();
+  const yo = useIdentidad();
   const navigate = useNavigate();
   const inicial = param && getCliente(db, param) ? param : '';
   const [paso, setPaso] = useState(inicial ? 2 : 1);
@@ -80,7 +81,7 @@ export default function RequestPage() {
     if (guardando) return; // evita envíos duplicados
     setGuardando(true);
     await delay(500);
-    const r = crearPrestamo({ clienteId: valores.clienteId, monto: valores.monto, plazo: valores.plazo, desembolso: valores.desembolso, observaciones: valores.observaciones });
+    const r = crearPrestamo(yo, { clienteId: valores.clienteId, monto: valores.monto, plazo: valores.plazo, desembolso: valores.desembolso, observaciones: valores.observaciones });
     setGuardando(false);
     if (!r.ok) { setConfirmar(false); toast.error(r.error); setPaso(2); void trigger(); return; }
     toast.success(`Préstamo ${r.prestamo.id} registrado`);

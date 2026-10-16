@@ -1,6 +1,10 @@
 {
     "rewrites": [
         {
+            "source": "/api/:path*",
+            "destination": "https://REEMPLAZA-CON-LA-URL-DE-TU-BACKEND/api/:path*"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

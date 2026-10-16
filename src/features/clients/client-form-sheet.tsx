@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/modal';
 import { Segmented } from '@/components/ui/segmented';
 import { Sheet } from '@/components/ui/sheet';
 import { toast } from '@/components/ui/toast';
-import { USUARIO_DEMO } from '@/lib/config';
+import { useIdentidad } from '@/hooks/use-auth';
 import { TIPOS_CLIENTE, clienteSchema, clienteVacio, esDocumentoValido, type ClienteForm } from '@/lib/validation';
 import { delay } from '@/lib/utils';
 import { registrarCliente } from '@/services/actions';
@@ -42,6 +42,7 @@ type Estado = { tipo: 'idle' | 'cargando' | 'ok' | 'sin-datos' | 'invalido'; tex
 export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
   const navigate = useNavigate();
   const [consulta, setConsulta] = useState<Estado>({ tipo: 'idle' });
+  const yo = useIdentidad();
   const [confirmar, setConfirmar] = useState<ClienteForm | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -76,7 +77,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
   const guardar = async (v: ClienteForm) => {
     setGuardando(true);
     await delay(450); // simula la latencia de un servicio
-    const r = registrarCliente({
+    const r = registrarCliente(yo, {
       nombre: v.nombre, tipo: v.tipo, doc: v.doc, telefono: v.telefono,
       ...(v.tipo === 'RUC 10' ? { negocio: v.negocio, dniTitular: v.dniTitular } : {}),
       ...(v.tipo === 'RUC 20' ? { domicilio: v.domicilio, representante: { nombre: v.repNombre, dni: v.repDni } } : {})
@@ -153,7 +154,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
             { label: 'Documento', value: confirmar.doc },
             { label: confirmar.tipo === 'RUC 20' ? 'Razón social' : 'Nombre', value: confirmar.nombre },
             ...(confirmar.tipo === 'RUC 20' ? [{ label: 'Representante', value: `${confirmar.repNombre} · DNI ${confirmar.repDni}` }] : []),
-            { label: 'Agencia', value: USUARIO_DEMO.agencia }
+            { label: 'Agencia', value: yo.agencia }
           ]} />
         )}
       </Modal>

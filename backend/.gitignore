@@ -31,3 +31,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Secretos: nunca se versionan (solo .env.example)
+.env
+.env.*
+!.env.example

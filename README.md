@@ -4,20 +4,39 @@ Registro y consulta de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20)
 
 > **Alcance: este sistema NO realiza ni registra pagos.** No hay pagos, abonos, amortizaciones, cancelaciones anticipadas ni liquidaciones: ni en la interfaz ni en los servicios (hay pruebas que lo comprueban).
 
-> **Prototipo exclusivamente frontend.** Todos los datos son ficticios, viven en `localStorage` y no hay backend. La consulta de DNI/RUC es **simulada** (no consulta RENIEC ni SUNAT) y el acceso es una **autenticación de demostración** que no ofrece seguridad real.
+> **Alcance real vs. ficticio.** Solo la **autenticación** es real: inicio de sesión con correo y contraseña, perfil, rol y agencia/ubicación vienen de PostgreSQL (`perfiles`, `agencias`, `ubicaciones`) a través del backend Spring Boot (`backend/`). Clientes, solicitudes, préstamos, cuotas y dashboard **siguen siendo datos ficticios en `localStorage`**; la consulta de DNI/RUC es simulada. Por eso el control de acceso a esos módulos es de navegación/presentación: no hay un servidor que proteja esos datos.
 
 ## Ejecutar
 
+Requisitos: Node 20+, Java 17+ y una base PostgreSQL (Supabase) con el esquema de `perfiles/agencias/ubicaciones`.
+
 ```bash
+# 1) Backend (puerto 8080). Copia backend/.env.example a backend/.env y rellénalo (no se versiona).
+cd backend
+set -a; source .env; set +a          # o define las variables en tu IDE
+SESSION_COOKIE_SECURE=false ./mvnw spring-boot:run   # false SOLO en local sobre http
+
+# 2) Frontend (http://localhost:5173; /api hace proxy al backend)
+cd ..
 npm install
-npm run dev        # desarrollo  → http://localhost:5173
+npm run dev
 npm run build      # tsc -b + vite build
-npm run preview    # sirve dist/
-npm run typecheck  # TypeScript estricto
-npm test           # Vitest (82 pruebas)
+npm run typecheck
+npm test           # Vitest
 ```
 
-Acceso de demostración: usuario `asesor` · contraseña `demo1234` (el login tiene un botón que las rellena). Requiere Node 20+ (probado con Node 22).
+### Crear un usuario para entrar
+`perfiles.clave_hash` debe contener un hash **BCrypt**. Con `backend/db/crear-perfil-ejemplo.sql` (pgcrypto) se crea un perfil pasando la clave como variable de psql, sin escribirla en ningún archivo.
+
+### Autenticación y seguridad
+- `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`. La sesión es una cookie **HttpOnly** (`NEXORA_SESION`) emitida por el servidor; el navegador no guarda tokens (ni `localStorage`).
+- CSRF por doble envío (cookie `XSRF-TOKEN` → cabecera `X-XSRF-TOKEN`). Bloqueo temporal tras 5 intentos fallidos por correo.
+- En **cada** petición autenticada el servidor relee el perfil: si se desactiva, cambia de rol o su agencia deja de ser válida, la sesión se revoca. El rol sale siempre de la base de datos.
+- Roles `asesor` y `gerencia` (valores exactos de la BD). Permisos en `src/lib/permissions.ts`; guards por URL en `src/app/App.tsx`.
+
+### Despliegue
+- **Vercel (frontend):** edita `vercel.json` y sustituye `REEMPLAZA-CON-LA-URL-DE-TU-BACKEND` por la URL HTTPS del backend; así `/api` es del mismo origen y la cookie es de primera parte. No hay variables de entorno en el frontend.
+- **Backend:** variables `SUPABASE_DB_URL`, `SUPABASE_DB_USER`, `SUPABASE_DB_PASSWORD` (y opcionales documentadas en `backend/.env.example`). `SESSION_COOKIE_SECURE` debe quedar en `true` en producción. Las sesiones viven en memoria: una sola instancia (con varias, usar Spring Session JDBC).
 
 ## Stack
 
