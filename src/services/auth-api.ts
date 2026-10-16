@@ -83,6 +83,22 @@ async function llamar<T>(ruta: string, init: { method: 'GET' | 'POST'; body?: un
   throw new ApiError(codigo, MENSAJES[codigo], r.status);
 }
 
+/**
+ * Al cerrar sesión, Spring Security borra la cookie XSRF-TOKEN. El siguiente POST /login saldría sin la cabecera
+ * X-XSRF-TOKEN, el servidor lo rechazaría (y el rechazo llega al navegador como 401 → «sesión expirada») y solo el
+ * segundo clic funcionaría, porque aquella respuesta ya traía una cookie nueva. Si no hay cookie, se obtiene ANTES
+ * de enviar las credenciales con una consulta GET inofensiva (el servidor la emite incluso en sus respuestas 401).
+ * No es un reintento del login: las credenciales se envían una sola vez.
+ */
+async function asegurarCsrf(): Promise<void> {
+  if (leerCookie('XSRF-TOKEN')) return;
+  try {
+    await llamar<Sesion>('/me', { method: 'GET' });
+  } catch {
+    /* 401 esperado (no hay sesión); si fue un fallo de red, el login informará del suyo */
+  }
+}
+
 export const authApi = {
   /** Devuelve la sesión vigente o `null` si no hay sesión. Cualquier otro fallo (red, 5xx) se propaga. */
   async sesionActual(): Promise<Sesion | null> {
@@ -93,7 +109,8 @@ export const authApi = {
       throw e;
     }
   },
-  login(correo: string, clave: string) {
+  async login(correo: string, clave: string) {
+    await asegurarCsrf();
     return llamar<Sesion>('/login', { method: 'POST', body: { correo, clave } });
   },
   /** Solo resuelve cuando el servidor confirma el cierre. */

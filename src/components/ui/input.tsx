@@ -32,7 +32,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ c
     <div className="relative">
       {prefix && <span aria-hidden className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold text-ink-muted">{prefix}</span>}
       {input}
-      {sufijo && <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted">{sufijo}</span>}
+      {/* Un sufijo de texto («meses») o el candado no reciben clics; un control interactivo (p. ej. el ojo de la contraseña) sí. */}
+      {sufijo && <span className={cn('absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted', (derived || typeof sufijo === 'string') && 'pointer-events-none')}>{sufijo}</span>}
     </div>
   );
 });

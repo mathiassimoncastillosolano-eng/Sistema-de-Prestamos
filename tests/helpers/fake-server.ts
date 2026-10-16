@@ -31,7 +31,11 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     llamadas.push({ ruta, metodo, cuerpo });
 
     const cabeceras = new Headers(init?.headers);
-    if (metodo !== 'GET' && cabeceras.get('X-XSRF-TOKEN') !== CSRF) return json(403); // sin CSRF correcto el servidor rechaza
+    // Como el backend real: la cookie XSRF-TOKEN se emite en cualquier respuesta (también en las 401) si el navegador no la trae.
+    if (!document.cookie.includes('XSRF-TOKEN=')) document.cookie = `XSRF-TOKEN=${CSRF}; path=/`;
+    // Sin CSRF correcto el servidor rechaza. En producción el 403 de Spring pasa por /error, que está denegado a anónimos,
+    // y llega al navegador como 401 (sin cuerpo JSON).
+    if (metodo !== 'GET' && cabeceras.get('X-XSRF-TOKEN') !== CSRF) return json(401);
 
     if (ruta === '/api/auth/me') {
       if (retenerMe) await retenerMe;
@@ -47,6 +51,7 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     if (ruta === '/api/auth/logout') {
       if (logoutFalla) return json(500);
       sesionDe = null;
+      document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'; // CsrfLogoutHandler borra la cookie
       return json(204);
     }
     return json(404);

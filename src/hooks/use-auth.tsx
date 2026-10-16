@@ -70,6 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [fase, setFase] = useState<Fase>({ tipo: 'cargando' });
   const enCurso = useRef(false);
   const ultimaComprobacion = useRef(0);
+  /** Cambia en cada inicio/cierre de sesión: una revalidación lanzada antes no puede alterar la sesión posterior. */
+  const generacion = useRef(0);
 
   const aplicar = useCallback((s: Sesion | null, avisoSiNoHay?: string) => {
     ultimaComprobacion.current = Date.now();
@@ -94,8 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!autenticado) return;
     const revalidar = () => {
       if (document.visibilityState !== 'visible' || Date.now() - ultimaComprobacion.current < REVALIDAR_MIN_MS) return;
+      const g = generacion.current;
       consultarSesion().then(
-        (s) => aplicar(s, mensajeDe('NO_AUTENTICADO')),
+        (s) => { if (g === generacion.current) aplicar(s, mensajeDe('NO_AUTENTICADO')); },
         () => { /* fallo de red transitorio: se conserva la vista actual y se reintenta luego */ }
       );
     };
@@ -114,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await authApi.logout().catch(() => undefined);
         throw new ApiError('ROL_NO_RECONOCIDO', mensajeDe('ROL_NO_RECONOCIDO'));
       }
+      generacion.current++;
       aplicar(s);
     } finally {
       enCurso.current = false;
@@ -133,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Solo se limpia el estado cuando el servidor confirmó el cierre.
     // La ruta se reinicia para que el siguiente usuario no herede el enlace profundo del anterior.
     try { history.replaceState(null, '', window.location.pathname + window.location.search + '#/'); } catch { /* sin acceso al historial */ }
+    generacion.current++;
     setFase({ tipo: 'anonimo' });
   }, []);
 
