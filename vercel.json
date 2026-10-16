@@ -2,7 +2,7 @@
     "rewrites": [
         {
             "source": "/api/:path*",
-            "destination": "https://REEMPLAZA-CON-LA-URL-DE-TU-BACKEND/api/:path*"
+            "destination": "https://sistema-de-prestamos-z2me.onrender.com/api/:path*"
         },
         {
             "source": "/(.*)",
