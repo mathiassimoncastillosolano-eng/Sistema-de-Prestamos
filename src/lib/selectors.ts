@@ -72,7 +72,7 @@ export function buscar(db: Db, consulta: string, limite = 6): { clientes: Result
     .map((p) => ({ p, c: getCliente(db, p.clienteId) }))
     .filter(({ p, c }) => normalizar([p.id, c?.nombre ?? '', c?.doc ?? ''].join(' ')).includes(q))
     .slice(0, limite)
-    .map<ResultadoBusqueda>(({ p, c }) => ({ tipo: 'prestamo', id: p.id, titulo: p.id, detalle: `${c?.nombre ?? p.clienteId} · ${resumen(p).estado}`, ruta: `/prestamos/${p.id}` }));
+    .map<ResultadoBusqueda>(({ p, c }) => ({ tipo: 'prestamo', id: p.id, titulo: p.id, detalle: `${c?.nombre ?? p.clienteId} · ${p.agencia}`, ruta: `/prestamos/${p.id}` }));
   return { clientes, prestamos };
 }
 

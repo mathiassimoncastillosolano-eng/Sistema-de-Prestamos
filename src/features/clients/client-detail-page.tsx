@@ -1,35 +1,52 @@
-import { FilePlus2, SearchX } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { CalendarDays, FilePlus2, Hash, Landmark, MapPin, Phone, SearchX, UserRound, Store, UsersRound } from 'lucide-react';
+import { useMemo, type ReactNode } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnimatedNumber } from '@/components/data-display/animated-number';
 import { DataTable } from '@/components/data-display/data-table';
-import { DefinitionList } from '@/components/data-display/definition-list';
 import { LimitMeter } from '@/components/data-display/limit-meter';
-import { StatusBadge } from '@/components/data-display/status-badge';
-import { PageHeader } from '@/components/layout/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardBody } from '@/components/ui/card';
+import { Card, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
-import { TabsNav } from '@/components/ui/tabs';
+import { Meter } from '@/components/ui/meter';
+import { PageHeader } from '@/components/layout/page-header';
 import { useDb } from '@/hooks/use-db';
 import { CFG } from '@/lib/config';
 import { fecha } from '@/lib/dates';
 import { r2 } from '@/lib/finance';
 import { money } from '@/lib/format';
-import { deudaCliente, estadoCliente, filasPrestamos, getCliente } from '@/lib/selectors';
-import { Landmark } from 'lucide-react';
+import { deudaCliente, filasPrestamos, getCliente } from '@/lib/selectors';
 import { TarjetaPrestamo, columnasPrestamo } from '@/features/loans/loan-columns';
 
 const columnas = columnasPrestamo({ mostrarCliente: false });
-type Tab = 'prestamos' | 'datos';
+
+/** Dato de la ficha: etiqueta pequeña + valor. Si no hay valor se muestra «No registrado» de forma discreta. */
+function Dato({ icon: Icon, label, value, className }: { icon: LucideIcon; label: string; value?: ReactNode; className?: string }) {
+  const vacio = value === undefined || value === null || value === '';
+  return (
+    <div className={className}>
+      <dt className="flex items-center gap-1.5 text-xs text-ink-muted"><Icon className="size-3.5" aria-hidden />{label}</dt>
+      <dd className={vacio ? 'mt-0.5 text-sm text-ink-muted' : 'num mt-0.5 break-words text-sm font-medium text-ink'}>{vacio ? 'No registrado' : value}</dd>
+    </div>
+  );
+}
+
+function Indicador({ label, children, pie }: { label: string; children: ReactNode; pie?: ReactNode }) {
+  return (
+    <div className="flex flex-col bg-surface p-5">
+      <p className="text-[0.8125rem] text-ink-muted">{label}</p>
+      <p className="mt-1 text-xl font-semibold text-ink">{children}</p>
+      <div className="mt-auto pt-2 text-xs text-ink-muted">{pie}</div>
+    </div>
+  );
+}
 
 export default function ClientDetailPage() {
   const { id = '' } = useParams();
   const db = useDb();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('prestamos');
   const c = getCliente(db, id);
   const prestamos = useMemo(() => filasPrestamos(db).filter((f) => f.prestamo.clienteId === id), [db, id]);
 
@@ -37,47 +54,86 @@ export default function ClientDetailPage() {
 
   const deuda = deudaCliente(db, c.id);
   const pendiente = r2(prestamos.reduce((a, f) => a + f.resumen.pendiente, 0));
+  const totalContractual = r2(prestamos.reduce((a, f) => a + f.resumen.total, 0));
+  const cubierto = r2(prestamos.reduce((a, f) => a + f.resumen.cubierto, 0));
+  const desembolsado = r2(prestamos.reduce((a, f) => a + f.prestamo.capital, 0));
+  const ultimoDesembolso = prestamos.reduce<string | null>((m, f) => (m === null || f.prestamo.desembolso > m ? f.prestamo.desembolso : m), null);
+  const conSaldo = prestamos.filter((f) => f.resumen.pendiente > 0.005).length;
   const disponible = Math.max(0, r2(CFG.limite - deuda));
   const esEmpresa = c.tipo === 'RUC 20';
-
-  const datos = [
-    { label: 'Tipo de cliente', value: c.tipo }, { label: 'Documento', value: c.doc },
-    ...(esEmpresa ? [{ label: 'Razón social', value: c.nombre }, { label: 'Domicilio fiscal', value: c.domicilio ?? '—' }] : []),
-    ...(c.tipo === 'RUC 10' ? [{ label: 'Titular', value: c.nombre }, { label: 'DNI del titular', value: c.dniTitular ?? '—' }, { label: 'Negocio', value: c.negocio ?? '—' }] : []),
-    { label: 'Agencia de registro', value: c.agencia }, { label: 'Asesor responsable', value: c.asesor }, { label: 'Fecha de alta', value: fecha(c.alta) }, { label: 'Celular', value: c.telefono || '—' }
-  ];
+  const esNegocio = c.tipo === 'RUC 10';
+  const usoCubierto = totalContractual > 0 ? (cubierto / totalContractual) * 100 : 0;
+  const nuevaSolicitud = () => navigate(`/solicitud/${c.id}`);
 
   return (
     <>
-      <PageHeader back={{ to: '/clientes', label: 'Clientes' }} title={c.nombre} description={`${c.tipo} · ${c.doc} · ${c.agencia} · Asesor ${c.asesor}`}
-        actions={<Button variant="primary" onClick={() => navigate(`/solicitud/${c.id}`)}><FilePlus2 className="size-4" />Nueva solicitud</Button>} />
+      <PageHeader back={{ to: '/clientes', label: 'Clientes' }}
+        title={<span className="flex flex-wrap items-center gap-x-3 gap-y-1">{c.nombre}<Badge tone={esEmpresa ? 'navy' : esNegocio ? 'teal' : 'neutral'}>{c.tipo}</Badge></span>}
+        description={<span className="num">{c.id} · {c.tipo} {c.doc} · {c.agencia} · Asesor {c.asesor}</span>}
+        actions={<Button variant="primary" onClick={nuevaSolicitud}><FilePlus2 className="size-4" />Nueva solicitud</Button>} />
 
-      <Card className="mb-5">
-        <CardBody className="flex flex-wrap items-center gap-4">
-          <Avatar nombre={c.nombre} tipo={c.tipo} size="xl" />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><Badge tone={esEmpresa ? 'navy' : c.tipo === 'RUC 10' ? 'teal' : 'neutral'}>{c.tipo}</Badge><StatusBadge estado={estadoCliente(db, c)} /></div>
-            {c.representante && <p className="mt-2 text-sm text-ink-muted">Representante legal: <b className="font-medium text-ink">{c.representante.nombre}</b> · DNI {c.representante.dni}</p>}
-            {c.negocio && <p className="mt-2 text-sm text-ink-muted">Negocio: <b className="font-medium text-ink">{c.negocio}</b></p>}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        {/* Ficha de identificación */}
+        <Card className="lg:col-span-1">
+          <div className="flex items-center gap-4 border-b border-line p-5">
+            <Avatar nombre={c.nombre} tipo={c.tipo} size="xl" />
+            <div className="min-w-0">
+              <p className="text-xs text-ink-muted">{esEmpresa ? 'Razón social' : esNegocio ? 'Titular' : 'Nombre completo'}</p>
+              <h2 className="break-words text-base font-semibold leading-snug text-ink">{c.nombre}</h2>
+            </div>
           </div>
-        </CardBody>
-      </Card>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
+            <Dato icon={Hash} label="Documento" value={`${c.tipo} ${c.doc}`} />
+            <Dato icon={Hash} label="Código de cliente" value={c.id} />
+            <Dato icon={Phone} label="Celular" value={c.telefono} />
+            <Dato icon={CalendarDays} label="Fecha de registro" value={fecha(c.alta)} />
+            <Dato icon={Landmark} label="Agencia" value={c.agencia} />
+            <Dato icon={UserRound} label="Asesor asignado" value={c.asesor} />
+            {esEmpresa && <Dato icon={MapPin} label="Domicilio fiscal" value={c.domicilio} className="col-span-2" />}
+            {esEmpresa && c.representante && <Dato icon={UsersRound} label="Representante legal" value={`${c.representante.nombre} · DNI ${c.representante.dni}`} className="col-span-2" />}
+            {esNegocio && <Dato icon={Hash} label="DNI del titular" value={c.dniTitular} />}
+            {esNegocio && <Dato icon={Store} label="Negocio" value={c.negocio} className={c.dniTitular ? undefined : 'col-span-2'} />}
+          </dl>
+        </Card>
 
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3">
-        <div className="bg-surface p-5"><p className="text-[0.8125rem] text-ink-muted">Capital pendiente</p><p className="mt-1 text-xl font-semibold text-ink"><AnimatedNumber value={deuda} format={money} duration={0.5} /></p><p className="mt-1 text-xs text-ink-muted">Base del límite de endeudamiento</p></div>
-        <div className="bg-surface p-5"><p className="text-[0.8125rem] text-ink-muted">Importe contractual pendiente</p><p className="mt-1 text-xl font-semibold text-ink"><AnimatedNumber value={pendiente} format={money} duration={0.5} /></p><p className="mt-1 text-xs text-ink-muted">Capital + intereses pactados, según cronograma</p></div>
-        <div className="bg-surface p-5"><p className="text-[0.8125rem] text-ink-muted">Capacidad disponible</p><p className="mt-1 text-xl font-semibold text-ink"><AnimatedNumber value={disponible} format={money} duration={0.5} /></p>
-          <div className="mt-2"><LimitMeter deuda={deuda} showText={false} label="Uso del límite" /></div><p className="mt-1.5 text-xs text-ink-muted">{Math.round((deuda / CFG.limite) * 100)} % del límite de {money(CFG.limite)} (toda la empresa)</p></div>
+        {/* Resumen financiero y actividad crediticia */}
+        <div className="flex flex-col gap-5 lg:col-span-2">
+          <div className="grid flex-1 grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3">
+            <Indicador label="Capital pendiente" pie="Base del límite de endeudamiento">
+              <AnimatedNumber value={deuda} format={money} duration={0.5} />
+            </Indicador>
+            <Indicador label="Importe contractual pendiente"
+              pie={totalContractual > 0
+                ? <><Meter value={usoCubierto} tone="brand" label={`Cubierto del total contractual: ${Math.round(usoCubierto)} %`} /><p className="mt-1.5">Capital + intereses pactados · total {money(totalContractual)}</p></>
+                : 'Capital + intereses pactados, según cronograma'}>
+              <AnimatedNumber value={pendiente} format={money} duration={0.5} />
+            </Indicador>
+            <Indicador label="Capacidad disponible"
+              pie={<><LimitMeter deuda={deuda} showText={false} label="Uso del límite" /><p className="mt-1.5">{Math.round((deuda / CFG.limite) * 100)} % de {money(CFG.limite)} (límite por cliente, toda la empresa)</p></>}>
+              <AnimatedNumber value={disponible} format={money} duration={0.5} />
+            </Indicador>
+          </div>
+
+          <Card>
+            <CardHeader as="h2" title="Actividad crediticia" description="Resumen calculado desde los préstamos registrados del cliente" />
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5 sm:grid-cols-4">
+              <div><dt className="text-xs text-ink-muted">Préstamos asociados</dt><dd className="num mt-0.5 text-base font-semibold text-ink">{prestamos.length}</dd></div>
+              <div><dt className="text-xs text-ink-muted">Con saldo pendiente</dt><dd className="num mt-0.5 text-base font-semibold text-ink">{conSaldo}</dd></div>
+              <div><dt className="text-xs text-ink-muted">Capital desembolsado</dt><dd className="num mt-0.5 text-base font-semibold text-ink">{money(desembolsado)}</dd></div>
+              <div><dt className="text-xs text-ink-muted">Último desembolso</dt><dd className="num mt-0.5 text-base font-semibold text-ink">{ultimoDesembolso ? fecha(ultimoDesembolso) : '—'}</dd></div>
+            </dl>
+          </Card>
+        </div>
       </div>
 
       <Card className="mt-5 overflow-hidden">
-        <TabsNav<Tab> aria-label="Secciones del expediente" value={tab} onValueChange={setTab}
-          items={[{ value: 'prestamos', label: `Préstamos · ${prestamos.length}` }, { value: 'datos', label: 'Datos' }]}
-          panels={{
-            prestamos: <DataTable data={prestamos} columns={columnas} getRowId={(f) => f.prestamo.id} textoBusqueda={() => ''} ordenInicial={[{ id: 'desembolso', desc: true }]} alAbrir={(f) => navigate(`/prestamos/${f.prestamo.id}`)}
-              tarjeta={(f) => <TarjetaPrestamo f={f} mostrarCliente={false} />} etiqueta="Préstamos del cliente" unidad="préstamos" vacio={<EmptyState icon={Landmark} title="Sin préstamos" description="Este cliente aún no tiene préstamos." action={<Button variant="primary" onClick={() => navigate(`/solicitud/${c.id}`)}>Crear solicitud</Button>} />} />,
-            datos: <div className="px-5 py-2"><DefinitionList items={datos} /></div>
-          }} />
+        <CardHeader as="h2" title={`Préstamos · ${prestamos.length}`} description="Abre un préstamo para ver su cronograma completo" className="pb-4" />
+        <div className="border-t border-line">
+          <DataTable data={prestamos} columns={columnas} getRowId={(f) => f.prestamo.id} textoBusqueda={() => ''} ordenInicial={[{ id: 'desembolso', desc: true }]}
+            alAbrir={(f) => navigate(`/prestamos/${f.prestamo.id}`)} tarjeta={(f) => <TarjetaPrestamo f={f} mostrarCliente={false} />}
+            etiqueta="Préstamos del cliente" unidad="préstamos"
+            vacio={<EmptyState icon={Landmark} title="Sin préstamos" description="Este cliente aún no tiene préstamos asociados." action={<Button variant="primary" onClick={nuevaSolicitud}><FilePlus2 className="size-4" />Crear solicitud</Button>} />} />
+        </div>
       </Card>
     </>
   );
