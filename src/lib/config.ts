@@ -5,9 +5,8 @@
 
 export const BRAND = {
   nombre: 'PerúCred',
-  /** Descriptor institucional. Describe lo que el sistema hace hoy (registro, validación y consulta de cartera);
-   *  no promete cobranza ni pagos, y no sugiere ser una entidad supervisada. */
-  descriptor: 'Plataforma de gestión crediticia',
+  /** Descriptor institucional OFICIAL: es el que lleva impreso el logo. Mantenerlos idénticos. */
+  descriptor: 'Tecnología para la Gestión Crediticia',
   lema: 'Gestión de préstamos con control total'
 } as const;
 

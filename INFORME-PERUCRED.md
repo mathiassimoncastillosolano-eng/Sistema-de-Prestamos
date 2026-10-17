@@ -1,37 +1,36 @@
 # Informe de remasterización — PerúCred
 
-## Estado del logo (acción pendiente tuya)
-La imagen oficial del logo **no llegó** (solo el ZIP). El símbolo actual es un **marcador provisional** hecho con la paleta de marca.
-Para instalar el oficial: edita `src/components/layout/brand-mark.tsx` y `public/favicon.svg` (ningún otro archivo dibuja la marca).
+## Logo oficial (integrado)
+Fuente: `brand-source/perucred-logo-original.png` (1536×1024, fondo blanco). Procesado a recursos en `public/`:
+- `brand/perucred-logo.png` — logo completo con fondo transparente (solo fondos claros).
+- `brand/perucred-symbol.png` — símbolo «P» sin texto. `brand/perucred-icon.png` — símbolo sobre tile blanco redondeado.
+- Favicons con el símbolo sin texto: `favicon.ico`, `favicon-16/32/48/192/512.png`, `apple-touch-icon.png` (enlazados en `index.html`). Se eliminó el `favicon.svg` provisional.
 
-## Descriptor institucional: «Plataforma de gestión crediticia»
-Criterio: describe lo que el sistema hace hoy (registrar, validar límites y consultar cartera/cronogramas); no promete cobranza ni pagos
-(el README declara que el sistema no los registra) y no sugiere ser entidad supervisada (evita «Financiera», «Banca», «Microfinanzas»).
-Es corto, en minúscula tras la primera letra (estilo institucional en español) y se omite en espacios reducidos (menú contraído, favicon).
+## Dónde aparece
+- **Login:** logo completo grande (hasta 36 rem en escritorio, 17 rem en móvil) sobre un panel siempre claro, también en modo oscuro.
+- **Menú lateral / pantallas de sesión:** símbolo oficial + nombre en texto con los colores de la marca (el logo completo tiene texto azul marino y no se lee sobre fondo oscuro).
+- **Pestaña del navegador / iOS:** favicon = símbolo sin texto.
 
-## Cambios
-- `src/styles/index.css`: tokens reescritos (claro/oscuro) con la paleta PerúCred; `copper`→`navy`, `sand`→`tint`, nuevos `side-accent`, `on-teal`, `overlay`; patrón escalonado reemplazado por retícula neutra.
-- `src/lib/config.ts`: `BRAND` = PerúCred + descriptor (se elimina `sufijo`).
-- `brand-mark.tsx` (logo + nombre + descriptor), `sidebar.tsx`, `login-page.tsx`, `session-screens.tsx` (vía BrandName), `nav.ts`, `print-header.tsx`, `lib/pdf.ts` (cabecera, pie y archivo `PeruCred-<id>-cronograma.pdf`).
-- `badge.tsx`, `avatar.tsx`, `empty-state.tsx`, `global-search.tsx`, `modal.tsx`, `sheet.tsx`, `stepper.tsx`, `clients-page.tsx`, `client-detail-page.tsx`: uso de los nuevos tokens (sin lógica tocada).
-- `index.html` (título, descripción, theme-color, color previo al pintado), `public/favicon.svg`, `package.json` (descripción), `README.md` (sección «Identidad de marca»).
+## Descriptor
+Se adoptó el que trae el logo: «Tecnología para la Gestión Crediticia», para que texto de interfaz, PDF e impresión coincidan con la marca.
+
+## Cambios previos (resumen)
+Tokens de color PerúCred en `src/styles/index.css` (claro/oscuro, contraste AA), `BRAND` en `config.ts`, marca en PDF, impresión, títulos y metadatos. Ver README, sección «Identidad de marca».
 
 ## No modificado a propósito
-Paquete Java `com.nexora.backend`, cookie `NEXORA_SESION`, propiedades `nexora.*`, atributo `nexora.perfil`, claves localStorage `nexora-db-v5`/`nx-tema`/`nx-side`, nombre del paquete npm. Cambiarlos rompería sesiones, datos guardados o despliegue.
-Backend, autenticación, permisos, reglas financieras, datos y `.env*`: intactos.
+Paquete Java `com.nexora`, cookie `NEXORA_SESION`, propiedades `nexora.*`, claves localStorage, nombre del paquete npm. Backend, autenticación, permisos, reglas financieras, datos y `.env*` intactos.
 
 ## Validación
 | Comprobación | Resultado |
 |---|---|
-| Sintaxis TS/TSX de los 17 archivos modificados (transpile) | ✅ sin errores |
-| Tokens Tailwind nuevos definidos en `@theme` | ✅ |
-| Contraste WCAG de 18 pares clave (claro/oscuro/menú/foco) | ✅ 0 fallos |
-| Maqueta visual del logo en fondo claro/oscuro y favicon 16/32 px | ✅ revisada |
-| Búsqueda de residuos de marca anterior | ✅ solo identificadores técnicos y README explicativo |
-| `npm install`, `tsc -b`, `vite build`, `vitest` | ⛔ **NO ejecutados**: el entorno no tiene acceso a internet |
-| Pruebas Java (`mvnw test`), recorrido en navegador de la app, responsive real, impresión/PDF generado | ⛔ **NO ejecutados** |
+| Extracción de logo/símbolo/iconos revisada visualmente (sin bordes blancos, sin restos de texto en el símbolo) | ✅ |
+| Sintaxis TS/TSX de archivos modificados | ✅ |
+| Contraste WCAG de 18 pares clave | ✅ |
+| Maqueta estática del login (escritorio y móvil) con los recursos reales | ✅ revisada (no es la app compilada) |
+| `npm install`, `tsc -b`, `vite build`, `vitest`, pruebas Java, prueba en navegador de la app real | ⛔ NO ejecutados (sin internet en el entorno) |
 
 ## Pendientes
-1. Correr localmente: `npm install && npm run typecheck && npm test && npm run build` (y revisar login, menú, dashboard, PDF).
-2. Entregar la imagen oficial del logo y reemplazar el marcador provisional.
-3. Preexistente: el árbol de trabajo del ZIP ya difería de su `HEAD` git (p. ej. falta `src/features/installments/installments-page.tsx`, que README menciona); no se tocó.
+1. Ejecutar localmente: `npm install && npm run typecheck && npm test && npm run build`, y revisar el login real en modo claro/oscuro y móvil.
+2. Si el equipo de marca dispone del logo en SVG o PNG de mayor resolución, sustituir `brand-source/` y regenerar `public/brand/*` (la fuente actual mide 1203 px de ancho útil).
+3. El PDF del cronograma sigue usando la marca en texto (no se incrustó el símbolo para no tocar la generación sin poder ejecutar sus pruebas).
+4. Preexistente: el árbol de trabajo del ZIP ya difería de su `HEAD` git (p. ej. falta `src/features/installments/installments-page.tsx`).

@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { BrandMark, BrandName } from '@/components/layout/brand-mark';
+import { BrandLogo } from '@/components/layout/brand-mark';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -44,21 +44,21 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      <section className="pattern-grid relative flex flex-col justify-between gap-10 bg-side p-6 text-side-ink sm:p-10 lg:p-14">
-        <div className="flex items-center gap-3 text-white"><BrandMark tile="light" /><BrandName /></div>
-        <div className="max-w-lg">
-          <h1 className="text-3xl font-semibold leading-tight text-white sm:text-4xl">{BRAND.lema}.</h1>
-          <p className="mt-4 text-[0.9375rem] leading-relaxed text-side-ink/80">Registra préstamos, valida el endeudamiento y consulta cronogramas con reglas de negocio claras y trazables.</p>
-          <ul className="mt-8 hidden space-y-3.5 sm:block">
+    <div className="grid min-h-dvh grid-rows-[auto_1fr] lg:grid-cols-[1.05fr_1fr] lg:grid-rows-1">
+      <section className="brand-panel relative flex flex-col items-center gap-8 p-6 sm:p-10 lg:justify-center lg:gap-12 lg:p-14">
+        <BrandLogo className="max-w-[17rem] sm:max-w-[24rem] lg:max-w-[36rem]" />
+        <div className="hidden w-full max-w-[36rem] sm:block">
+          <h1 className="text-2xl font-semibold leading-tight text-[#12365a] lg:text-3xl">{BRAND.lema}.</h1>
+          <p className="bp-muted mt-3 text-[0.9375rem] leading-relaxed">Registra préstamos, valida el endeudamiento y consulta cronogramas con reglas de negocio claras y trazables.</p>
+          <ul className="mt-6 hidden space-y-3 lg:block">
             {puntos.map((p) => (
-              <li key={p.texto} className="flex items-center gap-3 text-sm">
-                <span className="grid size-8 place-items-center rounded-full bg-side-active text-side-accent"><p.icon className="size-4" aria-hidden /></span>{p.texto}
+              <li key={p.texto} className="flex items-center gap-3 text-sm text-[#172b4d]">
+                <span className="bp-chip grid size-8 place-items-center rounded-full"><p.icon className="size-4" aria-hidden /></span>{p.texto}
               </li>
             ))}
           </ul>
+          <p className="bp-muted mt-8 hidden text-xs lg:block">Los datos de clientes y préstamos son ficticios (demostración)</p>
         </div>
-        <p className="hidden text-xs text-side-muted sm:block">Los datos de clientes y préstamos son ficticios (demostración)</p>
       </section>
 
       <section className="relative flex items-center justify-center bg-canvas p-6 sm:p-10">

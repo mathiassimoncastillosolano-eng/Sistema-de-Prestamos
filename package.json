@@ -3,7 +3,7 @@
   "private": true,
   "version": "2.0.0",
   "type": "module",
-  "description": "PerúCred · Plataforma de gestión crediticia (frontend con autenticación real; módulos de negocio con datos ficticios)",
+  "description": "PerúCred · Tecnología para la Gestión Crediticia (frontend con autenticación real; módulos de negocio con datos ficticios)",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

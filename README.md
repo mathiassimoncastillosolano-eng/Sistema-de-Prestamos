@@ -1,4 +1,4 @@
-# PerúCred · Plataforma de gestión crediticia
+# PerúCred · Tecnología para la Gestión Crediticia
 
 Registro y consulta de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20), solicitudes, préstamos con cronograma, consulta del cronograma dentro de cada préstamo y PDF.
 
@@ -93,9 +93,9 @@ Tokens en `src/styles/index.css` (identidad PerúCred: azul noche `#0B172A`, azu
 
 ## Identidad de marca (PerúCred)
 
-- **Nombre:** PerúCred (con tilde y esa capitalización). **Descriptor institucional:** «Plataforma de gestión crediticia». Ambos viven en `BRAND` (`src/lib/config.ts`); no escribas el nombre a mano en componentes.
-- **Por qué ese descriptor:** describe lo que el sistema hace (registrar, validar y consultar la cartera) sin prometer cobranza ni pagos (el sistema no los registra) y sin sugerir que la empresa sea una entidad supervisada.
-- **Logo:** se dibuja solo en `src/components/layout/brand-mark.tsx` (`BrandMark` y `BrandName`) y en `public/favicon.svg`. **El símbolo actual es provisional**: sustitúyelo por el logo oficial editando esos dos archivos.
+- **Nombre:** PerúCred (con tilde y esa capitalización). **Descriptor institucional:** «Tecnología para la Gestión Crediticia» (el mismo que lleva impreso el logo oficial). Ambos viven en `BRAND` (`src/lib/config.ts`); no escribas el nombre a mano en componentes.
+- **Recursos oficiales:** el original está en `brand-source/perucred-logo-original.png`. De él se derivaron, en `public/`: `brand/perucred-logo.png` (logo completo, fondo transparente, solo para fondos claros), `brand/perucred-symbol.png` (símbolo solo), `brand/perucred-icon.png` (símbolo sobre tile blanco; lo usa el menú lateral) y los favicons (`favicon.ico`, `favicon-16/32/48/192/512.png`, `apple-touch-icon.png`), todos con el símbolo sin texto.
+- **Dónde se usa:** el login muestra el logo completo en grande (`BrandLogo`, panel siempre claro). El menú y las pantallas de sesión usan el símbolo + el nombre en texto (`BrandMark`/`BrandName`), porque el logo completo no se lee sobre azul noche. Todo se dibuja en `src/components/layout/brand-mark.tsx`.
 - **Colores:** el turquesa puro `#00BFAE` no alcanza contraste AA como texto sobre blanco; en modo claro el texto turquesa usa `--teal-ink` y los rellenos turquesa llevan texto azul noche (`--on-teal`).
 - **Identificadores técnicos que conservan el nombre anterior a propósito** (cambiarlos rompería sesiones, datos guardados o el despliegue): paquete Java `com.nexora.backend`, cookie `NEXORA_SESION`, propiedades `nexora.seguridad.*`, atributo de sesión `nexora.perfil`, claves de localStorage `nexora-db-v5` / `nx-tema` / `nx-side`, y el nombre del paquete npm `nexora-finance`.
 
