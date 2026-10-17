@@ -26,7 +26,9 @@ export const CFG = {
   /** Ventana (días) para considerar una cuota "próxima a vencer". */
   diasProxVenc: 10,
   /** Porcentaje de uso del límite a partir del cual se avisa "cerca del límite". */
-  alertaLimite: 0.8
+  alertaLimite: 0.8,
+  /** Días de atraso de la cuota más antigua para considerar al cliente en proceso extrajudicial. */
+  diasExtrajudicial: 365
 } as const;
 
 /**

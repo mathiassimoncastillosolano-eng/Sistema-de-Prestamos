@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { ArrowUpRight, CalendarClock, CircleAlert, FilePlus2, Plus, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, CalendarClock, CircleAlert, FilePlus2, Gavel, Plus, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -17,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth, useIdentidad, useUsuario } from '@/hooks/use-auth';
 import { useDb } from '@/hooks/use-db';
 import { useSimulatedLoading } from '@/hooks/use-simulated-loading';
-import { PERIODOS, alcancesPara, calcularDashboard, type Alcance } from '@/lib/analytics';
+import { FILTROS_ESTADO, PERIODOS, alcancesPara, calcularDashboard, resumenPorAgencia, type Alcance, type ClienteMoroso, type FiltroEstado } from '@/lib/analytics';
 import { CFG } from '@/lib/config';
 import { diasEntre, fecha, fechaLarga, mesCorto, mesLargo, mesNombre } from '@/lib/dates';
 import { entero, money, moneyCompacto } from '@/lib/format';
@@ -50,6 +50,70 @@ function Stat({ label, valor, pie, tono, principal, className }: { label: string
   );
 }
 
+/** Lista de clientes morosos; se usa tanto para morosos como para extrajudiciales. */
+function ListaMorosos({ titulo, descripcion, filas, vacio, icono }: { titulo: string; descripcion: string; filas: ClienteMoroso[]; vacio: string; icono: LucideIcon }) {
+  const Icono = icono;
+  return (
+    <Card className="h-full">
+      <CardHeader title={titulo} description={descripcion}
+        action={filas.length ? <span className="num rounded-full bg-danger-soft px-2.5 py-0.5 text-xs font-medium text-danger-ink">{filas.length}</span> : undefined} />
+      <CardBody className="pt-2">
+        {filas.length === 0 ? (
+          <EmptyState icon={ShieldCheck} title="Sin clientes" description={vacio} className="py-8" />
+        ) : (
+          <ul className="divide-y divide-line">
+            {filas.slice(0, 5).map((m) => (
+              <li key={m.clienteId}>
+                <ModuleLink modulo="clientes" to={`/clientes/${m.clienteId}`} className="-mx-2 flex items-center gap-3 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-2" planoClassName="-mx-2 flex items-center gap-3 px-2 py-2.5">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-danger-soft text-danger-ink"><Icono className="size-4" aria-hidden /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-ink">{m.cliente?.nombre ?? m.clienteId}</span>
+                    <span className="block truncate text-xs text-ink-muted">{m.diasAtraso} días de atraso</span>
+                  </span>
+                  <span className="num text-sm font-semibold text-ink">{money(m.montoVencido)}</span>
+                </ModuleLink>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
+/** Tabla comparativa por agencia (solo gerencia). */
+function TablaAgencias({ filas }: { filas: ReturnType<typeof resumenPorAgencia> }) {
+  return (
+    <Card>
+      <CardHeader title="Resumen por agencia" description="Préstamos activos, capital pendiente y morosidad de cada agencia" />
+      <CardBody className="overflow-x-auto pt-2">
+        <table className="w-full min-w-[32rem] text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs text-ink-muted">
+              <th className="py-2 font-medium">Agencia</th>
+              <th className="py-2 text-right font-medium">Préstamos activos</th>
+              <th className="py-2 text-right font-medium">Capital pendiente</th>
+              <th className="py-2 text-right font-medium">Morosos</th>
+              <th className="py-2 text-right font-medium">Extrajudiciales</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-line">
+            {filas.map((f) => (
+              <tr key={f.agencia}>
+                <td className="py-2.5 font-medium text-ink">{f.agencia}</td>
+                <td className="num py-2.5 text-right">{entero(f.prestamosActivos)}</td>
+                <td className="num py-2.5 text-right">{money(f.capitalPendiente)}</td>
+                <td className={cn('num py-2.5 text-right', f.morosos > 0 && 'font-semibold text-danger-ink')}>{entero(f.morosos)}</td>
+                <td className={cn('num py-2.5 text-right', f.extrajudiciales > 0 && 'font-semibold text-danger-ink')}>{entero(f.extrajudiciales)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardBody>
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
   const db = useDb();
   const usuario = useUsuario();
@@ -60,8 +124,11 @@ export default function DashboardPage() {
   const alcances = useMemo(() => alcancesPara(usuario.rol, usuario.agencia?.nombre ?? null), [usuario.rol, usuario.agencia?.nombre]);
   const [alcance, setAlcance] = useState<Alcance>(() => alcances[0]?.value ?? 'empresa');
   const [meses, setMeses] = useState<number>(6);
+  const [estado, setEstado] = useState<FiltroEstado>('todos');
   const [registrar, setRegistrar] = useState(false);
-  const d = useMemo(() => calcularDashboard(db, alcance, meses, yo), [db, alcance, meses, yo]);
+  const d = useMemo(() => calcularDashboard(db, alcance, meses, yo, estado), [db, alcance, meses, yo, estado]);
+  const esGerencia = usuario.rol === 'gerencia';
+  const agencias = useMemo(() => (esGerencia ? resumenPorAgencia(db, yo, estado) : []), [esGerencia, db, yo, estado]);
   const alcanceLabel = alcances.find((a) => a.value === alcance)?.label ?? '';
   const mesPrev = mesNombre(d.mesPrevio);
 
@@ -111,6 +178,12 @@ export default function DashboardPage() {
               {PERIODOS.map((p) => <option key={p} value={p}>Últimos {p} meses</option>)}
             </Select>
           </label>
+          <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+            <span className="shrink-0 text-[0.8125rem] font-medium text-ink-muted">Estado</span>
+            <Select aria-label="Estado de los préstamos" value={estado} onChange={(e) => setEstado(e.target.value as FiltroEstado)} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
+              {FILTROS_ESTADO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+            </Select>
+          </label>
         </div>
       </motion.div>
 
@@ -125,6 +198,17 @@ export default function DashboardPage() {
         <Stat label="Clientes registrados" valor={<AnimatedNumber value={d.clientes} format={entero} />} pie={d.clientesNuevosMes ? `${d.clientesNuevosMes} nuevo${d.clientesNuevosMes === 1 ? '' : 's'} este mes` : alcanceLabel} />
         <Stat className="max-sm:col-span-2" label={`Vencen en ${CFG.diasProxVenc} días`} valor={<AnimatedNumber value={d.proximasVentana.cantidad} format={entero} />} pie={d.proximasVentana.cantidad ? `${money(d.proximasVentana.monto)} en cuotas programadas` : 'Sin vencimientos cercanos'} />
       </motion.div>
+
+      {esGerencia && alcance === 'empresa' && <motion.div variants={fadeUp}><TablaAgencias filas={agencias} /></motion.div>}
+
+      <div className="grid gap-5 lg:grid-cols-2 [&>*]:min-w-0">
+        <motion.div variants={fadeUp}>
+          <ListaMorosos titulo="Clientes morosos" descripcion="Con al menos una cuota vencida, del mayor al menor atraso" filas={d.morosos} vacio="No hay clientes morosos en este alcance." icono={CircleAlert} />
+        </motion.div>
+        <motion.div variants={fadeUp}>
+          <ListaMorosos titulo="En proceso extrajudicial" descripcion={`${CFG.diasExtrajudicial} días o más de atraso`} filas={d.extrajudiciales} vacio="Ningún cliente supera un año de atraso." icono={Gavel} />
+        </motion.div>
+      </div>
 
       <div className="grid gap-5 lg:grid-cols-12 [&>*]:min-w-0">
         <motion.div variants={fadeUp} className="lg:col-span-7 xl:col-span-8">

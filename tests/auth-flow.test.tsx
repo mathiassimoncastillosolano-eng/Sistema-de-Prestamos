@@ -73,6 +73,16 @@ describe('B · login correcto como gerencia', () => {
     expect(screen.queryByRole('button', { name: /Notificaciones/ })).not.toBeInTheDocument();
   });
 
+  it('el dashboard de gerencia muestra el resumen por agencia y los morosos', async () => {
+    montar();
+    const u = await iniciarSesion(GERENTE);
+    expect(await screen.findByText('Resumen por agencia', undefined, { timeout: 4000 })).toBeInTheDocument();
+    expect(screen.getByText('Clientes morosos')).toBeInTheDocument();
+    expect(screen.getByText('En proceso extrajudicial')).toBeInTheDocument();
+    await u.click(screen.getByRole('combobox', { name: 'Alcance de los indicadores' }));
+    expect(await screen.findByRole('option', { name: 'Agencia Cusco' })).toBeInTheDocument();
+  });
+
   it('entrar por la URL de un módulo prohibido nunca llega a montar ese módulo', async () => {
     window.location.hash = '#/prestamos';
     const srv = crearServidor([GERENTE]); srv.instalar(); srv.abrirSesion(GERENTE);

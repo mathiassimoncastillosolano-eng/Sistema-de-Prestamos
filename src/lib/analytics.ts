@@ -2,28 +2,47 @@
    ANALÍTICAS DEL DASHBOARD — todo se calcula desde los registros (clientes, préstamos, cuotas, registro histórico).
    No existen cifras independientes ni indicadores de pagos: el sistema no gestiona cobros.
    ========================================================= */
-import type { Cliente, Cuota, Db, EstadoPrestamo, Prestamo } from '@/types';
+import type { Cliente, Cuota, Db, EstadoPrestamo, Prestamo, ResumenPrestamo } from '@/types';
 import type { IdentidadOperativa, Rol } from '@/types/auth';
-import { CFG } from './config';
-import { addDays, addMonths, finDeMes, mesDe } from './dates';
+import { AGENCIAS, CFG } from './config';
+import { addDays, addMonths, diasEntre, finDeMes, mesDe } from './dates';
 import { capitalPendienteAl, cuotaAbierta, esDesembolsado, importePendienteCuota, r2, resumen } from './finance';
 import { deudaCliente } from './selectors';
 import { variacion } from './format';
 
-export type Alcance = 'mis' | 'agencia' | 'empresa';
+/** `mis`: cartera del asesor. `agencia:<nombre>`: una agencia concreta. `empresa`: todo. */
+export type Alcance = 'mis' | 'empresa' | `agencia:${string}`;
 export interface OpcionAlcance { value: Alcance; label: string }
 
-/** Alcances disponibles según el perfil real: la gerencia no tiene cartera ni agencia propias. */
+const deAgencia = (nombre: string): OpcionAlcance => ({ value: `agencia:${nombre}`, label: `Agencia ${nombre}` });
+
+/** Alcances disponibles según el perfil real. El asesor ve su cartera y su agencia; la gerencia elige cualquier agencia. */
 export function alcancesPara(rol: Rol | null, agencia: string | null): OpcionAlcance[] {
   const empresa: OpcionAlcance = { value: 'empresa', label: 'Toda la empresa' };
+  if (rol === 'gerencia') return [empresa, ...AGENCIAS.map(deAgencia)];
   if (rol !== 'asesor') return [empresa];
-  return [
-    { value: 'mis', label: 'Mi cartera' },
-    ...(agencia ? [{ value: 'agencia' as const, label: `Agencia ${agencia}` }] : []),
-    empresa
-  ];
+  return [{ value: 'mis', label: 'Mi cartera' }, ...(agencia ? [deAgencia(agencia)] : []), empresa];
 }
+
+/** Filtro de un alcance: sirve igual para clientes y préstamos, porque ambos tienen asesor y agencia. */
+export function filtroAlcance(alcance: Alcance, yo: IdentidadOperativa) {
+  return (x: { asesor: string; agencia: string }) => {
+    if (alcance === 'empresa') return true;
+    if (alcance === 'mis') return x.asesor === yo.nombre;
+    return x.agencia === alcance.slice('agencia:'.length);
+  };
+}
+
 export const PERIODOS = [3, 6, 12] as const;
+
+/** Filtro de cartera por estado del préstamo. */
+export type FiltroEstado = 'todos' | 'Vigente' | 'En mora' | 'Cancelado';
+export const FILTROS_ESTADO: { value: FiltroEstado; label: string }[] = [
+  { value: 'todos', label: 'Todos los estados' },
+  { value: 'Vigente', label: 'Vigente' },
+  { value: 'En mora', label: 'En mora' },
+  { value: 'Cancelado', label: 'Cancelado' }
+];
 
 export interface PuntoMensual {
   mes: string;
@@ -39,6 +58,14 @@ export interface CuotaPendiente {
   cuota: Cuota;
   /** Importe contractual de la cuota (informativo). */
   importe: number;
+}
+
+export interface ClienteMoroso {
+  cliente: Cliente | undefined;
+  clienteId: string;
+  /** Días de atraso de su cuota vencida más antigua. */
+  diasAtraso: number;
+  montoVencido: number;
 }
 
 export interface Dashboard {
@@ -62,6 +89,10 @@ export interface Dashboard {
   serie: PuntoMensual[];
   estados: { estado: EstadoPrestamo; cantidad: number; capital: number }[];
   clientesCercaLimite: { cliente: Cliente; deuda: number }[];
+  /** Clientes con al menos una cuota vencida. */
+  morosos: ClienteMoroso[];
+  /** Morosos cuya cuota vencida más antigua supera `CFG.diasExtrajudicial` días. */
+  extrajudiciales: ClienteMoroso[];
   /** Mes anterior de comparación, p. ej. "2026-09". */
   mesPrevio: string;
 }
@@ -69,13 +100,25 @@ export interface Dashboard {
 const suma = (xs: number[]) => r2(xs.reduce((a, b) => a + b, 0));
 const enRango = (f: string, desde: string, hasta: string) => f >= desde && f <= hasta;
 
-export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: IdentidadOperativa): Dashboard {
-  const dePrestamo = (p: Prestamo) => alcance === 'empresa' || (alcance === 'mis' ? p.asesor === yo.nombre : p.agencia === yo.agencia);
-  const deCliente = (c: Cliente) => alcance === 'empresa' || (alcance === 'mis' ? c.asesor === yo.nombre : c.agencia === yo.agencia);
+/** Agrupa las cuotas vencidas por cliente. La lista llega ordenada por fecha, así que la primera de cada cliente es la más antigua. */
+function agruparMorosos(vencidas: CuotaPendiente[]): ClienteMoroso[] {
+  const porCliente = new Map<string, ClienteMoroso>();
+  for (const o of vencidas) {
+    const id = o.prestamo.clienteId;
+    const m = porCliente.get(id) ?? { cliente: o.cliente, clienteId: id, diasAtraso: diasEntre(CFG.hoy, o.cuota.fecha), montoVencido: 0 };
+    m.montoVencido = r2(m.montoVencido + o.importe);
+    porCliente.set(id, m);
+  }
+  return [...porCliente.values()].sort((a, b) => b.diasAtraso - a.diasAtraso);
+}
+
+export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: IdentidadOperativa, estado: FiltroEstado = 'todos'): Dashboard {
+  const enAlcance = filtroAlcance(alcance, yo);
+  const conEstado = (r: ResumenPrestamo) => estado === 'todos' || r.estado === estado;
 
   /* Solo préstamos desembolsados: las solicitudes en evaluación, aprobadas o rechazadas no son cartera. */
-  const ps = db.prestamos.filter(dePrestamo).filter(esDesembolsado);
-  const rs = ps.map((p) => ({ p, r: resumen(p) }));
+  const rs = db.prestamos.filter(enAlcance).filter(esDesembolsado).map((p) => ({ p, r: resumen(p) })).filter((x) => conEstado(x.r));
+  const ps = rs.map((x) => x.p);
   const vigentes = rs.filter((x) => x.r.estado !== 'Cancelado');
   const cliente = (id: string) => db.clientes.find((c) => c.id === id);
 
@@ -96,6 +139,7 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: I
   );
   const porFecha = (a: CuotaPendiente, b: CuotaPendiente) => a.cuota.fecha.localeCompare(b.cuota.fecha);
   const vencidas = abiertas.filter((o) => o.cuota.fecha < hoy).sort(porFecha);
+  const morosos = agruparMorosos(vencidas);
   const futuras = abiertas.filter((o) => o.cuota.fecha >= hoy).sort(porFecha);
   const ventana = futuras.filter((o) => o.cuota.fecha <= addDays(hoy, CFG.diasProxVenc));
 
@@ -116,8 +160,8 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: I
     return { estado, cantidad: grupo.length, capital: suma(grupo.map((x) => x.r.capitalPend)) };
   });
 
-  const clientesAlcance = db.clientes.filter(deCliente);
-  const clientesCercaLimite = db.clientes
+  const clientesAlcance = db.clientes.filter(enAlcance);
+  const clientesCercaLimite = clientesAlcance
     .map((c) => ({ cliente: c, deuda: deudaCliente(db, c.id) }))
     .filter((x) => x.deuda >= CFG.limite * CFG.alertaLimite)
     .sort((a, b) => b.deuda - a.deuda);
@@ -129,8 +173,26 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: I
     clientes: clientesAlcance.length, clientesNuevosMes: clientesAlcance.filter((c) => enRango(c.alta, inicioMes, hoy)).length,
     vencidas, montoVencido: suma(vencidas.map((o) => o.importe)),
     proximas: futuras.slice(0, 5), proximasVentana: { cantidad: ventana.length, monto: suma(ventana.map((o) => o.importe)) },
-    serie, estados, clientesCercaLimite, mesPrevio: mesDe(inicioPrevio)
+    serie, estados, clientesCercaLimite, morosos, extrajudiciales: morosos.filter((m) => m.diasAtraso >= CFG.diasExtrajudicial),
+    mesPrevio: mesDe(inicioPrevio)
   };
+}
+
+/* ---------- Resumen por agencia (vista de gerencia) ---------- */
+export interface FilaAgencia {
+  agencia: string;
+  prestamosActivos: number;
+  capitalPendiente: number;
+  morosos: number;
+  extrajudiciales: number;
+}
+
+/** Una fila por agencia, reutilizando el mismo cálculo del dashboard con el alcance de cada agencia. */
+export function resumenPorAgencia(db: Db, yo: IdentidadOperativa, estado: FiltroEstado = 'todos'): FilaAgencia[] {
+  return AGENCIAS.map((agencia) => {
+    const d = calcularDashboard(db, `agencia:${agencia}`, 1, yo, estado);
+    return { agencia, prestamosActivos: d.prestamosActivos, capitalPendiente: d.capitalPendiente, morosos: d.morosos.length, extrajudiciales: d.extrajudiciales.length };
+  });
 }
 
 /* ---------- Notificaciones: derivadas de los datos de la cartera propia ---------- */
