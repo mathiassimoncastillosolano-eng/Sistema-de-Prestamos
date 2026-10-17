@@ -10,14 +10,17 @@
    5. Límite de endeudamiento = capital pendiente (sin intereses futuros).
    6. NO existe operativa de pagos: el sistema registra préstamos y consulta cronogramas. Lo único que se conserva
       es un REGISTRO HISTÓRICO importado (solo lectura) del que salen el capital pendiente y el resumen del préstamo.
-      La interfaz NO clasifica cada cuota como pagada/pendiente/vencida: sin conciliación de pagos esa etiqueta no es fiable.
+      El estado visual de cada cuota (Pagada / Pendiente / Próxima a vencer / Vencida) es una DEMOSTRACIÓN derivada de
+      `estadoCuota()` con las fechas y los importes cubiertos de los datos mock; no hay conciliación real de pagos.
    7. El cronograma original NUNCA se reescribe. Sin registro histórico, el capital pendiente NO disminuye.
+   8. Una solicitud sin desembolsar (`etapa`: en evaluación, aprobada o rechazada) no genera capital pendiente, no cuenta
+      para el límite de endeudamiento y su cronograma es solo una proyección.
 
    Esta migración conserva el comportamiento del prototipo. Ver DISCREPANCIA ABIERTA en lib/config.ts.
    ========================================================= */
-import type { Cuota, Prestamo, RegistroHistorico, ResumenPrestamo } from '@/types';
+import type { Cuota, EstadoCuota, EstadoPrestamo, Prestamo, RegistroHistorico, ResumenPrestamo } from '@/types';
 import { CFG } from './config';
-import { addMonths } from './dates';
+import { addMonths, diasEntre } from './dates';
 import { money } from './format';
 
 export const r2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
@@ -26,6 +29,29 @@ export const r2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
 export const cuotaAbierta = (c: Cuota) => c.cubierto < c.cuota - 0.005;
 /** Importe contractual de la cuota que aún no figura cubierto en el registro histórico. */
 export const importePendienteCuota = (c: Cuota) => r2(c.cuota - c.cubierto);
+
+/** Cuota con un pago parcial: algo cubierto, pero no el total. Nunca se considera «pagada». */
+export const cuotaParcial = (c: Cuota) => c.cubierto > 0.005 && cuotaAbierta(c);
+
+/**
+ * Estado visual de una cuota (única fuente; la usan las tablas, las tarjetas y el detalle).
+ * - Pagada: el importe cubierto alcanza la cuota completa.
+ * - Vencida: vence antes de `hoy` y aún tiene saldo (también si está parcialmente cubierta).
+ * - Próxima a vencer: con saldo y vence dentro de CFG.diasProxVenc días (incluido hoy).
+ * - Pendiente: cuota futura con saldo.
+ * `hoy` es por defecto la fecha simulada del prototipo (CFG.hoy), con la que están construidos los datos mock.
+ */
+export function estadoCuota(c: Cuota, hoy: string = CFG.hoy): EstadoCuota {
+  if (!cuotaAbierta(c)) return 'Pagada';
+  if (c.fecha < hoy) return 'Vencida';
+  if (diasEntre(c.fecha, hoy) <= CFG.diasProxVenc) return 'Próxima a vencer';
+  return 'Pendiente';
+}
+
+/** Un préstamo está desembolsado cuando no es una solicitud en evaluación, aprobada o rechazada. */
+export const esDesembolsado = (p: Pick<Prestamo, 'etapa'>) => !p.etapa;
+
+const ESTADO_DE_ETAPA = { evaluacion: 'En evaluación', aprobado: 'Aprobado', rechazado: 'Rechazado' } as const satisfies Record<NonNullable<Prestamo['etapa']>, EstadoPrestamo>;
 
 export const tasaMensual = (tea: number) => Math.pow(1 + tea, 1 / 12) - 1;
 
@@ -72,19 +98,23 @@ export function importarHistorico(p: Prestamo, reg: RegistroHistorico): Prestamo
   return { ...p, cronograma: cubrirConHistorico(p.cronograma, reg.monto), historico: [...p.historico, reg] };
 }
 
-export function resumen(p: Pick<Prestamo, 'cronograma' | 'capital'>): ResumenPrestamo {
+export function resumen(p: Pick<Prestamo, 'cronograma' | 'capital' | 'etapa'>): ResumenPrestamo {
   const total = r2(p.cronograma.reduce((a, c) => a + c.cuota, 0));
+  if (p.etapa) {
+    // Solicitud sin desembolsar: el cronograma es una proyección y no existe saldo ni mora.
+    return { total, cubierto: 0, pendiente: 0, interes: r2(total - p.capital), capitalPend: 0, vencidas: 0, proxima: null, estado: ESTADO_DE_ETAPA[p.etapa] };
+  }
   const cubierto = r2(p.cronograma.reduce((a, c) => a + c.cubierto, 0));
   const pendiente = r2(total - cubierto);
   const abiertas = p.cronograma.filter(cuotaAbierta);
   const capitalPend = r2(abiertas.reduce((a, c) => a + c.capital, 0));
   const vencidas = abiertas.filter((c) => c.fecha < CFG.hoy).length;
-  const estado = pendiente <= 0.005 ? 'Finalizado' : vencidas ? 'Con cuotas vencidas' : 'Vigente';
+  const estado: EstadoPrestamo = pendiente <= 0.005 ? 'Cancelado' : vencidas ? 'En mora' : 'Vigente';
   return { total, cubierto, pendiente, interes: r2(total - p.capital), capitalPend, vencidas, proxima: abiertas[0] ?? null, estado };
 }
 
 export const capitalPendienteCliente = (prestamos: Prestamo[], clienteId: string) =>
-  r2(prestamos.filter((p) => p.clienteId === clienteId).reduce((a, p) => a + resumen(p).capitalPend, 0));
+  r2(prestamos.filter((p) => p.clienteId === clienteId && esDesembolsado(p)).reduce((a, p) => a + resumen(p).capitalPend, 0));
 
 export const capacidadDisponible = (deuda: number) => Math.max(0, r2(CFG.limite - deuda));
 
@@ -93,7 +123,7 @@ export const capacidadDisponible = (deuda: number) => Math.max(0, r2(CFG.limite 
  * Sin registros, el capital pendiente es el capital completo desde el desembolso (no se inventa amortización).
  */
 export function capitalPendienteAl(p: Prestamo, fecha: string): number {
-  if (p.desembolso > fecha) return 0;
+  if (p.etapa || p.desembolso > fecha) return 0;
   let cr = p.cronograma.map((c) => ({ ...c, cubierto: 0 }));
   const movs = p.historico.map((g, i) => ({ g, i })).filter((x) => x.g.fecha <= fecha);
   movs.sort((a, b) => (a.g.fecha === b.g.fecha ? a.i - b.i : a.g.fecha < b.g.fecha ? -1 : 1));

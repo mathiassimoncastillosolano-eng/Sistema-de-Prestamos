@@ -4,6 +4,8 @@ Registro y consulta de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20)
 
 > **Alcance: este sistema NO realiza ni registra pagos.** No hay pagos, abonos, amortizaciones, cancelaciones anticipadas ni liquidaciones: ni en la interfaz ni en los servicios (hay pruebas que lo comprueban).
 
+> **Estados de demostración.** Los préstamos muestran los estados En evaluación, Aprobado, Vigente, En mora, Cancelado y Rechazado, y las cuotas Pendiente, Próxima a vencer, Vencida y Pagada. Se derivan en el navegador (`resumen()` y `estadoCuota()` en `src/lib/finance.ts`) de las fechas e importes de los datos ficticios; no hay conciliación real de pagos. «En evaluación», «Aprobado» y «Rechazado» son solicitudes sin desembolsar (`etapa`): no generan capital pendiente ni cuentan para el límite. La fecha de desembolso de una solicitud nueva es la fecha actual del sistema (no editable) y la primera cuota se calcula un mes después.
+
 > **Alcance real vs. ficticio.** Solo la **autenticación** es real: inicio de sesión con correo y contraseña, perfil, rol y agencia/ubicación vienen de PostgreSQL (`perfiles`, `agencias`, `ubicaciones`) a través del backend Spring Boot (`backend/`). Clientes, solicitudes, préstamos, cuotas y dashboard **siguen siendo datos ficticios en `localStorage`**; la consulta de DNI/RUC es simulada. Por eso el control de acceso a esos módulos es de navegación/presentación: no hay un servidor que proteja esos datos.
 
 ## Ejecutar

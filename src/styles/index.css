@@ -5,7 +5,9 @@
 
 /* =========================================================
    TOKENS DE DISEÑO — única fuente de verdad visual (identidad PerúCred).
-   Paleta de marca: Azul noche #0B172A · Azul corporativo #12365A · Turquesa #00BFAE · Turquesa claro #51D6C5.
+   Paleta de marca: Azul marino profundo #0B1830 · Azul corporativo #12395B · Turquesa #00BFAE · Turquesa suave #DDF7F3 · Turquesa claro #51D6C5.
+   Referencia de interfaz clara: fondo #F4F7FB · superficies #FFFFFF · bordes #DCE5EF · texto #132B46 · texto secundario #60738D
+   (el secundario se oscurece un punto, #5B6E88, para mantener contraste AA también sobre superficies tintadas).
    Los tonos "-ink" (texto) y el turquesa de interfaz (--teal) están ajustados para contraste AA sobre su fondo:
    el turquesa puro #00BFAE no alcanza 4.5:1 como texto sobre blanco, por eso se usa solo en fondos oscuros,
    logo y acentos decorativos; en claro, el texto turquesa usa --teal-ink.
@@ -14,28 +16,28 @@
   color-scheme: light;
 
   /* Superficies */
-  --canvas: #f5f7fa;
+  --canvas: #f4f7fb;
   --surface: #ffffff;
-  --surface-2: #eef2f7;
+  --surface-2: #eef3f9;
   --tint: #eaf0f7;
   --tint-ink: #334a63;
 
   /* Texto y bordes */
-  --ink: #172b4d;
-  --ink-muted: #56677f;
+  --ink: #132b46;
+  --ink-muted: #5b6e88;
   --ink-subtle: #7a889b;
-  --line: #e2e8f0;
-  --line-strong: #cbd5e1;
+  --line: #dce5ef;
+  --line-strong: #c4d0de;
 
   /* Acción principal */
-  --brand: #12365a;
-  --brand-hover: #0d2a47;
+  --brand: #12395b;
+  --brand-hover: #0d2e4a;
   --brand-ink: #ffffff;
 
   /* Acentos de marca */
   --teal: #00a396;
   --teal-ink: #007a70;
-  --teal-soft: #e0f7f5;
+  --teal-soft: #ddf7f3;
   --navy-soft: #e6edf6;
   --navy-ink: #12365a;
   /* Texto sobre superficies turquesa (relleno): azul noche, no blanco */
@@ -59,7 +61,7 @@
   --neutral-soft: #edf0f4;
 
   /* Navegación lateral */
-  --side: #0b172a;
+  --side: #0b1830;
   --side-ink: #d6e0ec;
   --side-muted: #8ea3bb;
   --side-accent: #51d6c5;
@@ -77,14 +79,27 @@
 
   --ring: #0a8f84;
   --overlay: #0b172a;
-  --sh-card: 0 1px 2px rgb(11 23 42 / 0.05);
+  --sh-card: 0 1px 2px rgb(11 24 48 / 0.05);
+
+  /* Espaciado y tipografía reutilizables (ritmo de las pantallas de negocio) */
+  --space-section: 1.25rem;
+  --space-gutter: 1rem;
+  --text-label: 0.6875rem;
+  --text-hint: 0.8125rem;
+  --tracking-label: 0.08em;
+  --table-pad-x: 0.75rem;
+  --table-pad-y: 0.625rem;
+
+  /* Marca: panel de acceso */
+  --brand-deep: #0b1830;
+  --brand-gradient: linear-gradient(165deg, #0b1830 0%, #0e2442 55%, #12395b 100%);
   --sh-pop: 0 14px 36px -10px rgb(11 23 42 / 0.28), 0 2px 8px rgb(11 23 42 / 0.08);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: #07111f;
+  --canvas: #071120;
   --surface: #0c1a2e;
   --surface-2: #112239;
   --tint: #14263d;
@@ -124,7 +139,7 @@
   --neutral-ink: #b0bece;
   --neutral-soft: rgb(131 151 173 / 0.14);
 
-  --side: #081322;
+  --side: #081224;
   --side-ink: #d6e0ec;
   --side-muted: #7f95ab;
   --side-accent: #51d6c5;
@@ -251,14 +266,47 @@
 }
 
 /* ---------- Panel de marca del login ----------
-   Siempre claro, también en modo oscuro: el logo oficial lleva texto azul marino y necesita fondo claro. */
+   Superficie azul marino con profundidad (degradados, retícula y anillo sutiles), igual en tema claro y oscuro.
+   El logo oficial lleva texto azul marino: se coloca sobre una baldosa blanca (.bp-logo) sin deformarlo. */
 .brand-panel {
-  background: linear-gradient(160deg, #ffffff 0%, #eef7f7 100%);
-  color: #12365a;
-  border-right: 1px solid #e2e8f0;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #e8eef6;
+  background:
+    radial-gradient(110% 80% at 0% 0%, rgb(0 191 174 / 0.2) 0%, transparent 58%),
+    radial-gradient(90% 70% at 100% 100%, rgb(18 57 91 / 0.85) 0%, transparent 62%),
+    var(--brand-gradient);
 }
-.brand-panel .bp-muted { color: #56677f; }
-.brand-panel .bp-chip { background: #e0f7f5; color: #007a70; }
+.brand-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(75% 75% at 25% 15%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(75% 75% at 25% 15%, #000 0%, transparent 75%);
+}
+.brand-panel::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -9rem;
+  bottom: -9rem;
+  width: 24rem;
+  height: 24rem;
+  border-radius: 9999px;
+  border: 1px solid rgb(81 214 197 / 0.22);
+  box-shadow: inset 0 0 0 3rem rgb(81 214 197 / 0.035), 0 0 0 3rem rgb(81 214 197 / 0.03);
+}
+.brand-panel .bp-muted { color: #9fb5cc; }
+.brand-panel .bp-title-accent { color: #51d6c5; }
+.brand-panel .bp-logo { background: #ffffff; border-radius: 1rem; box-shadow: 0 10px 30px -12px rgb(0 0 0 / 0.55); }
+.brand-panel .bp-item { background: rgb(255 255 255 / 0.06); border: 1px solid rgb(255 255 255 / 0.1); }
+.brand-panel .bp-chip { background: rgb(0 191 174 / 0.16); color: #51d6c5; }
 
 /* ---------- Impresión del cronograma ---------- */
 .print-only { display: none; }

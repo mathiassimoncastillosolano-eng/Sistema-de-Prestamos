@@ -1,4 +1,3 @@
-import { Lock } from 'lucide-react';
 import { forwardRef, type ComponentProps, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
@@ -10,20 +9,17 @@ interface InputProps extends Omit<ComponentProps<'input'>, 'prefix'> {
   prefix?: ReactNode;
   /** Se muestra dentro del campo, a la derecha (p. ej. «meses»). */
   suffix?: ReactNode;
-  /** Valor calculado por reglas de negocio: no editable, con borde discontinuo e icono de candado. */
-  derived?: boolean;
 }
 
 /** Ancho reservado para el prefijo según su longitud (el símbolo «S/» no debe pisar el texto). */
 const padPrefijo = (p: ReactNode) => (typeof p === 'string' && p.length > 2 ? 'pl-14' : 'pl-9');
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ className, prefix, suffix, derived, readOnly, ...props }, ref) {
-  const sufijo = derived ? <Lock className="size-3.5" aria-hidden /> : suffix;
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ className, prefix, suffix, ...props }, ref) {
+  const sufijo = suffix;
   const input = (
     <input
       ref={ref}
-      readOnly={readOnly || derived}
-      className={cn(controlBase, 'h-11 px-3 sm:h-10', prefix && padPrefijo(prefix), sufijo && (derived ? 'pr-9' : 'pr-14'), derived && 'cursor-default border-dashed bg-surface-2 text-ink focus-visible:border-line-strong', className)}
+      className={cn(controlBase, 'h-11 px-3 sm:h-10', prefix && padPrefijo(prefix), sufijo && 'pr-14', className)}
       {...props}
     />
   );
@@ -32,8 +28,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ c
     <div className="relative">
       {prefix && <span aria-hidden className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm font-semibold text-ink-muted">{prefix}</span>}
       {input}
-      {/* Un sufijo de texto («meses») o el candado no reciben clics; un control interactivo (p. ej. el ojo de la contraseña) sí. */}
-      {sufijo && <span className={cn('absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted', (derived || typeof sufijo === 'string') && 'pointer-events-none')}>{sufijo}</span>}
+      {/* Un sufijo de texto («meses») no recibe clics; un control interactivo (p. ej. el ojo de la contraseña) sí. */}
+      {sufijo && <span className={cn('absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted', typeof sufijo === 'string' && 'pointer-events-none')}>{sufijo}</span>}
     </div>
   );
 });

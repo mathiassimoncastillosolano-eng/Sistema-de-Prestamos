@@ -6,7 +6,7 @@ import type { Cliente, Cuota, Db, EstadoPrestamo, Prestamo } from '@/types';
 import type { IdentidadOperativa, Rol } from '@/types/auth';
 import { CFG } from './config';
 import { addDays, addMonths, finDeMes, mesDe } from './dates';
-import { capitalPendienteAl, cuotaAbierta, importePendienteCuota, r2, resumen } from './finance';
+import { capitalPendienteAl, cuotaAbierta, esDesembolsado, importePendienteCuota, r2, resumen } from './finance';
 import { deudaCliente } from './selectors';
 import { variacion } from './format';
 
@@ -51,7 +51,7 @@ export interface Dashboard {
   variacionDesembolsos: number | null;
   prestamosActivos: number;
   prestamosTotales: number;
-  prestamosFinalizados: number;
+  prestamosCancelados: number;
   clientes: number;
   clientesNuevosMes: number;
   vencidas: CuotaPendiente[];
@@ -73,9 +73,10 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: I
   const dePrestamo = (p: Prestamo) => alcance === 'empresa' || (alcance === 'mis' ? p.asesor === yo.nombre : p.agencia === yo.agencia);
   const deCliente = (c: Cliente) => alcance === 'empresa' || (alcance === 'mis' ? c.asesor === yo.nombre : c.agencia === yo.agencia);
 
-  const ps = db.prestamos.filter(dePrestamo);
+  /* Solo préstamos desembolsados: las solicitudes en evaluación, aprobadas o rechazadas no son cartera. */
+  const ps = db.prestamos.filter(dePrestamo).filter(esDesembolsado);
   const rs = ps.map((p) => ({ p, r: resumen(p) }));
-  const vigentes = rs.filter((x) => x.r.estado !== 'Finalizado');
+  const vigentes = rs.filter((x) => x.r.estado !== 'Cancelado');
   const cliente = (id: string) => db.clientes.find((c) => c.id === id);
 
   const hoy = CFG.hoy;
@@ -110,7 +111,7 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: I
     };
   });
 
-  const estados = (['Vigente', 'Con cuotas vencidas', 'Finalizado'] as const).map((estado) => {
+  const estados = (['Vigente', 'En mora', 'Cancelado'] as const).map((estado) => {
     const grupo = rs.filter((x) => x.r.estado === estado);
     return { estado, cantidad: grupo.length, capital: suma(grupo.map((x) => x.r.capitalPend)) };
   });
@@ -124,7 +125,7 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: I
   return {
     capitalPendiente, capitalPendientePrevio, variacionCapital: variacion(capitalPendiente, capitalPendientePrevio),
     totalDesembolsado: suma(ps.map((p) => p.capital)), desembolsadoMes, variacionDesembolsos: variacion(desembolsadoMes, desembolsadoPrevio),
-    prestamosActivos: vigentes.length, prestamosTotales: ps.length, prestamosFinalizados: ps.length - vigentes.length,
+    prestamosActivos: vigentes.length, prestamosTotales: ps.length, prestamosCancelados: ps.length - vigentes.length,
     clientes: clientesAlcance.length, clientesNuevosMes: clientesAlcance.filter((c) => enRango(c.alta, inicioMes, hoy)).length,
     vencidas, montoVencido: suma(vencidas.map((o) => o.importe)),
     proximas: futuras.slice(0, 5), proximasVentana: { cantidad: ventana.length, monto: suma(ventana.map((o) => o.importe)) },

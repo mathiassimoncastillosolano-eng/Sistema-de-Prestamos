@@ -1,8 +1,9 @@
-import { FileDown, MessageSquareText, TriangleAlert } from 'lucide-react';
+import { FileDown, Info, MessageSquareText, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AnimatedNumber } from '@/components/data-display/animated-number';
 import { DefinitionList } from '@/components/data-display/definition-list';
+import { StatusBadge } from '@/components/data-display/status-badge';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -12,7 +13,7 @@ import { Textarea } from '@/components/ui/input';
 import { toast } from '@/components/ui/toast';
 import { useDb } from '@/hooks/use-db';
 import { fecha } from '@/lib/dates';
-import { resumen } from '@/lib/finance';
+import { cuotaParcial, estadoCuota, resumen } from '@/lib/finance';
 import { money } from '@/lib/format';
 import { descargarPdfPrestamo } from '@/lib/pdf';
 import { actividadDe, getCliente, getPrestamo } from '@/lib/selectors';
@@ -29,7 +30,11 @@ function CuotaDialog({ n, onClose, id }: { n: number | null; onClose: () => void
         <DefinitionList items={[
           { label: 'Capital programado', value: money(c.capital) }, { label: 'Interés programado', value: money(c.interes) },
           { label: 'Importe de la cuota', value: money(c.cuota), strong: true },
-          { label: 'Saldo de capital programado', value: money(c.saldo) }
+          { label: 'Saldo de capital programado', value: money(c.saldo) },
+          ...(p?.etapa ? [] : [
+            { label: 'Estado', value: <StatusBadge estado={estadoCuota(c)} /> },
+            ...(cuotaParcial(c) ? [{ label: 'Cubierto (pago parcial)', value: money(c.cubierto) }] : [])
+          ])
         ]} />
       )}
     </Modal>
@@ -69,6 +74,7 @@ export default function LoanDetailPage() {
   const r = resumen(p);
   const c = getCliente(db, p.clienteId);
   const ultima = p.cronograma[p.cronograma.length - 1];
+  const sinDesembolso = !!p.etapa;
   const historial = actividadDe(db, 'prestamo', p.id);
 
   const descargar = async () => {
@@ -87,20 +93,26 @@ export default function LoanDetailPage() {
     { label: 'Capital original', valor: p.capital, pie: 'Monto registrado' },
     { label: 'Intereses pactados', valor: r.interes, pie: `TEA ${(p.tea * 100).toFixed(0)} %` },
     { label: 'Importe contractual total', valor: r.total, pie: `${p.plazo} cuotas` },
-    { label: 'Capital pendiente', valor: r.capitalPend, pie: r.cubierto > 0 ? 'Según registro histórico' : 'Sin amortizaciones registradas' },
-    { label: 'Pendiente contractual', valor: r.pendiente, pie: r.proxima ? `Próximo vencimiento ${fecha(r.proxima.fecha)}` : 'Sin cuotas abiertas' }
+    { label: 'Capital pendiente', valor: r.capitalPend, pie: sinDesembolso ? 'Aún sin desembolsar' : r.cubierto > 0 ? 'Según registro histórico' : 'Sin amortizaciones registradas' },
+    { label: 'Pendiente contractual', valor: r.pendiente, pie: sinDesembolso ? 'Aún sin desembolsar' : r.proxima ? `Próximo vencimiento ${fecha(r.proxima.fecha)}` : 'Sin cuotas abiertas' }
   ];
 
   return (
     <>
       <PageHeader back={{ to: '/prestamos', label: 'Préstamos' }}
-        title={p.id}
+        title={<span className="flex flex-wrap items-center gap-x-3 gap-y-1">{p.id}<StatusBadge estado={r.estado} className="text-[0.8125rem]" /></span>}
         description={<>{c ? <Link to={`/clientes/${c.id}`} className="font-medium text-teal-ink hover:underline">{c.nombre}</Link> : p.clienteId} · {p.agencia} · Asesor {p.asesor}</>}
         actions={<>
           <Button variant="primary" onClick={descargar} disabled={generando} aria-busy={generando}><FileDown className="size-4" />{generando ? 'Generando PDF…' : 'Descargar PDF'}</Button>
           <Button onClick={() => setMensaje(true)}><MessageSquareText className="size-4" />Mensaje para el cliente</Button>
         </>} />
 
+      {sinDesembolso && (
+        <p role="status" className="mb-4 flex items-start gap-2 rounded-control border border-line bg-info-soft px-3 py-2.5 text-sm text-info-ink">
+          <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>Solicitud con estado <b className="font-semibold">{r.estado}</b> (demostración). El desembolso no se ha realizado: la fecha es la prevista y el cronograma es una proyección.{p.observaciones && <> {p.observaciones}</>}</span>
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card lg:grid-cols-5">
         {kpis.map((k, i) => (
           <div key={k.label} className={`bg-surface p-4 sm:p-5 ${i === 4 ? 'col-span-2 lg:col-span-1' : ''}`}>
@@ -116,7 +128,7 @@ export default function LoanDetailPage() {
           <CardHeader title="Condiciones" className="pb-2" />
           <CardBody className="pt-0">
             <DefinitionList items={[
-              { label: 'Fecha de desembolso registrada', value: fecha(p.desembolso) },
+              { label: sinDesembolso ? 'Fecha de desembolso prevista' : 'Fecha de desembolso registrada', value: fecha(p.desembolso) },
               { label: 'Primer vencimiento', value: p.cronograma[0] ? fecha(p.cronograma[0].fecha) : '—' },
               { label: 'Vencimiento final', value: ultima ? fecha(ultima.fecha) : '—' },
               { label: 'Plazo', value: `${p.plazo} meses` }, { label: 'TEA', value: `${(p.tea * 100).toFixed(0)} %` },
@@ -135,7 +147,7 @@ export default function LoanDetailPage() {
       </div>
 
       <Card className="mt-5 overflow-hidden">
-        <CardHeader title="Cronograma de cuotas" description={`${p.plazo} cuotas · cronograma contractual, abre una cuota para ver su detalle`} className="pb-4" />
+        <CardHeader title={sinDesembolso ? 'Cronograma proyectado' : 'Cronograma de cuotas'} description={`${p.plazo} cuotas · ${sinDesembolso ? 'proyección a la fecha prevista de desembolso' : 'estados de demostración con datos ficticios'}, abre una cuota para ver su detalle`} className="pb-4" />
         <ScheduleTable prestamo={p} onSelect={setCuota} />
       </Card>
 

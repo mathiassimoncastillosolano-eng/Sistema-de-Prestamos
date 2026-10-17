@@ -29,7 +29,7 @@ import { ClientFormSheet } from '@/features/clients/client-form-sheet';
 const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const fechaHora = (t: string) => `${fecha(t.slice(0, 10))} · ${t.slice(11)}`;
 
-const COLOR_ESTADO: Record<string, string> = { Vigente: 'var(--success)', 'Con cuotas vencidas': 'var(--danger)', Finalizado: 'var(--neutral)' };
+const COLOR_ESTADO: Record<string, string> = { Vigente: 'var(--success)', 'En mora': 'var(--danger)', Cancelado: 'var(--neutral)' };
 
 /** Resumen textual de un gráfico para lectores de pantalla. */
 const Figura = ({ etiqueta, resumen, children, className }: { etiqueta: string; resumen: string; children: ReactNode; className?: string }) => (
@@ -121,7 +121,7 @@ export default function DashboardPage() {
         <Stat principal label="Capital pendiente" valor={<AnimatedNumber value={d.capitalPendiente} format={money} />}
           pie={<span className="flex flex-wrap items-center gap-1.5"><Trend valor={d.variacionCapital} modo="neutral" />{d.variacionCapital !== null && <span>vs. cierre de {mesPrev}</span>}</span>} />
         <Stat principal label="Cuotas vencidas" tono={d.vencidas.length ? 'danger' : undefined} valor={<AnimatedNumber value={d.vencidas.length} format={entero} />} pie={d.vencidas.length ? `${money(d.montoVencido)} en cuotas programadas` : 'Sin cuotas vencidas'} />
-        <Stat label="Préstamos activos" valor={<AnimatedNumber value={d.prestamosActivos} format={entero} />} pie={`${d.prestamosTotales} en total · ${d.prestamosFinalizados} finalizados`} />
+        <Stat label="Préstamos activos" valor={<AnimatedNumber value={d.prestamosActivos} format={entero} />} pie={`${d.prestamosTotales} en total · ${d.prestamosCancelados} cancelados`} />
         <Stat label="Clientes registrados" valor={<AnimatedNumber value={d.clientes} format={entero} />} pie={d.clientesNuevosMes ? `${d.clientesNuevosMes} nuevo${d.clientesNuevosMes === 1 ? '' : 's'} este mes` : alcanceLabel} />
         <Stat className="max-sm:col-span-2" label={`Vencen en ${CFG.diasProxVenc} días`} valor={<AnimatedNumber value={d.proximasVentana.cantidad} format={entero} />} pie={d.proximasVentana.cantidad ? `${money(d.proximasVentana.monto)} en cuotas programadas` : 'Sin vencimientos cercanos'} />
       </motion.div>
@@ -180,7 +180,7 @@ export default function DashboardPage() {
                         <i aria-hidden className="size-2.5 shrink-0 rounded-full" style={{ background: COLOR_ESTADO[e.estado] }} />
                         <span className="min-w-0 flex-1 text-ink-muted">{e.estado}</span>
                         <span className="num font-semibold text-ink">{e.cantidad}</span>
-                        <span className="num w-24 shrink-0 text-right text-xs text-ink-muted">{e.estado === 'Finalizado' ? '—' : money(e.capital)}</span>
+                        <span className="num w-24 shrink-0 text-right text-xs text-ink-muted">{e.estado === 'Cancelado' ? '—' : money(e.capital)}</span>
                       </li>
                     ))}
                   </ul>

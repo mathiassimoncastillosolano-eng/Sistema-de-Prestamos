@@ -49,6 +49,10 @@ export interface NuevaSolicitud {
 
 export type ResultadoPrestamo = { ok: true; prestamo: Prestamo } | { ok: false; error: string };
 
+/**
+ * Registra una SOLICITUD simulada en estado «En evaluación». No desembolsa nada: `desembolso` es la fecha prevista y el
+ * cronograma, una proyección. Solo escribe en el almacenamiento local del navegador (demostración).
+ */
 export function crearPrestamo(yo: IdentidadOperativa, s: NuevaSolicitud): ResultadoPrestamo {
   const db = getDb();
   const cliente = db.clientes.find((c) => c.id === s.clienteId);
@@ -61,11 +65,11 @@ export function crearPrestamo(yo: IdentidadOperativa, s: NuevaSolicitud): Result
     id: 'PR-' + siguienteNumero(db.prestamos.map((p) => p.id), 'PR-').toString().padStart(4, '0'),
     clienteId: cliente.id, agencia: yo.agencia, capital: s.monto, plazo: s.plazo, tea: CFG.tea,
     desembolso: s.desembolso, asesor: yo.nombre,
-    cronograma: generarCronograma(s.monto, s.plazo, s.desembolso), historico: [], observaciones: s.observaciones ?? ''
+    cronograma: generarCronograma(s.monto, s.plazo, s.desembolso), historico: [], observaciones: s.observaciones ?? '', etapa: 'evaluacion'
   };
   commit({
     ...db, prestamos: [...db.prestamos, prestamo],
-    actividad: conActividad(db, yo, 'Préstamo registrado', `${prestamo.id} por ${money(s.monto)} a ${cliente.nombre}`, { entidad: 'prestamo', id: prestamo.id })
+    actividad: conActividad(db, yo, 'Solicitud registrada', `${prestamo.id} por ${money(s.monto)} de ${cliente.nombre} (en evaluación)`, { entidad: 'prestamo', id: prestamo.id })
   });
   return { ok: true, prestamo };
 }

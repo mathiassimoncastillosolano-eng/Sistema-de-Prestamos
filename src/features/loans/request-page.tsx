@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'motion/react';
-import { Check, Search, UserPlus, X } from 'lucide-react';
+import { CalendarClock, CalendarDays, Check, Info, Percent, Search, Send, UserPlus, UserRound, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DefinitionList } from '@/components/data-display/definition-list';
+import { InfoFact, InfoPanel } from '@/components/data-display/info-fact';
 import { LimitMeter } from '@/components/data-display/limit-meter';
 import { PageHeader } from '@/components/layout/page-header';
 import { Avatar } from '@/components/ui/avatar';
@@ -12,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardBody } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
-import { DatePicker } from '@/components/ui/date-picker';
 import { FormSection } from '@/components/ui/form-section';
 import { Input, Textarea } from '@/components/ui/input';
 import { NumericInput } from '@/components/ui/numeric-input';
@@ -23,7 +23,7 @@ import { toast } from '@/components/ui/toast';
 import { useIdentidad, useUsuario } from '@/hooks/use-auth';
 import { useDb } from '@/hooks/use-db';
 import { CFG } from '@/lib/config';
-import { addMonths, fecha } from '@/lib/dates';
+import { addMonths, fecha, hoySistema } from '@/lib/dates';
 import { capacidadDisponible, simular, validarSolicitud } from '@/lib/finance';
 import { money } from '@/lib/format';
 import { DUR, EASE } from '@/lib/motion';
@@ -34,6 +34,7 @@ import { crearPrestamo } from '@/services/actions';
 import { getDb } from '@/services/store';
 import { ClientFormSheet } from '@/features/clients/client-form-sheet';
 import { ScheduleTable } from './schedule-table';
+import { SimulationSummary } from './simulation-summary';
 
 const PASOS = [{ titulo: 'Cliente', descripcion: 'Quién solicita' }, { titulo: 'Condiciones', descripcion: 'Monto y plazo' }, { titulo: 'Revisión', descripcion: 'Simulación y confirmación' }];
 
@@ -50,12 +51,12 @@ export default function RequestPage() {
   const [confirmar, setConfirmar] = useState(false);
   const [descartar, setDescartar] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  /* La vista previa de Condiciones solo aparece cuando la persona ya definió monto o plazo (no sobre los valores por defecto). */
-  const [condicionesEditadas, setCondicionesEditadas] = useState(false);
+  /* Fecha PREVISTA de desembolso: la fecha actual del sistema, fijada al abrir la solicitud. No es editable ni está codificada. */
+  const [desembolsoPrevisto] = useState(hoySistema);
 
   const form = useForm<SolicitudForm>({
     resolver: (v, c, o) => zodResolver(solicitudSchema((id) => deudaCliente(getDb(), id)))(v, c, o),
-    defaultValues: { clienteId: inicial, monto: 2000, plazo: 12, desembolso: CFG.hoy, observaciones: '' },
+    defaultValues: { clienteId: inicial, monto: 2000, plazo: 12, desembolso: desembolsoPrevisto, observaciones: '' },
     mode: 'onChange'
   });
   const { register, control, setValue, trigger, watch, formState: { errors, isDirty } } = form;
@@ -74,24 +75,26 @@ export default function RequestPage() {
   }, [db.clientes, q]);
 
   const elegir = (id: string) => {
-    if (id !== valores.clienteId) setCondicionesEditadas(false); // otro cliente: no arrastrar una vista previa anterior
     setValue('clienteId', id, { shouldValidate: true, shouldDirty: true });
   };
   const fallos = cliente ? validacion.checks.filter((k) => !k.ok) : [];
-  const vistaPrevia = condicionesEditadas && validacion.ok && !!sim && !!cliente;
+  /* La tarjeta lateral solo presenta resultados cuando los datos cumplen las reglas de negocio. */
+  const simulacionValida = validacion.ok && !!sim;
+  const motivoSimulacion = !Number.isFinite(valores.monto) || !Number.isFinite(valores.plazo) ? 'Ingresa un monto y un plazo válidos para ver la estimación.' : fallos.find((k) => k.campo === 'monto' || k.campo === 'plazo')?.ayuda;
+  const primeraCuota = addMonths(valores.desembolso, 1);
   const siguiente = async () => {
     if (paso === 1) { if (await trigger('clienteId')) setPaso(2); return; }
     if (paso === 2) { const ok = await trigger(['monto', 'plazo', 'desembolso']); if (ok && validacion.ok) setPaso(3); }
   };
 
-  const confirmarDesembolso = async () => {
+  const enviarSolicitud = async () => {
     if (guardando) return; // evita envíos duplicados
     setGuardando(true);
     await delay(500);
     const r = crearPrestamo(yo, { clienteId: valores.clienteId, monto: valores.monto, plazo: valores.plazo, desembolso: valores.desembolso, observaciones: valores.observaciones });
     setGuardando(false);
     if (!r.ok) { setConfirmar(false); toast.error(r.error); setPaso(2); void trigger(); return; }
-    toast.success(`Préstamo ${r.prestamo.id} registrado`);
+    toast.success(`Solicitud ${r.prestamo.id} registrada en evaluación (demostración)`);
     navigate(`/prestamos/${r.prestamo.id}`);
   };
 
@@ -99,11 +102,11 @@ export default function RequestPage() {
 
   return (
     <>
-      <PageHeader title="Nueva solicitud" description="Evalúa el endeudamiento, simula el cronograma y desembolsa con las reglas de negocio aplicadas." />
+      <PageHeader title="Nueva solicitud" description="Evalúa el endeudamiento, simula el cronograma y envía la solicitud a evaluación con las reglas de negocio aplicadas." />
       <div className="mb-6"><Stepper pasos={PASOS} actual={paso} onIr={setPaso} /></div>
 
-      <div>
-        <div>
+      <div className={cn('grid gap-5', paso === 2 && 'xl:grid-cols-[minmax(0,1fr)_21.5rem] xl:items-start')}>
+        <div className="min-w-0">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={paso} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: DUR.base, ease: EASE }}>
               <Card>
@@ -146,47 +149,43 @@ export default function RequestPage() {
                   {paso === 2 && (
                     <>
                       <h2 className="text-lg font-semibold text-ink">Condiciones del préstamo</h2>
+                      <p className="mt-0.5 text-sm text-ink-muted">Define el importe y el plazo; el resumen de la simulación se actualiza mientras escribes.</p>
                       <div className="mt-5 space-y-5">
                         <FormSection title="Importe y plazo">
                           <Controller name="monto" control={control} render={({ field }) => (
                             <Field label="Monto solicitado" error={errors.monto?.message} hint={`Mínimo ${money(CFG.minMonto)}. Disponible: ${money(capacidadDisponible(deuda))}`}>
-                              <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => { setCondicionesEditadas(true); field.onChange(v); }} onBlur={field.onBlur} decimals={2} prefix="S/" placeholder="0.00" />
+                              <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={field.onChange} onBlur={field.onBlur} decimals={2} prefix="S/" placeholder="0.00" />
                             </Field>
                           )} />
                           <Controller name="plazo" control={control} render={({ field }) => (
-                            <Field label={`Plazo (${CFG.plazoMin}–${CFG.plazoMax} meses)`} error={errors.plazo?.message}>
-                              <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => { setCondicionesEditadas(true); field.onChange(v); }} onBlur={field.onBlur} suffix="meses" />
+                            <Field label={`Plazo (${CFG.plazoMin}–${CFG.plazoMax} meses)`} error={errors.plazo?.message} hint="Cuotas mensuales iguales">
+                              <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={field.onChange} onBlur={field.onBlur} suffix="meses" />
                             </Field>
                           )} />
                         </FormSection>
-                        <FormSection title="Fechas" description="La primera cuota vence un mes después del desembolso.">
-                          <Controller name="desembolso" control={control} render={({ field }) => (
-                            <Field label="Fecha de desembolso" error={errors.desembolso?.message}>
-                              <DatePicker name={field.name} ref={field.ref} value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
-                            </Field>
-                          )} />
-                          <Field label="Primera cuota" hint="Calculada automáticamente"><Input derived value={valores.desembolso ? fecha(addMonths(valores.desembolso, 1)) : '—'} /></Field>
+                        <FormSection title="Fechas">
+                          <div className="space-y-2.5 sm:col-span-2">
+                            <InfoPanel aria-label="Fechas del préstamo">
+                              <InfoFact icon={CalendarDays} label="Desembolso" value={fecha(valores.desembolso)} helper="Fecha actual del sistema" />
+                              <InfoFact icon={CalendarClock} label="Primera cuota" value={fecha(primeraCuota)} helper="Calculada automáticamente" />
+                            </InfoPanel>
+                            <p className="flex items-start gap-1.5 text-[0.8125rem] text-ink-muted"><Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />La primera cuota vence un mes después del desembolso.</p>
+                          </div>
                         </FormSection>
                         <FormSection title="Condiciones y responsable">
-                          <Field label="Tasa efectiva anual" hint="Fijada por política"><Input derived value={`${(CFG.tea * 100).toFixed(0)} %`} /></Field>
-                          <Field label="Asesor responsable" hint="Usuario en sesión"><Input derived value={usuario.nombre} /></Field>
+                          <div className="sm:col-span-2">
+                            <InfoPanel aria-label="Condiciones y responsable">
+                              <InfoFact icon={Percent} label="Tasa efectiva anual" value={`${(CFG.tea * 100).toFixed(0)} %`} helper="Fijada por política de crédito" />
+                              <InfoFact icon={UserRound} label="Asesor responsable" value={usuario.nombre} helper="Usuario en sesión" />
+                            </InfoPanel>
+                          </div>
                         </FormSection>
-                        <Field label="Observaciones" optional><Textarea rows={2} {...register('observaciones')} /></Field>
+                        <Field label="Observaciones" optional><Textarea rows={3} maxLength={400} className="min-h-[5.5rem] max-h-56" placeholder="Información adicional para la evaluación" {...register('observaciones')} /></Field>
                         {fallos.length > 0 && (
                           <div role="alert" className="rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
                             <p className="font-medium">Revisa estas reglas antes de continuar</p>
                             <ul className="mt-1.5 space-y-1">{fallos.map((k) => <li key={k.label} className="flex items-start gap-2"><X className="mt-0.5 size-4 shrink-0" aria-hidden /><span>{k.label}<span className="block text-[0.8125rem]">{k.ayuda}</span></span></li>)}</ul>
                           </div>
-                        )}
-                        {vistaPrevia && sim && (
-                          <section aria-label="Vista previa de la cuota" className="rounded-control border border-line bg-surface-2 p-4">
-                            <p className="text-[0.8125rem] text-ink-muted">Vista previa de la simulación · se detalla en la revisión</p>
-                            <dl className="num mt-2 grid gap-3 sm:grid-cols-3">
-                              <div><dt className="text-xs text-ink-muted">Cuota mensual estimada</dt><dd className="text-xl font-semibold text-ink">{money(sim.cuota)}</dd></div>
-                              <div><dt className="text-xs text-ink-muted">Intereses estimados</dt><dd className="text-base text-ink">{money(sim.interes)}</dd></div>
-                              <div><dt className="text-xs text-ink-muted">Total contractual estimado</dt><dd className="text-base text-ink">{money(sim.total)}</dd></div>
-                            </dl>
-                          </section>
                         )}
                       </div>
                     </>
@@ -196,7 +195,7 @@ export default function RequestPage() {
                     <>
                       <h2 className="text-lg font-semibold text-ink">Revisión y confirmación</h2>
                       {validacion.ok
-                        ? <p className="mt-1 text-sm text-ink-muted">Esta es una simulación: todavía no existe ningún préstamo. Al confirmar se registra el préstamo simulado y se genera su cronograma.</p>
+                        ? <p className="mt-1 text-sm text-ink-muted">Esta es una simulación: todavía no existe ningún préstamo. Al confirmar se registra una solicitud simulada «En evaluación» con su cronograma proyectado; no hay desembolso real.</p>
                         : <p role="alert" className="mt-2 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">Hay validaciones pendientes. Vuelve al paso anterior para corregirlas.</p>}
 
                       {cliente && (
@@ -212,7 +211,7 @@ export default function RequestPage() {
                           <DefinitionList items={[
                             { label: 'Capital solicitado', value: money(montoNum) }, { label: 'Tasa aplicada', value: `TEA ${(CFG.tea * 100).toFixed(0)} %` },
                             { label: 'Plazo', value: `${valores.plazo} meses` }, { label: 'Frecuencia de pago', value: 'Mensual' },
-                            { label: 'Fecha de desembolso', value: fecha(valores.desembolso) }, { label: 'Primer vencimiento', value: sim ? fecha(sim.primera) : '—' }
+                            { label: 'Desembolso previsto', value: fecha(valores.desembolso) }, { label: 'Primer vencimiento', value: sim ? fecha(sim.primera) : '—' }
                           ]} />
                         </section>
                         <section aria-label="Resultado de la simulación">
@@ -243,7 +242,7 @@ export default function RequestPage() {
                         <section aria-label="Cronograma proyectado" className="mt-6">
                           <h3 className="mb-2 text-sm font-semibold text-ink">Cronograma de cuotas proyectado</h3>
                           <div className="overflow-hidden rounded-control border border-line">
-                            <ScheduleTable prestamo={{ cronograma: sim.cronograma, capital: montoNum }} />
+                            <ScheduleTable prestamo={{ cronograma: sim.cronograma, capital: montoNum }} proyectado />
                           </div>
                         </section>
                       )}
@@ -256,7 +255,7 @@ export default function RequestPage() {
                       {paso > 1 && <Button onClick={() => setPaso(paso - 1)}>Atrás</Button>}
                       {paso < 3
                         ? <Button variant="primary" onClick={siguiente} disabled={paso === 1 && !valores.clienteId}>Continuar</Button>
-                        : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!validacion.ok}><Check className="size-4" />Confirmar y desembolsar</Button>}
+                        : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!validacion.ok}><Send className="size-4" />Enviar a evaluación</Button>}
                     </div>
                   </div>
                 </CardBody>
@@ -264,13 +263,18 @@ export default function RequestPage() {
             </motion.div>
           </AnimatePresence>
         </div>
+        {paso === 2 && (
+          <motion.div key="resumen" className="min-w-0 xl:sticky xl:top-24" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE }}>
+            <SimulationSummary sim={simulacionValida ? sim : null} monto={montoNum} plazo={valores.plazo} valido={simulacionValida} motivo={motivoSimulacion} />
+          </motion.div>
+        )}
       </div>
 
       <ClientFormSheet open={registrar} onOpenChange={setRegistrar} onCreated={(c) => { elegir(c.id); }} />
 
-      <Modal open={confirmar} onOpenChange={(o) => { if (!guardando) setConfirmar(o); }} size="sm" title="Confirmar desembolso simulado"
-        description={`Vas a registrar un préstamo de ${money(montoNum)} a ${valores.plazo} meses para ${cliente?.nombre ?? ''}. No se realiza ningún cobro inicial ni movimiento bancario real.`}
-        footer={<><Button variant="secondary" onClick={() => setConfirmar(false)} disabled={guardando}>Cancelar</Button><Button variant="primary" loading={guardando} onClick={confirmarDesembolso}>Confirmar</Button></>} />
+      <Modal open={confirmar} onOpenChange={(o) => { if (!guardando) setConfirmar(o); }} size="sm" title="Enviar solicitud a evaluación (demostración)"
+        description={`Vas a registrar una solicitud de ${money(montoNum)} a ${valores.plazo} meses para ${cliente?.nombre ?? ''} con estado «En evaluación». Es una simulación: no se guarda en ninguna base de datos ni se desembolsa dinero.`}
+        footer={<><Button variant="secondary" onClick={() => setConfirmar(false)} disabled={guardando}>Cancelar</Button><Button variant="primary" loading={guardando} onClick={enviarSolicitud}>Enviar a evaluación</Button></>} />
 
       <Modal open={descartar} onOpenChange={setDescartar} size="sm" title="¿Descartar la solicitud?" description="Se perderán los datos ingresados. No se ha registrado ningún préstamo."
         footer={<><Button variant="secondary" onClick={() => setDescartar(false)}>Seguir editando</Button><Button variant="danger" onClick={() => navigate('/prestamos')}>Descartar</Button></>} />

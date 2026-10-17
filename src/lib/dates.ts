@@ -13,6 +13,11 @@ import { es } from 'date-fns/locale';
 
 const parse = (s: string) => parseISO(s);
 export const toISO = (d: Date) => format(d, 'yyyy-MM-dd');
+/**
+ * Fecha ACTUAL del sistema (calendario local), no la fecha simulada del prototipo (CFG.hoy). Se usa para la fecha prevista
+ * de desembolso de una solicitud nueva; los datos históricos mock siguen anclados a CFG.hoy y no se recalculan.
+ */
+export const hoySistema = () => toISO(new Date());
 
 /**
  * Suma meses al calendario. Si el mes destino no tiene ese día, usa el último día

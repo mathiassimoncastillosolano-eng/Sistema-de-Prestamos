@@ -1,7 +1,7 @@
 /* Consultas derivadas sobre el estado (puras, sin React). Reutilizables por vistas, búsqueda y analíticas. */
 import type { Cliente, Db, EstadoPrestamo, Prestamo } from '@/types';
 import { CFG } from './config';
-import { capacidadDisponible, capitalPendienteCliente, resumen } from './finance';
+import { capacidadDisponible, capitalPendienteCliente, esDesembolsado, resumen } from './finance';
 import { normalizar } from './utils';
 
 export const getCliente = (db: Db, id: string) => db.clientes.find((c) => c.id === id);
@@ -14,9 +14,9 @@ export type EstadoCliente = 'Con cuotas vencidas' | 'Cerca del límite' | 'Al d�
 
 /** Estado derivado del cliente (no existe como campo: se calcula desde sus préstamos). */
 export function estadoCliente(db: Db, c: Cliente): EstadoCliente {
-  const ps = prestamosDe(db, c.id).map(resumen);
-  if (ps.some((r) => r.estado === 'Con cuotas vencidas')) return 'Con cuotas vencidas';
-  if (!ps.some((r) => r.estado !== 'Finalizado')) return 'Sin préstamos activos';
+  const ps = prestamosDe(db, c.id).filter(esDesembolsado).map(resumen);
+  if (ps.some((r) => r.estado === 'En mora')) return 'Con cuotas vencidas';
+  if (!ps.some((r) => r.estado !== 'Cancelado')) return 'Sin préstamos activos';
   if (deudaCliente(db, c.id) >= CFG.limite * CFG.alertaLimite) return 'Cerca del límite';
   return 'Al día';
 }
@@ -35,7 +35,7 @@ export const filasClientes = (db: Db): FilaCliente[] =>
     const deuda = deudaCliente(db, cliente.id);
     return {
       cliente, deuda, uso: usoLimite(deuda), disponible: capacidadDisponible(deuda), estado: estadoCliente(db, cliente),
-      prestamosActivos: prestamosDe(db, cliente.id).filter((p) => resumen(p).estado !== 'Finalizado').length
+      prestamosActivos: prestamosDe(db, cliente.id).filter((p) => esDesembolsado(p) && resumen(p).estado !== 'Cancelado').length
     };
   });
 

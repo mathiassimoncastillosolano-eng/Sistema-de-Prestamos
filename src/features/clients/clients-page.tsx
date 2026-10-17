@@ -40,7 +40,7 @@ const columnas: ColumnDef<FilaCliente>[] = [
     cell: ({ row: { original: f } }) => <div className="flex items-center gap-2"><Badge tone={TONO_TIPO[f.cliente.tipo]}>{f.cliente.tipo}</Badge><span className="num text-ink">{f.cliente.doc}</span></div>
   },
   {
-    id: 'contacto', header: 'Contacto', enableSorting: false,
+    id: 'contacto', header: 'Contacto', enableSorting: false, meta: { className: 'hidden xl:table-cell' },
     cell: ({ row: { original: f } }) => (
       <div className="min-w-0">
         <p className="num text-ink">{f.cliente.telefono || '—'}</p>

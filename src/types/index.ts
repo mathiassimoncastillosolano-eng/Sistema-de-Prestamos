@@ -25,8 +25,18 @@ export interface Cliente {
   dniTitular?: string;
 }
 
-/** Estado informativo del préstamo, calculado desde el cronograma y el registro histórico importado. La cuota individual NO tiene estado de pago visible. */
-export type EstadoPrestamo = 'Vigente' | 'Con cuotas vencidas' | 'Finalizado';
+/**
+ * Estado del préstamo (demostración). Los estados «En evaluación», «Aprobado» y «Rechazado» corresponden a solicitudes
+ * que aún NO están desembolsadas (campo `etapa`); «Vigente», «En mora» y «Cancelado» se derivan del cronograma y del
+ * registro histórico importado de préstamos desembolsados.
+ */
+export type EstadoPrestamo = 'En evaluación' | 'Aprobado' | 'Vigente' | 'En mora' | 'Cancelado' | 'Rechazado';
+
+/** Etapa de una solicitud todavía no desembolsada. Un préstamo sin `etapa` está desembolsado. */
+export type EtapaSolicitud = 'evaluacion' | 'aprobado' | 'rechazado';
+
+/** Estado visual de una cuota del cronograma (demostración, derivado de fechas e importes cubiertos). */
+export type EstadoCuota = 'Pendiente' | 'Próxima a vencer' | 'Vencida' | 'Pagada';
 
 export interface Cuota {
   n: number;
@@ -65,6 +75,11 @@ export interface Prestamo {
   /** Registro histórico importado: base del capital pendiente. Solo lectura. */
   historico: RegistroHistorico[];
   observaciones: string;
+  /**
+   * Solo en solicitudes no desembolsadas (en evaluación, aprobadas o rechazadas). En ellas `desembolso` es la fecha PREVISTA
+   * y el cronograma es una proyección. Ausente = préstamo desembolsado.
+   */
+  etapa?: EtapaSolicitud;
 }
 
 export interface ActividadRef {
@@ -82,7 +97,7 @@ export interface Actividad {
 }
 
 export interface Db {
-  v: 5;
+  v: 6;
   clientes: Cliente[];
   prestamos: Prestamo[];
   actividad: Actividad[];

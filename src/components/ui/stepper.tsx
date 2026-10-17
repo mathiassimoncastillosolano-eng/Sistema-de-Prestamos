@@ -12,8 +12,8 @@ interface Props {
 /** Progreso de un flujo por pasos. Los pasos completados son navegables hacia atrás. */
 export function Stepper({ pasos, actual, onIr }: Props) {
   return (
-    <nav aria-label="Progreso de la solicitud">
-      <ol className="flex items-center gap-2 sm:gap-3">
+    <nav aria-label="Progreso de la solicitud" className="rounded-card border border-line bg-surface px-4 py-3 shadow-card sm:px-5 sm:py-3.5">
+      <ol className="flex items-center gap-2 sm:gap-4">
         {pasos.map((p, i) => {
           const n = i + 1;
           const hecho = n < actual;
@@ -24,15 +24,15 @@ export function Stepper({ pasos, actual, onIr }: Props) {
                 className={cn(
                   'grid size-8 shrink-0 place-items-center rounded-full border text-sm font-semibold transition-colors duration-200',
                   hecho && 'border-teal bg-teal text-on-teal',
-                  activo && 'border-brand bg-brand text-brand-ink',
+                  activo && 'border-brand bg-brand text-brand-ink ring-4 ring-teal/20',
                   !hecho && !activo && 'border-line-strong bg-surface text-ink-muted'
                 )}
               >
                 {hecho ? <Check className="size-4" aria-hidden /> : n}
               </span>
-              <span className="hidden min-w-0 text-left sm:block">
-                <span className={cn('block truncate text-sm font-medium', activo ? 'text-ink' : 'text-ink-muted')}>{p.titulo}</span>
-                {p.descripcion && <span className="block truncate text-xs text-ink-muted">{p.descripcion}</span>}
+              <span className={cn('min-w-0 text-left', !activo && 'hidden sm:block')}>
+                <span className={cn('block truncate text-sm', activo ? 'font-semibold text-ink' : hecho ? 'font-medium text-ink' : 'font-medium text-ink-muted')}>{p.titulo}</span>
+                {p.descripcion && <span className="hidden truncate text-xs text-ink-muted sm:block">{p.descripcion}</span>}
               </span>
             </>
           );

@@ -8,8 +8,8 @@
 import { AGENCIAS, CFG } from '@/lib/config';
 import { addDays, addMonths } from '@/lib/dates';
 import { money } from '@/lib/format';
-import { generarCronograma, importarHistorico } from '@/lib/finance';
-import type { Actividad, Cliente, Db, Prestamo, RegistroHistorico } from '@/types';
+import { cuotaAbierta, generarCronograma, importarHistorico } from '@/lib/finance';
+import type { Actividad, Cliente, Db, EtapaSolicitud, Prestamo, RegistroHistorico } from '@/types';
 
 const NOMBRES = [
   'Rosa Elena Quispe Huamán', 'Luis Alberto Cárdenas Rojas', 'Marta Flores Ccori', 'Jorge Salas Vidal',
@@ -107,13 +107,56 @@ export function construirSemilla(): Db {
     prestamos.push(importarCuotas(base, 6));
   }
 
+  const nuevoId = () => 'PR-' + (1001 + prestamos.length);
+
+  /**
+   * Préstamo desembolsado en `desembolso`: se cubren en el histórico las cuotas ya vencidas salvo las últimas `atraso`.
+   * Con `parcial` (0–1) se importa además un pago parcial de la primera cuota abierta, que nunca queda como «pagada».
+   */
+  const desembolsado = (ci: number, capital: number, plazo: number, desembolso: string, ai: number, atraso: number, parcial = 0): Prestamo => {
+    const c = clientes[ci] as Cliente;
+    const base: Prestamo = {
+      id: nuevoId(), clienteId: c.id, agencia: c.agencia, capital, plazo, tea: CFG.tea, desembolso, asesor: ASESORES[ai] as string,
+      cronograma: generarCronograma(capital, plazo, desembolso), historico: [], observaciones: ''
+    };
+    const vencidas = base.cronograma.filter((cu) => cu.fecha <= CFG.hoy).length;
+    let p = importarCuotas(base, Math.max(0, vencidas - atraso));
+    const abierta = p.cronograma.find(cuotaAbierta);
+    if (parcial > 0 && abierta) {
+      const f = addDays(abierta.fecha, 2);
+      p = importarHistorico(p, { op: 'HIS-' + ++op, fecha: f > CFG.hoy ? CFG.hoy : f, monto: Math.round(abierta.cuota * parcial * 100) / 100, usuario: p.asesor });
+    }
+    return p;
+  };
+
+  /** Solicitud todavía NO desembolsada: `desembolso` es la fecha prevista y el cronograma, una proyección sin histórico. */
+  const solicitud = (ci: number, capital: number, plazo: number, diasHastaPrevista: number, ai: number, etapa: EtapaSolicitud, observaciones = ''): Prestamo => {
+    const c = clientes[ci] as Cliente;
+    const desembolso = addDays(CFG.hoy, diasHastaPrevista);
+    return {
+      id: nuevoId(), clienteId: c.id, agencia: c.agencia, capital, plazo, tea: CFG.tea, desembolso, asesor: ASESORES[ai] as string,
+      cronograma: generarCronograma(capital, plazo, desembolso), historico: [], observaciones, etapa
+    };
+  };
+
+  /* Casos para demostrar los estados de cuota (próxima a vencer; vencida con pago parcial) y de préstamo. */
+  prestamos.push(desembolsado(19, 2800, 12, addDays(addMonths(CFG.hoy, -3), 6), 0, 0));
+  prestamos.push(desembolsado(3, 2400, 12, addMonths(CFG.hoy, -4), 1, 2, 0.4));
+  /* Solicitudes sin desembolsar: en evaluación, aprobadas (aún sin desembolso) y rechazadas. */
+  prestamos.push(solicitud(20, 3500, 18, 4, 0, 'evaluacion'));
+  prestamos.push(solicitud(21, 1800, 6, 5, 1, 'evaluacion'));
+  prestamos.push(solicitud(22, 2500, 12, 3, 0, 'aprobado', 'Aprobada, pendiente de desembolso (demostración).'));
+  prestamos.push(solicitud(23, 6000, 24, 6, 1, 'aprobado', 'Aprobada, pendiente de desembolso (demostración).'));
+  prestamos.push(solicitud(9, 6000, 24, -2, 0, 'rechazado', 'Rechazada: supera el límite de endeudamiento (demostración).'));
+  prestamos.push(solicitud(16, 1000, 6, -6, 1, 'rechazado', 'Rechazada en la evaluación crediticia (demostración).'));
+
   /* Coherencia: ningún cliente figura dado de alta después de su primer desembolso. */
   clientes.forEach((c) => {
     const primero = prestamos.filter((p) => p.clienteId === c.id).map((p) => p.desembolso).sort()[0];
     if (primero && c.alta > primero) c.alta = addDays(primero, -14);
   });
 
-  return { v: 5, clientes, prestamos, actividad: actividadReciente(clientes, prestamos) };
+  return { v: 6, clientes, prestamos, actividad: actividadReciente(clientes, prestamos) };
 }
 
 /** El feed de actividad se deriva de los propios registros (altas y registros de préstamos), nunca se inventa aparte. */
@@ -124,7 +167,10 @@ function actividadReciente(clientes: Cliente[], prestamos: Prestamo[]): Activida
   const dinero = money;
   clientes.forEach((c) => eventos.push({ dia: c.alta, t: '', usuario: c.asesor, tipo: 'Cliente registrado', desc: 'Alta de ' + c.nombre, ref: { entidad: 'cliente', id: c.id } }));
   prestamos.forEach((p) => {
-    eventos.push({ dia: p.desembolso, t: '', usuario: p.asesor, tipo: 'Préstamo registrado', desc: `${p.id} por ${dinero(p.capital)} a ${cliente(p.clienteId)?.nombre ?? p.clienteId}`, ref: { entidad: 'prestamo', id: p.id } });
+    const nombre = cliente(p.clienteId)?.nombre ?? p.clienteId;
+    // En una solicitud, `desembolso` es la fecha prevista: la solicitud se registró unos días antes.
+    if (p.etapa) eventos.push({ dia: addDays(p.desembolso, -7), t: '', usuario: p.asesor, tipo: 'Solicitud registrada', desc: `${p.id} por ${dinero(p.capital)} de ${nombre}`, ref: { entidad: 'prestamo', id: p.id } });
+    else eventos.push({ dia: p.desembolso, t: '', usuario: p.asesor, tipo: 'Préstamo registrado', desc: `${p.id} por ${dinero(p.capital)} a ${nombre}`, ref: { entidad: 'prestamo', id: p.id } });
   });
   eventos.sort((a, b) => (a.dia < b.dia ? 1 : a.dia > b.dia ? -1 : 0));
   return eventos.slice(0, 40).map(({ dia, ...e }, i) => ({ ...e, t: `${dia} ${String(9 + (i % 8)).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}` }));

@@ -1,4 +1,4 @@
-/* Pruebas de la interfaz del rediseño: Nueva solicitud, cronograma en Préstamos y ausencia de estados de pago por cuota.
+/* Pruebas de la interfaz del rediseño: Nueva solicitud, cronograma en Préstamos y estados de cuota (demostración).
    Usan el servidor de autenticación FALSO y los datos ficticios del navegador. */
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -51,11 +51,11 @@ describe('Nueva solicitud', () => {
 
     await u.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(await screen.findByRole('heading', { name: 'Revisión y confirmación' })).toBeInTheDocument();
-    for (const t of ['Capital solicitado', 'Tasa aplicada', 'Plazo', 'Frecuencia de pago', 'Primer vencimiento', 'Cuota estimada', 'Total de intereses estimados', 'Total contractual estimado']) {
+    for (const t of ['Capital solicitado', 'Tasa aplicada', 'Plazo', 'Frecuencia de pago', 'Desembolso previsto', 'Primer vencimiento', 'Cuota estimada', 'Total de intereses estimados', 'Total contractual estimado']) {
       expect(screen.getByText(t)).toBeInTheDocument();
     }
     expect(screen.getByRole('region', { name: 'Cronograma proyectado' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Confirmar y desembolsar/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Enviar a evaluación/ })).toBeEnabled();
 
     // volver al paso 1 y cambiar de cliente no deja resultados de la simulación a la vista
     await u.click(screen.getByRole('button', { name: 'Atrás' }));
@@ -67,23 +67,22 @@ describe('Nueva solicitud', () => {
 });
 
 describe('Cronograma en Préstamos', () => {
-  it('el detalle muestra el cronograma contractual sin columna ni etiquetas de estado de pago', async () => {
+  it('el detalle muestra el cronograma con la columna Estado y un estado por cuota', async () => {
     await conEscritorio(async () => {
-      montarComoAsesora('#/prestamos/PR-1001');
+      montarComoAsesora('#/prestamos/PR-1030'); // vencida con pago parcial, próxima a vencer y pagadas
       const tabla = await screen.findByRole('table', { name: 'Cronograma de cuotas' });
       const cabeceras = within(tabla).getAllByRole('columnheader').map((h) => h.textContent?.trim());
-      expect(cabeceras).toEqual(expect.arrayContaining(['N.º', 'Vence', 'Capital', 'Interés', 'Cuota', 'Saldo de capital']));
-      expect(cabeceras).not.toContain('Estado');
-      expect(within(tabla).getAllByRole('row').length).toBeGreaterThan(3); // cabecera + cuotas + totales
+      expect(cabeceras).toEqual(expect.arrayContaining(['N.º', 'Vence', 'Capital', 'Interés', 'Cuota', 'Saldo cap.', 'Estado']));
       expect(within(tabla).getByText('Totales')).toBeInTheDocument();
-      for (const t of [/Cubierta \(histórico\)/, /Vencida/, /Próxima a vencer/, /Pendiente$/]) {
-        expect(screen.queryByText(t)).not.toBeInTheDocument();
+      for (const t of ['Pagada', 'Vencida', 'Próxima a vencer', 'Pendiente']) {
+        expect(within(tabla).getAllByText(t).length).toBeGreaterThan(0);
       }
-      expect(document.querySelector('[class*="bg-danger-soft"]')).toBeNull();
+      // la cuota con pago parcial figura vencida (no pagada) y deja a la vista lo cubierto
+      expect(within(tabla).getByText(/Cubierto S\/ \d/)).toBeInTheDocument();
     });
   });
 
-  it('el diálogo de una cuota conserva los importes contractuales y no muestra estado', async () => {
+  it('el diálogo de una cuota conserva los importes contractuales y muestra su estado', async () => {
     await conEscritorio(async () => {
       montarComoAsesora('#/prestamos/PR-1001');
       const u = userEvent.setup();
@@ -91,8 +90,41 @@ describe('Cronograma en Préstamos', () => {
       const dialogo = await screen.findByRole('dialog');
       expect(within(dialogo).getByText('Importe de la cuota')).toBeInTheDocument();
       expect(within(dialogo).getByText('Saldo de capital programado')).toBeInTheDocument();
-      expect(within(dialogo).queryByText('Estado')).not.toBeInTheDocument();
-      expect(within(dialogo).queryByText(/Vencida|Cubierta/)).not.toBeInTheDocument();
+      expect(within(dialogo).getByText('Estado')).toBeInTheDocument();
+      expect(within(dialogo).getByText('Pagada')).toBeInTheDocument();
+    });
+  });
+
+  it('una solicitud en evaluación muestra un cronograma proyectado sin estados de cuota y sin saldo', async () => {
+    await conEscritorio(async () => {
+      montarComoAsesora('#/prestamos/PR-1031');
+      expect(await screen.findByText('Cronograma proyectado')).toBeInTheDocument();
+      const tabla = await screen.findByRole('table', { name: 'Cronograma de cuotas' });
+      expect(within(tabla).getAllByRole('columnheader').map((h) => h.textContent?.trim())).not.toContain('Estado');
+      expect(screen.getAllByText('En evaluación').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Aún sin desembolsar').length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe('Listado de préstamos', () => {
+  it('muestra la columna Estado y el filtro por estado funciona sobre los datos mock', async () => {
+    await conEscritorio(async () => {
+      montarComoAsesora('#/prestamos');
+      const u = userEvent.setup();
+      const tabla = await screen.findByRole('table', { name: 'Listado de préstamos' });
+      expect(within(tabla).getAllByRole('columnheader').map((h) => h.textContent?.trim())).toEqual(expect.arrayContaining(['Estado']));
+
+      await u.click(screen.getByRole('radio', { name: /Rechazado/ }));
+      await waitFor(() => expect(within(screen.getByRole('table', { name: 'Listado de préstamos' })).getAllByRole('row').length).toBe(3)); // cabecera + 2 rechazadas
+      const filas = within(screen.getByRole('table', { name: 'Listado de préstamos' }));
+      expect(filas.getByText('PR-1035')).toBeInTheDocument();
+      expect(filas.getByText('PR-1036')).toBeInTheDocument();
+      expect(filas.queryByText('PR-1001')).not.toBeInTheDocument();
+
+      await u.click(screen.getByRole('radio', { name: /En mora/ }));
+      await waitFor(() => expect(within(screen.getByRole('table', { name: 'Listado de préstamos' })).queryByText('PR-1035')).not.toBeInTheDocument());
+      expect(within(screen.getByRole('table', { name: 'Listado de préstamos' })).getAllByText('En mora').length).toBeGreaterThan(0);
     });
   });
 });
