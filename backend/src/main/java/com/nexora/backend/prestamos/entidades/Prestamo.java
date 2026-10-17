@@ -8,6 +8,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 
 /** public.prestamos. Se crea una sola vez (BR-PRE-07: sin edición libre), por eso no hay setters. */
 @Entity
@@ -15,6 +17,7 @@ import java.util.UUID;
 public class Prestamo {
 
     @Id
+    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     /** Identity generado por la BD (arranca en 1001). Solo lectura desde Java. */
