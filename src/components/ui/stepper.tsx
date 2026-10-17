@@ -23,7 +23,7 @@ export function Stepper({ pasos, actual, onIr }: Props) {
               <span
                 className={cn(
                   'grid size-8 shrink-0 place-items-center rounded-full border text-sm font-semibold transition-colors duration-200',
-                  hecho && 'border-teal bg-teal text-white dark:text-[#06222a]',
+                  hecho && 'border-teal bg-teal text-on-teal',
                   activo && 'border-brand bg-brand text-brand-ink',
                   !hecho && !activo && 'border-line-strong bg-surface text-ink-muted'
                 )}

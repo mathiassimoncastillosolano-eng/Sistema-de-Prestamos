@@ -19,7 +19,6 @@ const ClientDetailPage = lazy(() => import('@/features/clients/client-detail-pag
 const RequestPage = lazy(() => import('@/features/loans/request-page'));
 const LoansPage = lazy(() => import('@/features/loans/loans-page'));
 const LoanDetailPage = lazy(() => import('@/features/loans/loan-detail-page'));
-const InstallmentsPage = lazy(() => import('@/features/installments/installments-page'));
 
 /** Guard de ruta: decide por URL (no por el menú). Sin permiso redirige al dashboard antes de montar el módulo. */
 function Protegida({ modulo }: { modulo: Modulo }) {
@@ -54,9 +53,8 @@ function Rutas() {
         <Route element={<Protegida modulo="prestamos" />}>
           <Route path="prestamos" element={<LoansPage />} />
           <Route path="prestamos/:id" element={<LoanDetailPage />} />
-        </Route>
-        <Route element={<Protegida modulo="cuotas" />}>
-          <Route path="cuotas" element={<InstallmentsPage />} />
+          {/* Enlace antiguo (favoritos) del módulo eliminado: el cronograma vive en el detalle de cada préstamo. */}
+          <Route path="cuotas" element={<Navigate to="/prestamos" replace />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

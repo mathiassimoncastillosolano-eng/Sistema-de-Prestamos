@@ -1,6 +1,6 @@
-# NEXORA FINANCE
+# PerúCred · Plataforma de gestión crediticia
 
-Registro y consulta de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20), solicitudes, préstamos con cronograma, consulta de cuotas y PDF del cronograma.
+Registro y consulta de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20), solicitudes, préstamos con cronograma, consulta del cronograma dentro de cada préstamo y PDF.
 
 > **Alcance: este sistema NO realiza ni registra pagos.** No hay pagos, abonos, amortizaciones, cancelaciones anticipadas ni liquidaciones: ni en la interfaz ni en los servicios (hay pruebas que lo comprueban).
 
@@ -54,7 +54,7 @@ src/
   app/              App, rutas (carga diferida por pantalla), proveedores
   components/ui/    design system: button, field, modal, sheet, tabs, toast, stepper…
   components/layout/ shell, sidebar, header, búsqueda global, notificaciones
-  components/data-display/  DataTable, StatusBadge, AnimatedNumber, tooltips de gráficos…
+  components/data-display/  DataTable, StatusBadge (préstamo/cliente), AnimatedNumber, tooltips de gráficos…
   features/         dashboard · clients · loans · installments · auth
   lib/              config · finance · analytics · selectors · validation · format · dates · motion · pdf
   services/         store (estado + persistencia) · actions (escrituras) · identity (consulta simulada) · storage
@@ -73,9 +73,9 @@ Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda l
 
 ### Estados y capital pendiente (sin pagos)
 
-- Estado de cuota **calculado** desde fechas: *Pendiente*, *Próxima a vencer* (10 días), *Vencida*. Nunca se asigna a mano.
-- Los datos mock incluyen un **registro histórico importado, de solo lectura**, que respalda las cuotas *Cubierta (histórico)* y permite calcular capital pendiente y préstamos *Finalizados*. La interfaz no puede crear ni modificar ese registro.
-- Un préstamo nuevo no tiene cobertura: su capital pendiente es el capital original y **no disminuye con el paso del tiempo**; sus cuotas vencidas figuran como *Vencida*.
+- Las cuotas del cronograma **no muestran estado de pago** (pagada, pendiente, vencida…): el sistema aún no registra ni concilia pagos, así que esa etiqueta no sería fiable. Se muestran solo datos contractuales: N.º, vencimiento, capital, interés, cuota y saldo de capital.
+- Los datos mock incluyen un **registro histórico importado, de solo lectura**, que permite calcular el capital pendiente y los préstamos *Finalizados*. La interfaz no puede crear ni modificar ese registro.
+- Un préstamo nuevo no tiene cobertura: su capital pendiente es el capital original y **no disminuye con el paso del tiempo**.
 
 ## PDF
 
@@ -89,7 +89,15 @@ El documento de requisitos plantea S/ 1,000 a 12 meses con total **S/ 1,300**. C
 
 ## Diseño
 
-Tokens en `src/styles/index.css` (paleta Azul Pacífico / Verde petróleo / Cobre / Marfil / Blanco frío / Grafito, con tonos de texto ajustados para contraste). Colores de estado con significado único: verde = al día, ámbar = atención, rojo = vencido, azul = informativo, gris = inactivo. El tema se aplica antes de pintar (script en `index.html`) y se persiste. Movimiento: 150–350 ms, sin rebotes, `MotionConfig reducedMotion="user"` + regla CSS global.
+Tokens en `src/styles/index.css` (identidad PerúCred: azul noche `#0B172A`, azul corporativo `#12365A`, turquesa `#00BFAE` y turquesa claro `#51D6C5`, con tonos de texto ajustados para contraste; ver «Identidad de marca»). Colores de estado con significado único: verde = al día, ámbar = atención, rojo = vencido, azul = informativo, gris = inactivo. El tema se aplica antes de pintar (script en `index.html`) y se persiste. Movimiento: 150–350 ms, sin rebotes, `MotionConfig reducedMotion="user"` + regla CSS global.
+
+## Identidad de marca (PerúCred)
+
+- **Nombre:** PerúCred (con tilde y esa capitalización). **Descriptor institucional:** «Plataforma de gestión crediticia». Ambos viven en `BRAND` (`src/lib/config.ts`); no escribas el nombre a mano en componentes.
+- **Por qué ese descriptor:** describe lo que el sistema hace (registrar, validar y consultar la cartera) sin prometer cobranza ni pagos (el sistema no los registra) y sin sugerir que la empresa sea una entidad supervisada.
+- **Logo:** se dibuja solo en `src/components/layout/brand-mark.tsx` (`BrandMark` y `BrandName`) y en `public/favicon.svg`. **El símbolo actual es provisional**: sustitúyelo por el logo oficial editando esos dos archivos.
+- **Colores:** el turquesa puro `#00BFAE` no alcanza contraste AA como texto sobre blanco; en modo claro el texto turquesa usa `--teal-ink` y los rellenos turquesa llevan texto azul noche (`--on-teal`).
+- **Identificadores técnicos que conservan el nombre anterior a propósito** (cambiarlos rompería sesiones, datos guardados o el despliegue): paquete Java `com.nexora.backend`, cookie `NEXORA_SESION`, propiedades `nexora.seguridad.*`, atributo de sesión `nexora.perfil`, claves de localStorage `nexora-db-v5` / `nx-tema` / `nx-side`, y el nombre del paquete npm `nexora-finance`.
 
 ## Qué se verificó (y qué no)
 
@@ -103,4 +111,4 @@ Se conservan los 15 clientes y 16 préstamos originales (mismos ID e importes). 
 
 ## Pendiente / siguientes pasos sugeridos
 
-Resolver la discrepancia de la TEA; decidir cómo tratar las cuotas vencidas de préstamos sin registro histórico (hoy figuran *Vencida*); backend real (sustituir `services/store.ts` y `actions.ts` por llamadas a API, y autenticación/autorización de servidor); el chunk de gráficos pesa ~400 kB (115 kB gzip) y se carga solo en el dashboard; añadir pruebas E2E al repositorio (Playwright).
+Resolver la discrepancia de la TEA; módulo real de registro y conciliación de pagos (cuando exista, podrá volver a mostrarse un estado por cuota; el resumen por préstamo, el dashboard y las notificaciones aún derivan «vencidas» solo de las fechas); backend real (sustituir `services/store.ts` y `actions.ts` por llamadas a API, y autenticación/autorización de servidor); el chunk de gráficos pesa ~400 kB (115 kB gzip) y se carga solo en el dashboard; añadir pruebas E2E al repositorio (Playwright).

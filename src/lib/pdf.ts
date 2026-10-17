@@ -8,20 +8,20 @@
 import type { Cliente, Prestamo } from '@/types';
 import { BRAND, CFG } from './config';
 import { fecha } from './dates';
-import { estadoCuota, resumen } from './finance';
+import { resumen } from './finance';
 import { money } from './format';
 
 const MARGEN = 15;
 const TINTA: [number, number, number] = [26, 32, 44];
 const APAGADO: [number, number, number] = [92, 102, 118];
 const LINEA: [number, number, number] = [214, 219, 227];
-const MARCA: [number, number, number] = [14, 79, 99];
+const MARCA: [number, number, number] = [18, 54, 90]; // azul corporativo #12365A
 const FONDO_CABECERA: [number, number, number] = [236, 241, 245];
 
 /** Los PDF usan fuentes estándar (WinAnsi): se sustituyen los pocos caracteres fuera de Latin-1. */
 const seguro = (t: string) => t.replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"').replace(/\u00A0/g, ' ');
 
-export const nombreArchivoPdf = (p: Prestamo) => `NEXORA-${p.id}-cronograma.pdf`;
+export const nombreArchivoPdf = (p: Prestamo) => `PeruCred-${p.id}-cronograma.pdf`;
 
 /** Construye el documento (jsPDF). Se separa de la generación del Blob para poder inspeccionarlo en pruebas. */
 export async function crearDocumentoPdf(p: Prestamo, c: Cliente | undefined) {
@@ -36,7 +36,9 @@ export async function crearDocumentoPdf(p: Prestamo, c: Cliente | undefined) {
 
   /* ---- Encabezado ---- */
   doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...MARCA);
-  doc.text(`${BRAND.nombre} ${BRAND.sufijo}`, MARGEN, 16);
+  doc.text(BRAND.nombre, MARGEN, 16);
+  doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO);
+  doc.text(BRAND.descriptor, MARGEN, 19.8);
   doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...APAGADO);
   doc.text(`Emitido el ${fecha(CFG.hoy)}`, ancho - MARGEN, 16, { align: 'right' });
   doc.setFont('helvetica', 'bold').setFontSize(17).setTextColor(...TINTA);
@@ -113,16 +115,16 @@ export async function crearDocumentoPdf(p: Prestamo, c: Cliente | undefined) {
     showHead: 'everyPage',
     showFoot: 'lastPage',
     rowPageBreak: 'avoid',
-    head: [['N.º', 'Vence', 'Capital', 'Interés', 'Cuota', 'Saldo de capital', 'Estado']],
-    body: p.cronograma.map((q) => [String(q.n), fecha(q.fecha), money(q.capital), money(q.interes), money(q.cuota), money(q.saldo), estadoCuota(q)].map(seguro)),
-    foot: [[{ content: 'Totales', colSpan: 2, styles: { halign: 'left' as const } }, seguro(money(p.capital)), seguro(money(r.interes)), seguro(money(r.total)), '', '']],
+    head: [['N.º', 'Vence', 'Capital', 'Interés', 'Cuota', 'Saldo de capital']],
+    body: p.cronograma.map((q) => [String(q.n), fecha(q.fecha), money(q.capital), money(q.interes), money(q.cuota), money(q.saldo)].map(seguro)),
+    foot: [[{ content: 'Totales', colSpan: 2, styles: { halign: 'left' as const } }, seguro(money(p.capital)), seguro(money(r.interes)), seguro(money(r.total)), '']],
     styles: { font: 'helvetica', fontSize: 8.5, textColor: TINTA, cellPadding: { top: 1.9, bottom: 1.9, left: 2, right: 2 }, overflow: 'linebreak', valign: 'middle', lineColor: LINEA, lineWidth: { bottom: 0.2 } },
     headStyles: { fillColor: FONDO_CABECERA, textColor: APAGADO, fontStyle: 'bold', fontSize: 8, lineWidth: { bottom: 0.4 } },
     footStyles: { fillColor: FONDO_CABECERA, textColor: TINTA, fontStyle: 'bold', lineWidth: { top: 0.4 } },
     columnStyles: {
       0: { cellWidth: 11, halign: 'left' }, 1: { cellWidth: 25 },
       2: { cellWidth: 26, halign: 'right' }, 3: { cellWidth: 24, halign: 'right' }, 4: { cellWidth: 26, halign: 'right', fontStyle: 'bold' },
-      5: { cellWidth: 32, halign: 'right' }, 6: { cellWidth: 'auto' }
+      5: { cellWidth: 'auto', halign: 'right' }
     },
     didParseCell: (d) => {
       if (d.section === 'head' && [2, 3, 4, 5].includes(d.column.index)) d.cell.styles.halign = 'right';
@@ -136,7 +138,7 @@ export async function crearDocumentoPdf(p: Prestamo, c: Cliente | undefined) {
     doc.setPage(i);
     doc.setDrawColor(...LINEA).setLineWidth(0.2).line(MARGEN, alto - 14, ancho - MARGEN, alto - 14);
     doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO);
-    doc.text(`${p.id} · Documento informativo generado por ${BRAND.nombre} ${BRAND.sufijo} · Datos de demostración`, MARGEN, alto - 9);
+    doc.text(`${p.id} · Documento informativo generado por ${BRAND.nombre} · Datos de demostración`, MARGEN, alto - 9);
     doc.text(`Página ${i} de ${total}`, ancho - MARGEN, alto - 9, { align: 'right' });
   }
 

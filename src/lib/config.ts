@@ -4,8 +4,10 @@
    ========================================================= */
 
 export const BRAND = {
-  nombre: 'NEXORA',
-  sufijo: 'FINANCE',
+  nombre: 'PerúCred',
+  /** Descriptor institucional. Describe lo que el sistema hace hoy (registro, validación y consulta de cartera);
+   *  no promete cobranza ni pagos, y no sugiere ser una entidad supervisada. */
+  descriptor: 'Plataforma de gestión crediticia',
   lema: 'Gestión de préstamos con control total'
 } as const;
 
@@ -40,6 +42,7 @@ export const EJEMPLO_DOCUMENTO_REQUISITOS = { monto: 1000, plazo: 12, totalEsper
 
 export const AGENCIAS = ['Lima Centro', 'Arequipa', 'Cusco'] as const;
 
+/** Claves técnicas de localStorage: NO se renombran con la marca (se perderían los datos y el tema guardados de cada usuario). */
 export const STORAGE_KEYS = {
   db: 'nexora-db-v5',
   tema: 'nx-tema',

@@ -4,41 +4,42 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* =========================================================
-   TOKENS DE DISEÑO — única fuente de verdad visual.
-   Paleta base (brief): Azul Pacífico #10263D · Verde petróleo #167D83 ·
-   Cobre #C18A58 · Marfil #F5F1E8 · Blanco frío #F8FAFC · Grafito #17212F.
-   Los tonos "-ink" (texto) están ajustados para contraste AA sobre su fondo:
-   el cobre y el verde petróleo puros no alcanzan 4.5:1 como texto pequeño.
+   TOKENS DE DISEÑO — única fuente de verdad visual (identidad PerúCred).
+   Paleta de marca: Azul noche #0B172A · Azul corporativo #12365A · Turquesa #00BFAE · Turquesa claro #51D6C5.
+   Los tonos "-ink" (texto) y el turquesa de interfaz (--teal) están ajustados para contraste AA sobre su fondo:
+   el turquesa puro #00BFAE no alcanza 4.5:1 como texto sobre blanco, por eso se usa solo en fondos oscuros,
+   logo y acentos decorativos; en claro, el texto turquesa usa --teal-ink.
    ========================================================= */
 :root {
   color-scheme: light;
 
   /* Superficies */
-  --canvas: #f8fafc;
+  --canvas: #f5f7fa;
   --surface: #ffffff;
-  --surface-2: #f3f5f8;
-  --sand: #f5f1e8;
-  --sand-ink: #6b5a3e;
+  --surface-2: #eef2f7;
+  --tint: #eaf0f7;
+  --tint-ink: #334a63;
 
   /* Texto y bordes */
-  --ink: #17212f;
-  --ink-muted: #556275;
-  --ink-subtle: #7a8697;
-  --line: #e3e8ef;
-  --line-strong: #cbd3de;
+  --ink: #172b4d;
+  --ink-muted: #56677f;
+  --ink-subtle: #7a889b;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
 
   /* Acción principal */
-  --brand: #10263d;
-  --brand-hover: #1b3a59;
-  --brand-ink: #f8fafc;
+  --brand: #12365a;
+  --brand-hover: #0d2a47;
+  --brand-ink: #ffffff;
 
-  /* Acentos */
-  --teal: #167d83;
-  --teal-ink: #0f6a70;
-  --teal-soft: #e3f2f2;
-  --copper: #c18a58;
-  --copper-ink: #8a5a2e;
-  --copper-soft: #f6ece0;
+  /* Acentos de marca */
+  --teal: #00a396;
+  --teal-ink: #007a70;
+  --teal-soft: #e0f7f5;
+  --navy-soft: #e6edf6;
+  --navy-ink: #12365a;
+  /* Texto sobre superficies turquesa (relleno): azul noche, no blanco */
+  --on-teal: #0b172a;
 
   /* Semánticos (significado idéntico en todas las pantallas) */
   --success: #2f8a55;
@@ -58,51 +59,54 @@
   --neutral-soft: #edf0f4;
 
   /* Navegación lateral */
-  --side: #10263d;
-  --side-ink: #dbe4ee;
-  --side-muted: #8fa3b8;
-  --side-hover: rgb(245 241 232 / 0.07);
-  --side-active: rgb(245 241 232 / 0.11);
-  --side-line: rgb(245 241 232 / 0.1);
+  --side: #0b172a;
+  --side-ink: #d6e0ec;
+  --side-muted: #8ea3bb;
+  --side-accent: #51d6c5;
+  --side-hover: rgb(255 255 255 / 0.06);
+  --side-active: rgb(0 191 174 / 0.14);
+  --side-line: rgb(255 255 255 / 0.09);
 
   /* Gráficos */
-  --chart-1: #167d83;
-  --chart-2: #10263d;
-  --chart-3: #c18a58;
+  --chart-1: #00a396;
+  --chart-2: #12365a;
+  --chart-3: #4f7cac;
   --chart-4: #9aabbd;
   --chart-5: #d92d20;
-  --chart-grid: #e8edf3;
+  --chart-grid: #e6ebf2;
 
-  --ring: #167d83;
-  --sh-card: 0 1px 2px rgb(16 38 61 / 0.05);
-  --sh-pop: 0 14px 36px -10px rgb(16 38 61 / 0.28), 0 2px 8px rgb(16 38 61 / 0.08);
+  --ring: #0a8f84;
+  --overlay: #0b172a;
+  --sh-card: 0 1px 2px rgb(11 23 42 / 0.05);
+  --sh-pop: 0 14px 36px -10px rgb(11 23 42 / 0.28), 0 2px 8px rgb(11 23 42 / 0.08);
 }
 
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --canvas: #0a141f;
-  --surface: #0f1d2c;
-  --surface-2: #142638;
-  --sand: #1c2a38;
-  --sand-ink: #d9c9a8;
+  --canvas: #07111f;
+  --surface: #0c1a2e;
+  --surface-2: #112239;
+  --tint: #14263d;
+  --tint-ink: #b9c9dc;
 
-  --ink: #e8eef4;
-  --ink-muted: #9dafc1;
-  --ink-subtle: #6f8297;
-  --line: #223548;
-  --line-strong: #345069;
+  --ink: #e8eef6;
+  --ink-muted: #9db0c6;
+  --ink-subtle: #70859d;
+  --line: #1e3550;
+  --line-strong: #2f4c6c;
 
-  --brand: #167d83;
-  --brand-hover: #1b9097;
-  --brand-ink: #ffffff;
+  /* En oscuro la acción principal es turquesa con texto azul noche (contraste > 8:1) */
+  --brand: #00bfae;
+  --brand-hover: #2dd0c0;
+  --brand-ink: #0b172a;
 
-  --teal: #35b6bc;
-  --teal-ink: #4cc3c9;
-  --teal-soft: rgb(53 182 188 / 0.14);
-  --copper: #d9a674;
-  --copper-ink: #e3b98f;
-  --copper-soft: rgb(217 166 116 / 0.14);
+  --teal: #2fcfc0;
+  --teal-ink: #51d6c5;
+  --teal-soft: rgb(0 191 174 / 0.15);
+  --navy-soft: rgb(111 155 234 / 0.14);
+  --navy-ink: #a9c4ea;
+  --on-teal: #0b172a;
 
   --success: #4fc07f;
   --success-ink: #66d393;
@@ -120,21 +124,23 @@
   --neutral-ink: #b0bece;
   --neutral-soft: rgb(131 151 173 / 0.14);
 
-  --side: #0b1b2c;
-  --side-ink: #dbe4ee;
+  --side: #081322;
+  --side-ink: #d6e0ec;
   --side-muted: #7f95ab;
-  --side-hover: rgb(245 241 232 / 0.06);
-  --side-active: rgb(245 241 232 / 0.1);
-  --side-line: rgb(245 241 232 / 0.08);
+  --side-accent: #51d6c5;
+  --side-hover: rgb(255 255 255 / 0.05);
+  --side-active: rgb(0 191 174 / 0.16);
+  --side-line: rgb(255 255 255 / 0.08);
 
-  --chart-1: #35b6bc;
+  --chart-1: #2fcfc0;
   --chart-2: #8fb4d9;
-  --chart-3: #d9a674;
+  --chart-3: #6f9bea;
   --chart-4: #4e657c;
   --chart-5: #f0746a;
-  --chart-grid: #1d3043;
+  --chart-grid: #1a2f47;
 
-  --ring: #4cc3c9;
+  --ring: #51d6c5;
+  --overlay: #040a14;
   --sh-card: 0 1px 2px rgb(0 0 0 / 0.35);
   --sh-pop: 0 18px 44px -10px rgb(0 0 0 / 0.6), 0 2px 8px rgb(0 0 0 / 0.35);
 }
@@ -145,8 +151,8 @@
   --color-canvas: var(--canvas);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
-  --color-sand: var(--sand);
-  --color-sand-ink: var(--sand-ink);
+  --color-tint: var(--tint);
+  --color-tint-ink: var(--tint-ink);
   --color-ink: var(--ink);
   --color-ink-muted: var(--ink-muted);
   --color-ink-subtle: var(--ink-subtle);
@@ -158,9 +164,10 @@
   --color-teal: var(--teal);
   --color-teal-ink: var(--teal-ink);
   --color-teal-soft: var(--teal-soft);
-  --color-copper: var(--copper);
-  --color-copper-ink: var(--copper-ink);
-  --color-copper-soft: var(--copper-soft);
+  --color-navy-soft: var(--navy-soft);
+  --color-navy-ink: var(--navy-ink);
+  --color-on-teal: var(--on-teal);
+  --color-overlay: var(--overlay);
   --color-success: var(--success);
   --color-success-ink: var(--success-ink);
   --color-success-soft: var(--success-soft);
@@ -179,6 +186,7 @@
   --color-side: var(--side);
   --color-side-ink: var(--side-ink);
   --color-side-muted: var(--side-muted);
+  --color-side-accent: var(--side-accent);
   --color-side-hover: var(--side-hover);
   --color-side-active: var(--side-active);
   --color-side-line: var(--side-line);
@@ -242,10 +250,10 @@
   input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 }
 
-/* ---------- Motivo escalonado (sutil, inspirado en la arquitectura de la costa histórica) ---------- */
-.pattern-steps {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cpath d='M0 48h14V34h14V20h14V6h14' fill='none' stroke='%23F5F1E8' stroke-opacity='.075' stroke-width='1.5'/%3E%3C/svg%3E");
-  background-size: 56px 56px;
+/* ---------- Retícula sutil para superficies de marca (login y menú lateral) ---------- */
+.pattern-grid {
+  background-image: radial-gradient(rgb(255 255 255 / 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
 }
 
 /* ---------- Impresión del cronograma ---------- */

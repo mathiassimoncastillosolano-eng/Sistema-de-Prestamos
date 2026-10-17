@@ -22,7 +22,7 @@ import { filasClientes, type EstadoCliente, type FilaCliente } from '@/lib/selec
 import type { TipoCliente } from '@/types';
 import { ClientFormSheet } from './client-form-sheet';
 
-const TONO_TIPO: Record<TipoCliente, 'teal' | 'copper' | 'neutral'> = { DNI: 'neutral', 'RUC 10': 'teal', 'RUC 20': 'copper' };
+const TONO_TIPO: Record<TipoCliente, 'teal' | 'navy' | 'neutral'> = { DNI: 'neutral', 'RUC 10': 'teal', 'RUC 20': 'navy' };
 const ESTADOS: EstadoCliente[] = ['Al día', 'Cerca del límite', 'Con cuotas vencidas', 'Sin préstamos activos'];
 
 const columnas: ColumnDef<FilaCliente>[] = [

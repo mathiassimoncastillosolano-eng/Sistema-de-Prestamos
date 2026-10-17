@@ -56,7 +56,7 @@ export default function ClientDetailPage() {
         <CardBody className="flex flex-wrap items-center gap-4">
           <Avatar nombre={c.nombre} tipo={c.tipo} size="xl" />
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2"><Badge tone={esEmpresa ? 'copper' : c.tipo === 'RUC 10' ? 'teal' : 'neutral'}>{c.tipo}</Badge><StatusBadge estado={estadoCliente(db, c)} /></div>
+            <div className="flex flex-wrap items-center gap-2"><Badge tone={esEmpresa ? 'navy' : c.tipo === 'RUC 10' ? 'teal' : 'neutral'}>{c.tipo}</Badge><StatusBadge estado={estadoCliente(db, c)} /></div>
             {c.representante && <p className="mt-2 text-sm text-ink-muted">Representante legal: <b className="font-medium text-ink">{c.representante.nombre}</b> · DNI {c.representante.dni}</p>}
             {c.negocio && <p className="mt-2 text-sm text-ink-muted">Negocio: <b className="font-medium text-ink">{c.negocio}</b></p>}
           </div>

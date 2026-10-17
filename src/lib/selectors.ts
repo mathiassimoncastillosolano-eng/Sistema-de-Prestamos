@@ -1,7 +1,7 @@
 /* Consultas derivadas sobre el estado (puras, sin React). Reutilizables por vistas, búsqueda y analíticas. */
-import type { Cliente, Cuota, Db, EstadoCuota, EstadoPrestamo, Prestamo } from '@/types';
+import type { Cliente, Db, EstadoPrestamo, Prestamo } from '@/types';
 import { CFG } from './config';
-import { capacidadDisponible, capitalPendienteCliente, estadoCuota, resumen } from './finance';
+import { capacidadDisponible, capitalPendienteCliente, resumen } from './finance';
 import { normalizar } from './utils';
 
 export const getCliente = (db: Db, id: string) => db.clientes.find((c) => c.id === id);
@@ -50,21 +50,6 @@ export const filasPrestamos = (db: Db): FilaPrestamo[] =>
   db.prestamos.map((prestamo) => {
     const r = resumen(prestamo);
     return { prestamo, cliente: getCliente(db, prestamo.clienteId), resumen: r, estado: r.estado };
-  });
-
-/* ---------- Cuotas (solo consulta) ---------- */
-export interface FilaCuota {
-  prestamo: Prestamo;
-  cliente: Cliente | undefined;
-  cuota: Cuota;
-  estado: EstadoCuota;
-}
-
-/** Todas las cuotas programadas de la cartera, con su estado informativo calculado. Es una vista de consulta. */
-export const filasCuotas = (db: Db): FilaCuota[] =>
-  db.prestamos.flatMap((prestamo) => {
-    const cliente = getCliente(db, prestamo.clienteId);
-    return prestamo.cronograma.map((cuota) => ({ prestamo, cliente, cuota, estado: estadoCuota(cuota) }));
   });
 
 /** Historial administrativo (altas y registros) vinculado a una entidad. */

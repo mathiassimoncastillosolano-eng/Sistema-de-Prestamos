@@ -45,7 +45,7 @@ export default function LoginPage() {
 
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      <section className="pattern-steps relative flex flex-col justify-between gap-10 bg-side p-6 text-side-ink sm:p-10 lg:p-14">
+      <section className="pattern-grid relative flex flex-col justify-between gap-10 bg-side p-6 text-side-ink sm:p-10 lg:p-14">
         <div className="flex items-center gap-3 text-white"><BrandMark tile="light" /><BrandName /></div>
         <div className="max-w-lg">
           <h1 className="text-3xl font-semibold leading-tight text-white sm:text-4xl">{BRAND.lema}.</h1>
@@ -53,7 +53,7 @@ export default function LoginPage() {
           <ul className="mt-8 hidden space-y-3.5 sm:block">
             {puntos.map((p) => (
               <li key={p.texto} className="flex items-center gap-3 text-sm">
-                <span className="grid size-8 place-items-center rounded-full bg-side-active text-copper"><p.icon className="size-4" aria-hidden /></span>{p.texto}
+                <span className="grid size-8 place-items-center rounded-full bg-side-active text-side-accent"><p.icon className="size-4" aria-hidden /></span>{p.texto}
               </li>
             ))}
           </ul>
@@ -75,7 +75,7 @@ export default function LoginPage() {
             </Field>
           </div>
 
-          {aviso && !fallo && <p role="status" className="mt-4 flex items-start gap-2 rounded-control border border-line bg-sand px-3 py-2.5 text-sm text-sand-ink"><Info className="mt-0.5 size-4 shrink-0" aria-hidden />{aviso}</p>}
+          {aviso && !fallo && <p role="status" className="mt-4 flex items-start gap-2 rounded-control border border-line bg-tint px-3 py-2.5 text-sm text-tint-ink"><Info className="mt-0.5 size-4 shrink-0" aria-hidden />{aviso}</p>}
           {fallo && <p role="alert" className="mt-4 flex items-start gap-2 rounded-control border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger-ink"><CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />{fallo}</p>}
 
           <Button type="submit" variant="primary" size="lg" className="mt-6 w-full" loading={isSubmitting}>{isSubmitting ? 'Verificando…' : 'Ingresar'}</Button>

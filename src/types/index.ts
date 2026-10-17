@@ -25,11 +25,7 @@ export interface Cliente {
   dniTitular?: string;
 }
 
-/**
- * Estados informativos de una cuota. Se CALCULAN desde las fechas y desde el registro histórico importado;
- * nunca se asignan a mano. 'Cubierta (histórico)' solo aparece si el registro histórico lo respalda.
- */
-export type EstadoCuota = 'Vencida' | 'Próxima a vencer' | 'Pendiente' | 'Cubierta (histórico)';
+/** Estado informativo del préstamo, calculado desde el cronograma y el registro histórico importado. La cuota individual NO tiene estado de pago visible. */
 export type EstadoPrestamo = 'Vigente' | 'Con cuotas vencidas' | 'Finalizado';
 
 export interface Cuota {
@@ -66,7 +62,7 @@ export interface Prestamo {
   desembolso: string;
   asesor: string;
   cronograma: Cuota[];
-  /** Registro histórico importado: respalda las cuotas 'Cubierta (histórico)'. Solo lectura. */
+  /** Registro histórico importado: base del capital pendiente. Solo lectura. */
   historico: RegistroHistorico[];
   observaciones: string;
 }

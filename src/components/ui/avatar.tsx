@@ -2,7 +2,7 @@ import { Building2 } from 'lucide-react';
 import { cn, iniciales } from '@/lib/utils';
 import type { TipoCliente } from '@/types';
 
-const TONOS = ['bg-teal-soft text-teal-ink', 'bg-copper-soft text-copper-ink', 'bg-info-soft text-info-ink', 'bg-sand text-sand-ink', 'bg-neutral-soft text-neutral-ink'];
+const TONOS = ['bg-teal-soft text-teal-ink', 'bg-navy-soft text-navy-ink', 'bg-info-soft text-info-ink', 'bg-tint text-tint-ink', 'bg-neutral-soft text-neutral-ink'];
 const hash = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 const tamanos = { sm: 'size-8 text-[0.6875rem]', md: 'size-9 text-xs', lg: 'size-11 text-sm', xl: 'size-14 text-lg' };

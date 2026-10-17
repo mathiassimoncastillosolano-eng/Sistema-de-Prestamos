@@ -30,7 +30,7 @@ export function Modal({ open, onOpenChange, title, description, children, footer
           <Dialog.Portal forceMount>
             <Dialog.Overlay asChild forceMount>
               <motion.div
-                className="fixed inset-0 z-50 grid place-items-center bg-[#0a141f]/55 p-4 backdrop-blur-[2px]"
+                className="fixed inset-0 z-50 grid place-items-center bg-overlay/55 p-4 backdrop-blur-[2px]"
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fast }}
               >
                 <Dialog.Content asChild forceMount aria-describedby={description ? undefined : undefined}>

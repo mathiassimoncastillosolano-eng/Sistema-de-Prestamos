@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { esRolValido, moduloDeRuta, puedeAccederARuta, puedeAccederAModulo, type Modulo } from '@/lib/permissions';
 import { gruposPara } from '@/components/layout/nav';
 
-const MODULOS: Modulo[] = ['dashboard', 'clientes', 'solicitud', 'prestamos', 'cuotas'];
+const MODULOS: Modulo[] = ['dashboard', 'clientes', 'solicitud', 'prestamos'];
 
 describe('permisos por rol', () => {
-  it('asesor accede a los cinco módulos', () => {
+  it('asesor accede a los cuatro módulos', () => {
     MODULOS.forEach((m) => expect(puedeAccederAModulo('asesor', m)).toBe(true));
   });
   it('gerencia solo accede al dashboard', () => {
     expect(puedeAccederAModulo('gerencia', 'dashboard')).toBe(true);
-    (['clientes', 'solicitud', 'prestamos', 'cuotas'] as Modulo[]).forEach((m) => expect(puedeAccederAModulo('gerencia', m)).toBe(false));
+    (['clientes', 'solicitud', 'prestamos'] as Modulo[]).forEach((m) => expect(puedeAccederAModulo('gerencia', m)).toBe(false));
   });
   it('un rol desconocido, vacío o con otra capitalización no recibe ningún permiso', () => {
     for (const rol of ['auditor', '', 'ASESOR', 'Gerencia', ' asesor', null, undefined, 7]) {
@@ -24,6 +24,7 @@ describe('permisos por rol', () => {
     expect(moduloDeRuta('/prestamos/PR-1001')).toBe('prestamos');
     expect(moduloDeRuta('/solicitud/C001')).toBe('solicitud');
     expect(moduloDeRuta('/nada')).toBeNull();
+    expect(moduloDeRuta('/cuotas')).toBe('prestamos'); // enlace antiguo: se autoriza (y redirige) como Préstamos
     for (const ruta of ['/clientes', '/clientes/C001', '/solicitud', '/solicitud/C001', '/prestamos', '/prestamos/PR-1001', '/cuotas']) {
       expect(puedeAccederARuta('gerencia', ruta)).toBe(false);
       expect(puedeAccederARuta('asesor', ruta)).toBe(true);
@@ -36,7 +37,7 @@ describe('permisos por rol', () => {
 describe('menú lateral', () => {
   const etiquetas = (rol: string) => gruposPara((m) => puedeAccederAModulo(rol, m)).flatMap((g) => g.items.map((i) => i.label));
   it('asesor: Resumen, Clientes y Cartera completos', () => {
-    expect(etiquetas('asesor')).toEqual(['Dashboard', 'Clientes', 'Nueva solicitud', 'Préstamos', 'Cuotas y cronogramas']);
+    expect(etiquetas('asesor')).toEqual(['Dashboard', 'Clientes', 'Nueva solicitud', 'Préstamos']);
   });
   it('gerencia: solo Dashboard y sin grupos vacíos', () => {
     expect(etiquetas('gerencia')).toEqual(['Dashboard']);

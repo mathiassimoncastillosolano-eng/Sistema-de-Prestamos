@@ -6,15 +6,14 @@
    ========================================================= */
 import type { Rol } from '@/types/auth';
 
-export type Modulo = 'dashboard' | 'clientes' | 'solicitud' | 'prestamos' | 'cuotas';
+export type Modulo = 'dashboard' | 'clientes' | 'solicitud' | 'prestamos';
 
 /** Qué roles pueden usar cada módulo. Un rol que no aparezca aquí no tiene acceso a nada. */
 const ACCESO: Record<Modulo, readonly Rol[]> = {
   dashboard: ['asesor', 'gerencia'],
   clientes: ['asesor'],
   solicitud: ['asesor'],
-  prestamos: ['asesor'],
-  cuotas: ['asesor']
+  prestamos: ['asesor']
 };
 
 export const ROLES_VALIDOS: readonly Rol[] = ['asesor', 'gerencia'];
@@ -38,7 +37,9 @@ export function puedeAccederAModulo(rol: unknown, modulo: Modulo): boolean {
 export function moduloDeRuta(pathname: string): Modulo | null {
   const base = pathname.split('/')[1] ?? '';
   if (base === '') return 'dashboard';
-  if (base === 'clientes' || base === 'solicitud' || base === 'prestamos' || base === 'cuotas') return base;
+  if (base === 'clientes' || base === 'solicitud' || base === 'prestamos') return base;
+  /* El antiguo módulo «Cuotas y cronogramas» ya no existe: su URL redirige a Préstamos, así que se autoriza como tal. */
+  if (base === 'cuotas') return 'prestamos';
   return null;
 }
 

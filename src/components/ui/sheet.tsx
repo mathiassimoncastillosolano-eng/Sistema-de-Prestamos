@@ -28,7 +28,7 @@ export function Sheet({ open, onOpenChange, title, description, children, footer
         {open && (
           <Dialog.Portal forceMount>
             <Dialog.Overlay asChild forceMount>
-              <motion.div className="fixed inset-0 z-50 bg-[#0a141f]/55 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fast }} />
+              <motion.div className="fixed inset-0 z-50 bg-overlay/55 backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fast }} />
             </Dialog.Overlay>
             <Dialog.Content asChild forceMount>
               <motion.div

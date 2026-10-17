@@ -1,6 +1,6 @@
 /* =========================================================
-   DATOS MOCK — todos ficticios. Incluyen un REGISTRO HISTÓRICO importado (solo lectura) que respalda las
-   cuotas "Cubierta (histórico)"; la aplicación no permite crear pagos.
+   DATOS MOCK — todos ficticios. Incluyen un REGISTRO HISTÓRICO importado (solo lectura) del que salen el capital
+   pendiente y el resumen de cada préstamo; la aplicación no permite crear pagos.
    Los 15 clientes y 16 préstamos originales se conservan
    (mismos IDs, importes y cronogramas); se añaden clientes y préstamos para poder
    probar búsquedas, filtros, paginación y gráficos.

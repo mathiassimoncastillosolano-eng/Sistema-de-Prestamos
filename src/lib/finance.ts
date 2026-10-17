@@ -9,14 +9,15 @@
    4. Fechas: la cuota k vence k meses después del desembolso; si el mes no tiene ese día, el último día del mes.
    5. Límite de endeudamiento = capital pendiente (sin intereses futuros).
    6. NO existe operativa de pagos: el sistema registra préstamos y consulta cronogramas. Lo único que se conserva
-      es un REGISTRO HISTÓRICO importado (solo lectura) que respalda las cuotas "Cubierta (histórico)".
+      es un REGISTRO HISTÓRICO importado (solo lectura) del que salen el capital pendiente y el resumen del préstamo.
+      La interfaz NO clasifica cada cuota como pagada/pendiente/vencida: sin conciliación de pagos esa etiqueta no es fiable.
    7. El cronograma original NUNCA se reescribe. Sin registro histórico, el capital pendiente NO disminuye.
 
    Esta migración conserva el comportamiento del prototipo. Ver DISCREPANCIA ABIERTA en lib/config.ts.
    ========================================================= */
-import type { Cuota, EstadoCuota, Prestamo, RegistroHistorico, ResumenPrestamo } from '@/types';
+import type { Cuota, Prestamo, RegistroHistorico, ResumenPrestamo } from '@/types';
 import { CFG } from './config';
-import { addDays, addMonths } from './dates';
+import { addMonths } from './dates';
 import { money } from './format';
 
 export const r2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
@@ -48,13 +49,6 @@ export function generarCronograma(capital: number, n: number, desembolso: string
     });
   }
   return out;
-}
-
-export function estadoCuota(c: Cuota, hoy: string = CFG.hoy): EstadoCuota {
-  if (!cuotaAbierta(c)) return 'Cubierta (histórico)';
-  if (c.fecha < hoy) return 'Vencida';
-  if (c.fecha <= addDays(hoy, CFG.diasProxVenc)) return 'Próxima a vencer';
-  return 'Pendiente';
 }
 
 /**

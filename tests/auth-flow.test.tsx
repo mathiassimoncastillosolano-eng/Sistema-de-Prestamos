@@ -29,7 +29,7 @@ describe('A · login correcto como asesor', () => {
     montar();
     await iniciarSesion(ASESORA);
 
-    await waitFor(() => expect(etiquetasMenu()).toEqual(['Dashboard', 'Clientes', 'Nueva solicitud', 'Préstamos', 'Cuotas y cronogramas']));
+    await waitFor(() => expect(etiquetasMenu()).toEqual(['Dashboard', 'Clientes', 'Nueva solicitud', 'Préstamos']));
     expect(screen.getAllByText('Valeria Quintana').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Agencia Sur Prueba/ })).toBeInTheDocument();
     expect(screen.getAllByText('Asesor de préstamos').length).toBeGreaterThan(0);

@@ -11,14 +11,14 @@ export const badgeVariants = cva('inline-flex items-center gap-1.5 whitespace-no
       info: 'bg-info-soft text-info-ink',
       neutral: 'bg-neutral-soft text-neutral-ink',
       teal: 'bg-teal-soft text-teal-ink',
-      copper: 'bg-copper-soft text-copper-ink'
+      navy: 'bg-navy-soft text-navy-ink'
     }
   },
   defaultVariants: { tone: 'neutral' }
 });
 
 const dotColor: Record<string, string> = {
-  success: 'bg-success', warning: 'bg-warning', danger: 'bg-danger', info: 'bg-info', neutral: 'bg-neutral', teal: 'bg-teal', copper: 'bg-copper'
+  success: 'bg-success', warning: 'bg-warning', danger: 'bg-danger', info: 'bg-info', neutral: 'bg-neutral', teal: 'bg-teal', navy: 'bg-brand'
 };
 
 interface BadgeProps extends ComponentProps<'span'>, VariantProps<typeof badgeVariants> {

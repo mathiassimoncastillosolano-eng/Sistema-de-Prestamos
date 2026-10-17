@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AnimatedNumber } from '@/components/data-display/animated-number';
 import { DefinitionList } from '@/components/data-display/definition-list';
-import { StatusBadge } from '@/components/data-display/status-badge';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
@@ -12,9 +11,8 @@ import { Modal } from '@/components/ui/modal';
 import { Textarea } from '@/components/ui/input';
 import { toast } from '@/components/ui/toast';
 import { useDb } from '@/hooks/use-db';
-import { CFG } from '@/lib/config';
-import { diasEntre, fecha } from '@/lib/dates';
-import { cuotaAbierta, estadoCuota, importePendienteCuota, resumen } from '@/lib/finance';
+import { fecha } from '@/lib/dates';
+import { resumen } from '@/lib/finance';
 import { money } from '@/lib/format';
 import { descargarPdfPrestamo } from '@/lib/pdf';
 import { actividadDe, getCliente, getPrestamo } from '@/lib/selectors';
@@ -24,22 +22,15 @@ function CuotaDialog({ n, onClose, id }: { n: number | null; onClose: () => void
   const db = useDb();
   const p = getPrestamo(db, id);
   const c = p?.cronograma.find((x) => x.n === n);
-  const e = c ? estadoCuota(c) : null;
-  const dias = c ? diasEntre(c.fecha, CFG.hoy) : 0;
   return (
     <Modal open={n !== null && !!c} onOpenChange={(o) => { if (!o) onClose(); }} size="sm" title={c ? `Cuota ${c.n} de ${p?.plazo}` : 'Cuota'} description={c ? `Vence el ${fecha(c.fecha)}` : undefined}
       footer={<Button variant="secondary" onClick={onClose}>Cerrar</Button>}>
-      {c && e && (
-        <>
-          <DefinitionList items={[
-            { label: 'Estado', value: <StatusBadge estado={e} /> },
-            { label: 'Capital programado', value: money(c.capital) }, { label: 'Interés programado', value: money(c.interes) },
-            { label: 'Importe de la cuota', value: money(c.cuota), strong: true },
-            { label: 'Saldo de capital programado', value: money(c.saldo) }
-          ]} />
-          {cuotaAbierta(c) && <p className="mt-3 text-sm text-ink-muted">{dias < 0 ? `Vencida hace ${-dias} día${dias === -1 ? '' : 's'}.` : dias === 0 ? 'Vence hoy.' : `Vence en ${dias} día${dias === 1 ? '' : 's'}.`} Importe contractual: {money(importePendienteCuota(c))}.</p>}
-          {e === 'Cubierta (histórico)' && <p className="mt-3 text-sm text-ink-muted">Esta cuota figura cubierta en el registro histórico importado. El sistema no permite registrar pagos; la información es solo de consulta.</p>}
-        </>
+      {c && (
+        <DefinitionList items={[
+          { label: 'Capital programado', value: money(c.capital) }, { label: 'Interés programado', value: money(c.interes) },
+          { label: 'Importe de la cuota', value: money(c.cuota), strong: true },
+          { label: 'Saldo de capital programado', value: money(c.saldo) }
+        ]} />
       )}
     </Modal>
   );
@@ -97,13 +88,13 @@ export default function LoanDetailPage() {
     { label: 'Intereses pactados', valor: r.interes, pie: `TEA ${(p.tea * 100).toFixed(0)} %` },
     { label: 'Importe contractual total', valor: r.total, pie: `${p.plazo} cuotas` },
     { label: 'Capital pendiente', valor: r.capitalPend, pie: r.cubierto > 0 ? 'Según registro histórico' : 'Sin amortizaciones registradas' },
-    { label: 'Pendiente contractual', valor: r.pendiente, pie: r.proxima ? `Próximo vencimiento ${fecha(r.proxima.fecha)}` : 'Sin cuotas abiertas', alerta: r.vencidas > 0 }
+    { label: 'Pendiente contractual', valor: r.pendiente, pie: r.proxima ? `Próximo vencimiento ${fecha(r.proxima.fecha)}` : 'Sin cuotas abiertas' }
   ];
 
   return (
     <>
       <PageHeader back={{ to: '/prestamos', label: 'Préstamos' }}
-        title={<span className="flex flex-wrap items-center gap-3">{p.id}<StatusBadge estado={r.estado} /></span>}
+        title={p.id}
         description={<>{c ? <Link to={`/clientes/${c.id}`} className="font-medium text-teal-ink hover:underline">{c.nombre}</Link> : p.clienteId} · {p.agencia} · Asesor {p.asesor}</>}
         actions={<>
           <Button variant="primary" onClick={descargar} disabled={generando} aria-busy={generando}><FileDown className="size-4" />{generando ? 'Generando PDF…' : 'Descargar PDF'}</Button>
@@ -114,7 +105,7 @@ export default function LoanDetailPage() {
         {kpis.map((k, i) => (
           <div key={k.label} className={`bg-surface p-4 sm:p-5 ${i === 4 ? 'col-span-2 lg:col-span-1' : ''}`}>
             <p className="text-[0.8125rem] text-ink-muted">{k.label}</p>
-            <p className={`mt-1 truncate text-xl font-semibold ${k.alerta ? 'text-danger-ink' : 'text-ink'}`}><AnimatedNumber value={k.valor} format={money} duration={0.5} /></p>
+            <p className="mt-1 truncate text-xl font-semibold text-ink"><AnimatedNumber value={k.valor} format={money} duration={0.5} /></p>
             <p className="mt-1 text-xs text-ink-muted">{k.pie}</p>
           </div>
         ))}
@@ -144,7 +135,7 @@ export default function LoanDetailPage() {
       </div>
 
       <Card className="mt-5 overflow-hidden">
-        <CardHeader title="Cronograma de cuotas" description={`${p.plazo} cuotas · informativo, abre una cuota para ver su detalle`} className="pb-4" />
+        <CardHeader title="Cronograma de cuotas" description={`${p.plazo} cuotas · cronograma contractual, abre una cuota para ver su detalle`} className="pb-4" />
         <ScheduleTable prestamo={p} onSelect={setCuota} />
       </Card>
 

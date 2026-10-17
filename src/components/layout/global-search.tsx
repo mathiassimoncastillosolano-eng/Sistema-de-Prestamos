@@ -19,7 +19,7 @@ function Resaltado({ texto, q }: { texto: string; q: string }) {
   return (
     <>
       {texto.slice(0, i)}
-      <mark className="rounded-sm bg-copper-soft px-0.5 text-inherit">{texto.slice(i, i + nq.length)}</mark>
+      <mark className="rounded-sm bg-teal-soft px-0.5 text-inherit">{texto.slice(i, i + nq.length)}</mark>
       {texto.slice(i + nq.length)}
     </>
   );
@@ -100,7 +100,7 @@ export function GlobalSearch() {
         {abierto && (
           <Dialog.Portal forceMount>
             <Dialog.Overlay asChild forceMount>
-              <motion.div className="fixed inset-0 z-50 flex items-start justify-center bg-[#0a141f]/55 p-3 pt-[8dvh] backdrop-blur-[2px] sm:p-6 sm:pt-[12dvh]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fast }}>
+              <motion.div className="fixed inset-0 z-50 flex items-start justify-center bg-overlay/55 p-3 pt-[8dvh] backdrop-blur-[2px] sm:p-6 sm:pt-[12dvh]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: DUR.fast }}>
                 <Dialog.Content asChild forceMount aria-describedby={undefined}>
                   <motion.div className="flex max-h-[70dvh] w-full max-w-xl flex-col overflow-hidden rounded-panel border border-line bg-surface shadow-pop" initial={{ opacity: 0, y: -8, scale: 0.985 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: DUR.base, ease: EASE }}>
                     <Dialog.Title className="sr-only">Búsqueda global</Dialog.Title>

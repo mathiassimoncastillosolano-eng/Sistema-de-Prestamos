@@ -21,7 +21,7 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
   const { puede } = useAuth();
   const grupos = gruposPara(puede);
   return (
-    <div className="pattern-steps flex h-full flex-col bg-side text-side-ink">
+    <div className="pattern-grid flex h-full flex-col bg-side text-side-ink">
       <div className={cn('flex h-16 shrink-0 items-center gap-3 px-[1.125rem]', colapsado && 'justify-center px-0')}>
         <BrandMark tile="light" />
         {!colapsado && <BrandName className="text-side-ink" />}
@@ -41,10 +41,10 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
                         <>
                           {isActive && (
                             <motion.span layoutId={colapsado ? 'nav-active-c' : 'nav-active'} className="absolute inset-0 rounded-control bg-side-active" transition={{ duration: DUR.base, ease: EASE }}>
-                              <span className="absolute inset-y-2.5 left-0 w-[3px] rounded-r-full bg-copper" />
+                              <span className="absolute inset-y-2.5 left-0 w-[3px] rounded-r-full bg-side-accent" />
                             </motion.span>
                           )}
-                          <it.icon className={cn('relative size-5 shrink-0 transition-colors', isActive ? 'text-copper' : 'text-side-muted group-hover:text-side-ink')} aria-hidden />
+                          <it.icon className={cn('relative size-5 shrink-0 transition-colors', isActive ? 'text-side-accent' : 'text-side-muted group-hover:text-side-ink')} aria-hidden />
                           {!colapsado && <span className="relative truncate">{it.label}</span>}
                         </>
                       )}
