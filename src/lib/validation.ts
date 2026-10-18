@@ -64,6 +64,23 @@ export const clienteSchema = base.superRefine((v, ctx) => {
   }
 });
 
+/** Edición de celular y correo desde el expediente: mismas reglas y mensajes que en el registro. */
+export const contactoSchema = z.object({ telefono: z.string().trim(), correo: z.string().trim() }).superRefine((v, ctx) => {
+  const err = (path: 'telefono' | 'correo', message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
+
+  if (!v.telefono) {
+    err('telefono', 'El celular es obligatorio.');
+  } else if (!/^9\d{8}$/.test(v.telefono)) {
+    err('telefono', 'El celular debe tener 9 dígitos y empezar con 9.');
+  }
+
+  if (!v.correo) {
+    err('correo', 'El correo electrónico es obligatorio.');
+  } else if (v.correo.length > 120 || !CORREO_REGEX.test(v.correo)) {
+    err('correo', 'Ingresa un correo electrónico válido (por ejemplo, nombre@dominio.com).');
+  }
+});
+export type ContactoForm = z.infer<typeof contactoSchema>;
 
 /* ---------- Solicitud de préstamo ---------- */
 export const solicitudSchema = (deudaDe: (clienteId: string) => number) =>

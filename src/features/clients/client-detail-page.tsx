@@ -1,7 +1,9 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CalendarDays, Eye, FilePlus2, Hash, Landmark, Mail, MapPin, Phone, SearchX, UserRound, UsersRound } from 'lucide-react';
+import { CalendarDays, Eye, FilePlus2, Hash, Landmark, Mail, MapPin, Pencil, Phone, SearchX, UserRound, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
+import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AnimatedNumber } from '@/components/data-display/animated-number';
 import { DataTable } from '@/components/data-display/data-table';
@@ -13,12 +15,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
+import { Field } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
 import { Meter } from '@/components/ui/meter';
+import { Modal } from '@/components/ui/modal';
+import { toast } from '@/components/ui/toast';
 import { CFG } from '@/lib/config';
 import { fecha, toISO } from '@/lib/dates';
 import { r2 } from '@/lib/finance';
 import { money } from '@/lib/format';
-import { consultarCliente, type ClienteDetalle } from '@/services/clientes-api';
+import { contactoSchema, type ContactoForm } from '@/lib/validation';
+import { clientesApi, consultarCliente, type ClienteDetalle } from '@/services/clientes-api';
 import { prestamosApi, type PrestamoResumenApi } from '@/services/prestamos-api';
 import type { EstadoPrestamo, TipoCliente } from '@/types';
 
@@ -92,6 +99,53 @@ function Indicador({ label, children, pie }: { label: string; children: ReactNod
   );
 }
 
+/** Edición del celular y el correo del cliente (únicos datos que se pueden cambiar; el resto viene de RENIEC/SUNAT). */
+function EditarContacto({ cliente, open, onOpenChange, onGuardado }: { cliente: ClienteDetalle; open: boolean; onOpenChange: (open: boolean) => void; onGuardado: (c: ClienteDetalle) => void }) {
+  const [guardando, setGuardando] = useState(false);
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<ContactoForm>({
+    resolver: zodResolver(contactoSchema),
+    defaultValues: { telefono: cliente.telefono ?? '', correo: cliente.correo ?? '' }, mode: 'onTouched', reValidateMode: 'onChange'
+  });
+
+  // Cada vez que se abre, parte de los datos guardados.
+  useEffect(() => {
+    if (open) reset({ telefono: cliente.telefono ?? '', correo: cliente.correo ?? '' });
+  }, [open, cliente.telefono, cliente.correo, reset]);
+
+  const guardar = async (v: ContactoForm) => {
+    setGuardando(true);
+    try {
+      const actualizado = await clientesApi.actualizarContacto(cliente.id, v.telefono, v.correo);
+      toast.success('Datos de contacto actualizados.');
+      onGuardado(actualizado);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'No se pudieron guardar los cambios. Inténtalo nuevamente.');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <Modal open={open} onOpenChange={(o) => { if (!guardando) onOpenChange(o); }} size="sm" title="Editar contacto"
+      description="Actualiza el celular y el correo electrónico del cliente."
+      footer={<>
+        <Button variant="secondary" onClick={() => onOpenChange(false)} disabled={guardando}>Cancelar</Button>
+        <Button variant="primary" type="submit" form="form-contacto" loading={guardando}>Guardar cambios</Button>
+      </>}>
+      <form id="form-contacto" noValidate onSubmit={handleSubmit(guardar)} className="space-y-4">
+        <Field label="Celular" error={errors.telefono?.message}>
+          <Input inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" autoComplete="off" {...register('telefono')} />
+        </Field>
+        <Field label="Correo electrónico" error={errors.correo?.message}>
+          <Input type="email" inputMode="email" maxLength={120} placeholder="nombre@dominio.com" autoComplete="off" {...register('correo')} />
+        </Field>
+      </form>
+    </Modal>
+  );
+}
+
+
 export default function ClientDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -103,6 +157,7 @@ export default function ClientDetailPage() {
   const [cargandoPrestamos, setCargandoPrestamos] = useState(true);
   const [errorPrestamos, setErrorPrestamos] = useState<string | null>(null);
   const [intentoPrestamos, setIntentoPrestamos] = useState(0);
+  const [editando, setEditando] = useState(false);
 
   useEffect(() => {
     if (!id) {
@@ -215,6 +270,9 @@ export default function ClientDetailPage() {
             {esNegocio && <Dato icon={Hash} label="DNI del titular" value={cliente.dniTitular} />}
             {(esEmpresa || esNegocio) && <Dato icon={Hash} label="Estado SUNAT" value={[cliente.estadoSunat, cliente.condicionSunat].filter(Boolean).join(' · ')} className={esNegocio ? undefined : 'col-span-2'} />}
           </dl>
+          <div className="border-t border-line px-5 py-4">
+            <Button size="sm" onClick={() => setEditando(true)}><Pencil className="size-4" />Editar celular y correo</Button>
+          </div>
         </Card>
 
         {/* Resumen financiero y actividad crediticia */}
@@ -264,6 +322,7 @@ export default function ClientDetailPage() {
           )}
         </div>
       </Card>
+            <EditarContacto cliente={cliente} open={editando} onOpenChange={setEditando} onGuardado={setCliente} />
     </>
   );
 }

@@ -80,7 +80,7 @@ function leerCookie(nombre: string): string | null {
   return par ? decodeURIComponent(par.slice(nombre.length + 1)) : null;
 }
 
-async function llamar<T>(ruta: string, init: { method: 'GET' | 'POST'; body?: unknown }): Promise<T> {
+async function llamar<T>(ruta: string, init: { method: 'GET' | 'POST' | 'PATCH'; body?: unknown }): Promise<T> {
   const cabeceras: Record<string, string> = { Accept: 'application/json' };
   if (init.body !== undefined) cabeceras['Content-Type'] = 'application/json';
   if (init.method !== 'GET') {
@@ -129,6 +129,11 @@ export const clientesApi = {
       method: 'POST',
       body: { tipoDocumento: tipo, numeroDocumento: numero, telefono, correo }
     });
+  },
+
+  /** Cambia solo el celular y el correo; devuelve la ficha actualizada. */
+  actualizarContacto(id: string, telefono: string, correo: string) {
+    return llamar<ClienteDetalle>(`/${encodeURIComponent(id)}/contacto`, { method: 'PATCH', body: { telefono, correo } });
   }
 };
 

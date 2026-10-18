@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { Search, SearchX, Users } from 'lucide-react';
+import { Plus, Search, SearchX, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable } from '@/components/data-display/data-table';
@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
 import { listarClientes, type ClienteListado } from '@/services/clientes-api';
 import type { TipoCliente } from '@/types';
+import { ClientFormSheet } from './client-form-sheet';
 
 const TONO_TIPO: Record<TipoCliente, 'teal' | 'navy' | 'neutral'> = {
   DNI: 'neutral',
@@ -94,6 +95,7 @@ export default function ClientsPage() {
   const [intento, setIntento] = useState(0);
   const [q, setQ] = useState('');
   const [tipo, setTipo] = useState<'todos' | TipoCliente>('todos');
+  const [registrar, setRegistrar] = useState(false);
 
   useEffect(() => {
     let activo = true;
@@ -123,6 +125,7 @@ export default function ClientsPage() {
           <Input type="search" aria-label="Buscar clientes" placeholder="Buscar por nombre o documento" prefix={<Search className="size-4" />} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <Segmented aria-label="Tipo de cliente" value={tipo} onValueChange={setTipo} options={[{ value: 'todos', label: 'Todos' }, { value: 'DNI', label: 'DNI' }, { value: 'RUC 10', label: 'RUC 10' }, { value: 'RUC 20', label: 'RUC 20' }]} />
+        <Button className="lg:ml-auto" onClick={() => setRegistrar(true)}><Plus className="size-4" />Registrar cliente</Button>
       </div>
 
       <Card className="overflow-hidden">
@@ -149,6 +152,7 @@ export default function ClientsPage() {
           />
         )}
       </Card>
+      <ClientFormSheet open={registrar} onOpenChange={setRegistrar} />
     </>
   );
 }

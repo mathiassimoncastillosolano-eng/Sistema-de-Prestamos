@@ -1,6 +1,7 @@
 package com.nexora.backend.clientes.controladores;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
+import com.nexora.backend.clientes.dto.ActualizarContactoDTO;
 import com.nexora.backend.clientes.dto.ClienteListadoDTO;
 import com.nexora.backend.clientes.dto.ClienteRespuestaDTO;
 import com.nexora.backend.clientes.dto.ConsultaClienteRespuestaDTO;
@@ -64,6 +65,14 @@ public class ClienteControlador {
         Optional<ClienteRespuestaDTO> cliente = clienteServicio.consultar(id);
         if (cliente.isEmpty()) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(cliente.get());
+    }
+
+    @PatchMapping("/{id}/contacto")
+    public ClienteRespuestaDTO actualizarContacto(
+            @PathVariable UUID id,
+            @Valid @RequestBody ActualizarContactoDTO request,
+            HttpServletRequest peticion) {
+        return clienteServicio.actualizarContacto(id, request, perfilDe(peticion));
     }
 
     private static Perfil perfilDe(HttpServletRequest peticion) {
