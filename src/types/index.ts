@@ -64,6 +64,8 @@ export interface RegistroHistorico {
 
 export interface Prestamo {
   id: string;
+  /** Código visible cuando `id` es un UUID de la base (p. ej. "PR-1001"). */
+  codigo?: string;
   clienteId: string;
   agencia: string;
   capital: number;

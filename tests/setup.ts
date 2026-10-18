@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach, beforeEach, vi } from 'vitest';
 
 // jsdom no implementa estas APIs que usan Radix, Recharts y Motion.
@@ -8,6 +8,9 @@ vi.stubGlobal('ResizeObserver', ResizeObserverFalso);
 if (!window.matchMedia) {
   window.matchMedia = ((q: string) => ({ matches: false, media: q, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false })) as typeof window.matchMedia;
 }
+// El dashboard carga datos y gráficos al iniciar sesión; con todas las pruebas en paralelo, 1 s de espera se queda corto.
+configure({ asyncUtilTimeout: 3000 });
+
 Element.prototype.scrollIntoView = () => {};
 Element.prototype.hasPointerCapture = () => false;
 Element.prototype.releasePointerCapture = () => {};
