@@ -7,7 +7,6 @@ import { StatusBadge } from '@/components/data-display/status-badge';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card, CardBody, CardHeader } from '@/components/ui/card';
-import { EmptyState } from '@/components/ui/empty-state';
 import { Modal } from '@/components/ui/modal';
 import { Textarea } from '@/components/ui/input';
 import { toast } from '@/components/ui/toast';
@@ -18,6 +17,7 @@ import { money } from '@/lib/format';
 import { descargarPdfPrestamo } from '@/lib/pdf';
 import { actividadDe, getCliente, getPrestamo } from '@/lib/selectors';
 import { ScheduleTable } from './schedule-table';
+import { RealLoanDetail } from './real-loan-detail';
 
 function CuotaDialog({ n, onClose, id }: { n: number | null; onClose: () => void; id: string }) {
   const db = useDb();
@@ -69,7 +69,7 @@ export default function LoanDetailPage() {
   const [generando, setGenerando] = useState(false);
   const p = getPrestamo(db, id);
 
-  if (!p) return <EmptyState icon={TriangleAlert} title="Préstamo no encontrado" description="Revisa el código o vuelve al listado de préstamos." action={<Button asChild variant="primary"><Link to="/prestamos">Ver préstamos</Link></Button>} />;
+  if (!p) return <RealLoanDetail id={id} />;
 
   const r = resumen(p);
   const c = getCliente(db, p.clienteId);
