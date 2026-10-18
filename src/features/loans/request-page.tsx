@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'motion/react';
-import { CalendarClock, CalendarDays, Check, Info, Percent, Search, Send, TriangleAlert, UserRound } from 'lucide-react';
+import { CalendarClock, CalendarDays, Check, Percent, Search, Send, TriangleAlert, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -24,45 +24,39 @@ import { fecha } from '@/lib/dates';
 import { money } from '@/lib/format';
 import { DUR, EASE } from '@/lib/motion';
 import { cn, normalizar } from '@/lib/utils';
+import { codigoPrestamo } from './loan-utils';
 import { listarClientes, type ClienteListado } from '@/services/clientes-api';
-import { detalleLimite, prestamosApi, PrestamoApiError } from '@/services/prestamos-api';
-import { simular } from '@/lib/finance';
+import { detalleLimite, prestamosApi, PrestamoApiError, type CondicionesApi } from '@/services/prestamos-api';
+import { ScheduleReview, ScheduleReviewModal } from './schedule-review';
 import { SimulationSummary } from './simulation-summary';
+import { useSimulacion } from './use-simulacion';
 
-/* Reglas de negocio de US-04/05. El servidor las vuelve a validar: aquí solo se avisa antes de enviar. */
-const CAPITAL_MINIMO = 1000;
+/* Las reglas (mínimo, límite, plazos, TEA) llegan del servidor en GET /api/prestamos/condiciones; el servidor las vuelve a validar. */
 const MAX_CAPITAL_ENTRADA = 999999; // 6 cifras
 const MAX_PLAZO_ENTRADA = 999;      // 3 cifras
 const MAX_OBSERVACIONES = 250;
-const LIMITE = 10000;
-const PLAZO_MIN = 1;
-const PLAZO_MAX = 60;
-const TEA = 0.3;
 
-const esquema = z.object({
+const crearEsquema = (c: CondicionesApi | null) => z.object({
   clienteId: z.string().min(1, 'Selecciona un cliente.'),
-    capital: z
+  capital: z
     .number({ error: 'Ingresa un monto válido.' })
-    .min(CAPITAL_MINIMO, `El monto mínimo es ${money(CAPITAL_MINIMO)}.`)
-    .max(LIMITE, `El monto no puede superar ${money(LIMITE)} (límite por cliente).`)
+    .min(c?.capitalMinimo ?? 0.01, `El monto mínimo es ${money(c?.capitalMinimo ?? 0.01)}.`)
+    .max(c?.limiteEndeudamiento ?? MAX_CAPITAL_ENTRADA, `El monto no puede superar ${money(c?.limiteEndeudamiento ?? MAX_CAPITAL_ENTRADA)} (límite por cliente).`)
     .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'El monto admite como máximo 2 decimales.'),
   plazo: z
     .number({ error: 'Ingresa el plazo en meses.' })
     .int('El plazo debe ser un número entero de meses.')
-    .min(PLAZO_MIN, `El plazo mínimo es ${PLAZO_MIN} mes.`)
-    .max(PLAZO_MAX, `El plazo máximo es ${PLAZO_MAX} meses.`),
-    observaciones: z.string().max(MAX_OBSERVACIONES, `Máximo ${MAX_OBSERVACIONES} caracteres.`)
+    .min(c?.plazoMinimoMeses ?? 1, `El plazo mínimo es ${c?.plazoMinimoMeses ?? 1} mes${(c?.plazoMinimoMeses ?? 1) === 1 ? '' : 'es'}.`)
+    .max(c?.plazoMaximoMeses ?? MAX_PLAZO_ENTRADA, `El plazo máximo es ${c?.plazoMaximoMeses ?? MAX_PLAZO_ENTRADA} meses.`),
+  observaciones: z.string().max(MAX_OBSERVACIONES, `Máximo ${MAX_OBSERVACIONES} caracteres.`)
 });
-type SolicitudForm = z.infer<typeof esquema>;
+type SolicitudForm = z.infer<ReturnType<typeof crearEsquema>>;
 
 const PASOS = [
   { titulo: 'Cliente', descripcion: 'Quién solicita' },
   { titulo: 'Condiciones', descripcion: 'Monto y plazo' },
   { titulo: 'Confirmación', descripcion: 'Revisar y registrar' }
 ];
-
-/** Fecha de hoy en Lima (yyyy-MM-dd), solo para mostrarla: la fecha de desembolso real la fija el servidor. */
-const hoyLima = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
 
 export default function RequestPage() {
   const { clienteId: param } = useParams();
@@ -75,7 +69,14 @@ export default function RequestPage() {
   const [descartar, setDescartar] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [errorServidor, setErrorServidor] = useState<PrestamoApiError | null>(null);
-  const [desembolsoPrevisto] = useState(hoyLima);
+  const [verCronograma, setVerCronograma] = useState(false);
+  const enviando = useRef(false); // bloquea el doble envío aunque el estado aún no se haya repintado
+
+  const [cond, setCond] = useState<CondicionesApi | null>(null);
+  const [errorCond, setErrorCond] = useState<string | null>(null);
+  const [intentoCond, setIntentoCond] = useState(0);
+  const esquema = useMemo(() => crearEsquema(cond), [cond]);
+  const resolver = useMemo(() => zodResolver(esquema), [esquema]);
 
   const [clientes, setClientes] = useState<ClienteListado[]>([]);
   const [cargandoClientes, setCargandoClientes] = useState(true);
@@ -84,9 +85,9 @@ export default function RequestPage() {
   const preseleccionado = useRef(false);
 
   const form = useForm<SolicitudForm>({
-    resolver: zodResolver(esquema),
-    defaultValues: { clienteId: '', capital: 2000, plazo: 12, observaciones: '' },
-    mode: 'onChange'
+    resolver,
+    defaultValues: { clienteId: '', capital: 0, plazo: 0, observaciones: '' },
+    mode: 'all'
   });
   const { register, control, setValue, trigger, watch, formState: { errors, isDirty } } = form;
   const valores = watch();
@@ -101,6 +102,15 @@ export default function RequestPage() {
       .finally(() => { if (vigente) setCargandoClientes(false); });
     return () => { vigente = false; };
   }, [intento]);
+
+  useEffect(() => {
+    let vigente = true;
+    setErrorCond(null);
+    prestamosApi.condiciones()
+      .then((c) => { if (vigente) setCond(c); })
+      .catch((e: unknown) => { if (vigente) setErrorCond(e instanceof Error ? e.message : 'No se pudieron cargar las condiciones del préstamo.'); });
+    return () => { vigente = false; };
+  }, [intentoCond]);
 
   /* /solicitud/:clienteId → preselecciona ese cliente y salta a las condiciones. */
   useEffect(() => {
@@ -123,8 +133,12 @@ export default function RequestPage() {
 
   const capitalNum = Number.isFinite(valores.capital) ? valores.capital : 0;
   const plazoNum = Number.isFinite(valores.plazo) ? valores.plazo : 0;
-  const condicionesValidas = esquema.safeParse(valores).success;
-  const sim = condicionesValidas ? simular({ monto: capitalNum, plazo: plazoNum, desembolso: desembolsoPrevisto }) : null;
+  const condicionesValidas = !!cond && esquema.safeParse(valores).success;
+  const { sim, estado: estadoSim, error: errorSim, recalcular } = useSimulacion(capitalNum, plazoNum, condicionesValidas);
+  const simVigente = estadoSim === 'lista' && !!sim && sim.capital === capitalNum && sim.plazoMeses === plazoNum;
+  const desembolso = sim?.fechaDesembolso ?? cond?.fechaDesembolso ?? '';
+  const primerVencimiento = sim?.fechaPrimerVencimiento ?? cond?.fechaPrimerVencimiento ?? '';
+  const extras = { clienteNombre: cliente?.nombre, clienteDocumento: cliente ? `${cliente.tipoDocumento} ${cliente.numeroDocumento}` : undefined, asesor: usuario.nombre, agencia: usuario.agencia?.nombre };
 
   const elegir = (id: string) => {
     setErrorServidor(null);
@@ -137,8 +151,9 @@ export default function RequestPage() {
   };
 
   const enviar = async () => {
-    if (!esquema.safeParse(valores).success) { setConfirmar(false); setPaso(2); void trigger(); return; }
-    if (guardando) return; // evita envíos duplicados
+    if (enviando.current) return; // evita envíos duplicados
+    if (!simVigente || !sim || !esquema.safeParse(valores).success) { setConfirmar(false); if (!condicionesValidas) { setPaso(2); void trigger(); } return; }
+    enviando.current = true;
     setGuardando(true);
     setErrorServidor(null);
     try {
@@ -146,15 +161,20 @@ export default function RequestPage() {
         clienteId: valores.clienteId,
         capital: valores.capital,
         plazoMeses: valores.plazo,
-        observaciones: valores.observaciones.trim() || undefined
+        observaciones: valores.observaciones.trim() || undefined,
+        // Lo que el asesor revisó: si el servidor calcula otra cosa (p. ej. cambió el día), rechaza y se vuelve a revisar.
+        fechaDesembolsoEsperada: sim.fechaDesembolso,
+        totalContractualEsperado: sim.totalContractual
       });
-      toast.success(`Préstamo N.º ${p.numero} registrado con su cronograma`);
-      navigate(`/prestamos/${p.id}`);
+      toast.success(`Préstamo ${codigoPrestamo(p.numero)} registrado con su cronograma`);
+      navigate(`/prestamos/${p.id}`); // el bloqueo se mantiene hasta salir de la página
     } catch (e) {
-      setConfirmar(false);
-      setErrorServidor(e instanceof PrestamoApiError ? e : new PrestamoApiError('DESCONOCIDO', 'No se pudo registrar el préstamo. Inténtalo nuevamente.'));
-    } finally {
+      enviando.current = false;
       setGuardando(false);
+      setConfirmar(false);
+      const err = e instanceof PrestamoApiError ? e : new PrestamoApiError('DESCONOCIDO', 'No se pudo registrar el préstamo. Inténtalo nuevamente.');
+      setErrorServidor(err);
+      if (err.codigo === 'CONDICIONES_DESACTUALIZADAS') recalcular(); // vuelve a mostrar el cronograma vigente para revisarlo
     }
   };
 
@@ -213,7 +233,7 @@ export default function RequestPage() {
                     {errors.clienteId && <p role="alert" className="mt-3 text-sm font-medium text-danger-ink">{errors.clienteId.message}</p>}
                     {cliente && (
                       <p className="mt-4 rounded-control bg-success-soft p-3 text-sm text-success-ink">
-                        Cliente seleccionado: <b className="font-semibold">{cliente.nombre}</b>. El límite de endeudamiento de {money(LIMITE)} se evalúa al registrar, sumando los préstamos activos del cliente en toda la empresa.
+                        Cliente seleccionado: <b className="font-semibold">{cliente.nombre}</b>. {cond ? <>El límite de endeudamiento de {money(cond.limiteEndeudamiento)} se evalúa al registrar</> : 'El límite de endeudamiento se evalúa al registrar'}, sumando los préstamos activos del cliente en toda la empresa.
                       </p>
                     )}
                   </>
@@ -222,33 +242,38 @@ export default function RequestPage() {
                 {paso === 2 && (
                   <>
                     <h2 className="text-lg font-semibold text-ink">Condiciones del préstamo</h2>
-                    <p className="mt-0.5 text-sm text-ink-muted">Define el importe y el plazo. Las cuotas se calculan al registrar.</p>
+                    <p className="mt-0.5 text-sm text-ink-muted">Define el importe y el plazo. El cronograma se calcula en el servidor con las condiciones vigentes.</p>
+                    {!cond && !errorCond && <p role="status" className="py-8 text-center text-sm text-ink-muted">Cargando condiciones…</p>}
+                    {!cond && errorCond && (
+                      <EmptyState icon={TriangleAlert} title="No se pudieron cargar las condiciones" description={errorCond} className="py-8"
+                        action={<Button variant="primary" onClick={() => setIntentoCond((n) => n + 1)}>Reintentar</Button>} />
+                    )}
+                    {cond && (
                     <div className="mt-5 space-y-5">
                       <FormSection title="Importe y plazo">
                         <Controller name="capital" control={control} render={({ field }) => (
-                          <Field label="Monto solicitado" error={errors.capital?.message} hint={`Mínimo ${money(CAPITAL_MINIMO)}. Límite acumulado por cliente: ${money(LIMITE)}`}>
+                          <Field label="Monto solicitado" error={errors.capital?.message} hint={`Mínimo ${money(cond.capitalMinimo)}. Límite acumulado por cliente: ${money(cond.limiteEndeudamiento)}`}>
                             <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_CAPITAL_ENTRADA ? MAX_CAPITAL_ENTRADA : v)} onBlur={field.onBlur} decimals={2} maxIntegerDigits={6} prefix="S/" placeholder="0.00" />
                           </Field>
                         )} />
                         <Controller name="plazo" control={control} render={({ field }) => (
-                          <Field label={`Plazo (${PLAZO_MIN}–${PLAZO_MAX} meses)`} error={errors.plazo?.message} hint="Cuotas mensuales iguales">
-                            <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_PLAZO_ENTRADA ? MAX_PLAZO_ENTRADA : v)} onBlur={field.onBlur} maxIntegerDigits={3} suffix="meses" />
+                          <Field label={`Plazo (${cond.plazoMinimoMeses}–${cond.plazoMaximoMeses} meses)`} error={errors.plazo?.message} hint="Cuotas mensuales iguales">
+                            <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_PLAZO_ENTRADA ? MAX_PLAZO_ENTRADA : v)} onBlur={field.onBlur} maxIntegerDigits={3} suffix="meses" placeholder="0" />
                           </Field>
                         )} />
                       </FormSection>
                       <FormSection title="Fechas">
-                        <div className="space-y-2.5 sm:col-span-2">
+                        <div className="sm:col-span-2">
                           <InfoPanel aria-label="Fechas del préstamo">
-                            <InfoFact icon={CalendarDays} label="Desembolso" value={fecha(desembolsoPrevisto)} helper="Fecha de hoy (Lima), no editable" />
-                            <InfoFact icon={CalendarClock} label="Primera cuota" value="Un mes después" helper="Se calcula al registrar" />
+                            <InfoFact icon={CalendarDays} label="Fecha de desembolso" value={fecha(desembolso)} helper="Fecha actual · Lima, Perú" />
+                            <InfoFact icon={CalendarClock} label="Primera cuota" value={fecha(primerVencimiento)} helper="Vencimiento de la cuota 1" />
                           </InfoPanel>
-                          <p className="flex items-start gap-1.5 text-[0.8125rem] text-ink-muted"><Info className="mt-0.5 size-3.5 shrink-0" aria-hidden />La primera cuota vence exactamente un mes después del desembolso.</p>
                         </div>
                       </FormSection>
                       <FormSection title="Condiciones y responsable">
                         <div className="sm:col-span-2">
                           <InfoPanel aria-label="Condiciones y responsable">
-                            <InfoFact icon={Percent} label="Tasa efectiva anual" value={`${(TEA * 100).toFixed(0)} %`} helper="Fijada por política de crédito" />
+                            <InfoFact icon={Percent} label="Tasa efectiva anual" value={`${(cond.tea * 100).toFixed(0)} %`} helper="Fijada por política de crédito" />
                             <InfoFact icon={UserRound} label="Asesor responsable" value={usuario.nombre} helper="Usuario en sesión" />
                           </InfoPanel>
                         </div>
@@ -258,6 +283,7 @@ export default function RequestPage() {
                       </Field>
                       <p className="mt-1 text-right text-xs text-ink-muted">{valores.observaciones.length}/{MAX_OBSERVACIONES}</p>
                     </div>
+                    )}
                   </>
                 )}
 
@@ -268,7 +294,7 @@ export default function RequestPage() {
 
                     {errorServidor && (
                       <div role="alert" className="mt-4 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
-                        <p className="font-medium">{errorServidor.codigo === 'LIMITE_EXCEDIDO' ? 'Se supera el límite de endeudamiento' : 'No se pudo registrar el préstamo'}</p>
+                        <p className="font-medium">{errorServidor.codigo === 'LIMITE_EXCEDIDO' ? 'Se supera el límite de endeudamiento' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Las condiciones cambiaron' : 'No se pudo registrar el préstamo'}</p>
                         {limite ? (
                           <dl className="num mt-2 grid max-w-xs grid-cols-[1fr_auto] gap-x-4 gap-y-1">
                             <dt>Acumulado actual</dt><dd className="text-right font-semibold">{money(limite.acumulado)}</dd>
@@ -279,7 +305,7 @@ export default function RequestPage() {
                           <p className="mt-1">{errorServidor.message}</p>
                         )}
                         <p className="mt-2 text-[0.8125rem]">
-                          {limite ? 'Reduce el monto en el paso anterior para continuar.' : 'Revisa los datos o inténtalo nuevamente.'}
+                          {limite ? 'Reduce el monto en el paso anterior para continuar.' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Revisa el cronograma actualizado y confirma de nuevo.' : 'Revisa los datos o inténtalo nuevamente.'}
                         </p>
                       </div>
                     )}
@@ -298,14 +324,27 @@ export default function RequestPage() {
                       <h3 className="mb-1 text-sm font-semibold text-ink">Condiciones</h3>
                       <DefinitionList items={[
                         { label: 'Capital solicitado', value: money(capitalNum), strong: true },
-                        { label: 'Moneda', value: 'Soles (PEN)' },
+                        { label: 'Moneda', value: cond?.moneda === 'PEN' ? 'Soles (PEN)' : (cond?.moneda ?? '—') },
                         { label: 'Plazo', value: `${plazoNum} meses` },
-                        { label: 'Tasa aplicada', value: `TEA ${(TEA * 100).toFixed(0)} %` },
+                        { label: 'Tasa aplicada', value: cond ? `TEA ${(cond.tea * 100).toFixed(0)} %` : '—' },
                         { label: 'Frecuencia de cuotas', value: 'Mensual' },
-                        { label: 'Desembolso', value: fecha(desembolsoPrevisto) },
+                        { label: 'Fecha de desembolso', value: desembolso ? fecha(desembolso) : '—' },
+                        { label: 'Primera cuota', value: primerVencimiento ? fecha(primerVencimiento) : '—' },
                         { label: 'Asesor responsable', value: usuario.nombre },
                         { label: 'Observaciones', value: valores.observaciones.trim() || '—' }
                       ]} />
+                    </section>
+
+                    <section aria-label="Cronograma de cuotas" className="mt-6">
+                      <h3 className="mb-2 text-sm font-semibold text-ink">Cronograma de cuotas</h3>
+                      {simVigente && sim && <ScheduleReview sim={sim} extras={extras} />}
+                      {estadoSim === 'cargando' && <p role="status" className="py-6 text-center text-sm text-ink-muted">Calculando cronograma…</p>}
+                      {estadoSim === 'error' && (
+                        <div role="alert" className="rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
+                          <p>{errorSim?.message ?? 'No se pudo calcular el cronograma.'}</p>
+                          <button type="button" onClick={recalcular} className="mt-1 font-medium underline">Reintentar</button>
+                        </div>
+                      )}
                     </section>
                   </>
                 )}
@@ -315,8 +354,8 @@ export default function RequestPage() {
                   <div className="flex flex-col-reverse gap-2 sm:flex-row">
                     {paso > 1 && <Button onClick={() => setPaso(paso - 1)}>Atrás</Button>}
                     {paso < 3
-                      ? <Button variant="primary" onClick={siguiente} disabled={(paso === 1 && !valores.clienteId) || (paso === 2 && !condicionesValidas)}>Continuar</Button>
-                      : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!condicionesValidas || !valores.clienteId}><Send className="size-4" />Registrar préstamo</Button>}
+                      ? <Button variant="primary" onClick={siguiente} disabled={(paso === 1 && !valores.clienteId) || (paso === 2 && !simVigente)}>Continuar</Button>
+                      : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || guardando}><Send className="size-4" />Registrar préstamo</Button>}
                   </div>
                 </div>
               </CardBody>
@@ -325,18 +364,22 @@ export default function RequestPage() {
         
         </AnimatePresence>
       </div>
-      {paso === 2 && (
+      {paso === 2 && cond && (
           <motion.div key="resumen" className="min-w-0 xl:sticky xl:top-24" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE }}>
             <SimulationSummary
-              sim={sim}
-              monto={capitalNum}
-              plazo={plazoNum}
-              valido={condicionesValidas && !!sim}
-              motivo={errors.capital?.message ?? errors.plazo?.message}
+              sim={simVigente ? sim : null}
+              estado={estadoSim}
+              tea={cond.tea}
+              errorMensaje={errorSim?.message}
+              ayuda="Ingresa un monto y un plazo válidos para ver la estimación y el cronograma."
+              onVerCronograma={() => setVerCronograma(true)}
+              onReintentar={recalcular}
             />
           </motion.div>
         )}
         </div>
+
+      <ScheduleReviewModal open={verCronograma} onOpenChange={setVerCronograma} sim={simVigente ? sim : null} extras={extras} />
 
       <Modal open={confirmar} onOpenChange={(o) => { if (!guardando) setConfirmar(o); }} size="sm" title="Registrar préstamo"
         description={`Vas a registrar un préstamo de ${money(capitalNum)} a ${plazoNum} meses para ${cliente?.nombre ?? ''}. Se guardará junto con su cronograma de cuotas.`}

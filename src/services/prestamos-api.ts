@@ -2,6 +2,8 @@
    CLIENTE DE LA API DE PRÉSTAMOS (US-04, US-05, US-06).
    - Misma sesión por cookie HttpOnly y protección CSRF que auth-api.ts.
    - El servidor fija fecha, tasa, asesor, agencia y estado: aquí solo se envían cliente, capital, plazo y observaciones.
+   - El navegador NO calcula cuotas, fechas ni saldos: simulación, listado y detalle vienen del servidor (misma fórmula
+     y misma fecha de Lima que el registro).
    ========================================================= */
 
 export type CodigoPrestamo =
@@ -14,9 +16,14 @@ export type CodigoPrestamo =
   | 'PLAZO_FUERA_DE_RANGO'
   | 'MONEDA_NO_PERMITIDA'
   | 'LIMITE_EXCEDIDO'
+  | 'CONDICIONES_DESACTUALIZADAS'
   | 'NO_AUTENTICADO'
   | 'RED'
   | 'DESCONOCIDO';
+
+/** Estados permitidos (CHECK de la BD). Los de cuota se muestran tal cual. */
+export type EstadoPrestamoApi = 'Vigente' | 'En mora' | 'Cancelado';
+export type EstadoCuotaApi = 'PENDIENTE' | 'PAGADA' | 'VENCIDA';
 
 export interface CuotaApi {
   numero: number;
@@ -39,14 +46,14 @@ export interface PrestamoApi {
   tea: number;
   fechaDesembolso: string;
   fechaPrimerVencimiento: string;
-  estado: 'Vigente' | 'En mora' | 'Cancelado';
+  estado: EstadoPrestamoApi;
   cuotaMensual: number;
   totalIntereses: number;
   totalContractual: number;
   cuotas: CuotaApi[];
 }
 
-/** Fila de GET /api/prestamos?clienteId=… (sin registro de pagos: Vigente/En mora tienen todo pendiente, Cancelado nada). */
+/** Fila de GET /api/prestamos?clienteId=… (mismos saldos y estados que el listado y el detalle). */
 export interface PrestamoResumenApi {
   id: string;
   numero: number;
@@ -65,6 +72,103 @@ export interface SolicitudPrestamoApi {
   capital: number;
   plazoMeses: number;
   observaciones?: string;
+  /** Lo que el asesor revisó: si el servidor calcula otra cosa, rechaza el registro (CONDICIONES_DESACTUALIZADAS). */
+  fechaDesembolsoEsperada?: string;
+  totalContractualEsperado?: number;
+}
+
+/** GET /api/prestamos/condiciones: reglas vigentes y fechas de una solicitud nueva (fecha de Lima). */
+export interface CondicionesApi {
+  moneda: string;
+  tea: number;
+  capitalMinimo: number;
+  limiteEndeudamiento: number;
+  plazoMinimoMeses: number;
+  plazoMaximoMeses: number;
+  zonaHoraria: string;
+  fechaDesembolso: string;
+  fechaPrimerVencimiento: string;
+}
+
+/** POST /api/prestamos/simulacion: cronograma que se guardaría hoy. No se persiste nada. */
+export interface SimulacionApi {
+  moneda: string;
+  capital: number;
+  plazoMeses: number;
+  tea: number;
+  fechaDesembolso: string;
+  fechaPrimerVencimiento: string;
+  cuotaMensual: number;
+  totalIntereses: number;
+  totalContractual: number;
+  cuotas: CuotaApi[];
+}
+
+/** Fila de GET /api/prestamos (alcance de la sesión). */
+export interface PrestamoListadoApi {
+  id: string;
+  numero: number;
+  clienteId: string;
+  clienteNombre: string;
+  clienteTipoDocumento: string;
+  clienteNumeroDocumento: string;
+  agenciaNombre: string;
+  asesorNombre: string;
+  propio: boolean;
+  capital: number;
+  plazoMeses: number;
+  fechaDesembolso: string;
+  estado: EstadoPrestamoApi;
+  totalContractual: number;
+  capitalPendiente: number;
+  totalPendiente: number;
+  proximoVencimiento: string | null;
+  cuotasVencidas: number;
+}
+
+export interface CuotaDetalleApi extends CuotaApi {
+  estado: EstadoCuotaApi;
+  /** Parte de la cuota que aún no figura como pagada. */
+  importePendiente: number;
+  diasAtraso: number;
+}
+
+export interface EventoHistorialApi {
+  /** yyyy-MM-dd HH:mm (America/Lima) */
+  fechaHora: string;
+  tipo: string;
+  descripcion: string;
+  usuario: string;
+}
+
+/** GET /api/prestamos/{id}. */
+export interface PrestamoDetalleApi {
+  id: string;
+  numero: number;
+  clienteId: string;
+  clienteNombre: string;
+  clienteTipoDocumento: string;
+  clienteNumeroDocumento: string;
+  agenciaNombre: string;
+  asesorNombre: string;
+  moneda: string;
+  capital: number;
+  plazoMeses: number;
+  tea: number;
+  fechaDesembolso: string;
+  fechaPrimerVencimiento: string;
+  fechaUltimoVencimiento: string;
+  estado: EstadoPrestamoApi;
+  observaciones: string | null;
+  cuotaMensual: number;
+  totalIntereses: number;
+  totalContractual: number;
+  capitalPendiente: number;
+  totalPendiente: number;
+  proximoVencimiento: string | null;
+  cuotasVencidas: number;
+  cuotas: CuotaDetalleApi[];
+  historial: EventoHistorialApi[];
 }
 
 /** Detalle que acompaña a LIMITE_EXCEDIDO. */
@@ -88,7 +192,7 @@ export class PrestamoApiError extends Error {
 
 const CODIGOS = new Set<string>([
   'DATOS_INVALIDOS', 'SIN_PERMISO', 'CLIENTE_NO_ENCONTRADO', 'PRESTAMO_NO_ENCONTRADO', 'CLIENTE_NO_APTO',
-  'CAPITAL_BAJO_MINIMO', 'PLAZO_FUERA_DE_RANGO', 'MONEDA_NO_PERMITIDA', 'LIMITE_EXCEDIDO'
+  'CAPITAL_BAJO_MINIMO', 'PLAZO_FUERA_DE_RANGO', 'MONEDA_NO_PERMITIDA', 'LIMITE_EXCEDIDO', 'CONDICIONES_DESACTUALIZADAS'
 ]);
 
 const MSG_RED = 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo nuevamente.';
@@ -170,12 +274,24 @@ export const prestamosApi = {
   registrar(solicitud: SolicitudPrestamoApi): Promise<PrestamoApi> {
     return llamar<PrestamoApi>('', { method: 'POST', body: solicitud });
   },
+  /** Reglas vigentes y fechas de desembolso / primera cuota (fecha de Lima, calculadas por el servidor). */
+  condiciones(): Promise<CondicionesApi> {
+    return llamar<CondicionesApi>('/condiciones', { method: 'GET' });
+  },
+  /** Cronograma que se guardaría hoy con ese capital y plazo. No registra nada. */
+  simular(solicitud: { capital: number; plazoMeses: number }): Promise<SimulacionApi> {
+    return llamar<SimulacionApi>('/simulacion', { method: 'POST', body: solicitud });
+  },
+  /** Listado de préstamos de la sesión (gerencia: todos; asesor: su agencia). */
+  listar(): Promise<PrestamoListadoApi[]> {
+    return llamar<PrestamoListadoApi[]>('', { method: 'GET' });
+  },
   /** Préstamos de un cliente en todas las agencias, del más reciente al más antiguo. */
   listarPorCliente(clienteId: string): Promise<PrestamoResumenApi[]> {
     return llamar<PrestamoResumenApi[]>(`?clienteId=${encodeURIComponent(clienteId)}`, { method: 'GET' });
   },
   /** US-06: consulta el préstamo con el cronograma guardado. */
-  consultar(id: string): Promise<PrestamoApi> {
-    return llamar<PrestamoApi>(`/${encodeURIComponent(id)}`, { method: 'GET' });
+  consultar(id: string): Promise<PrestamoDetalleApi> {
+    return llamar<PrestamoDetalleApi>(`/${encodeURIComponent(id)}`, { method: 'GET' });
   }
 };

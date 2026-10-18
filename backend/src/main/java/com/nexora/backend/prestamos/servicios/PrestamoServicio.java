@@ -7,8 +7,10 @@ import com.nexora.backend.prestamos.dominio.CalculadoraCronograma;
 import com.nexora.backend.prestamos.dominio.Cronograma;
 import com.nexora.backend.prestamos.dominio.ReglasPrestamo;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
-import com.nexora.backend.prestamos.dto.PrestamoResumen;
+import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
+import com.nexora.backend.prestamos.dto.SimulacionRespuesta;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
+import com.nexora.backend.prestamos.dto.SolicitudSimulacion;
 import com.nexora.backend.prestamos.entidades.ClienteResumen;
 import com.nexora.backend.prestamos.entidades.Prestamo;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
@@ -19,14 +21,17 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** US-04 (registro), US-05 (límite acumulado) y US-06 (cronograma), en una sola transacción atómica. */
+/**
+ * US-04 (registro), US-05 (límite acumulado) y simulación del cronograma. Las consultas (listado, detalle) viven en
+ * PrestamoConsultaServicio. Simulación y registro usan la MISMA calculadora, la misma TEA y la misma fecha de Lima.
+ */
 @Service
 public class PrestamoServicio {
 
@@ -74,6 +79,7 @@ public class PrestamoServicio {
         // Fecha del día en Perú: el préstamo se registra cuando el cliente está en agencia.
         LocalDate hoy = LocalDate.now(reloj);
         Cronograma cronograma = CalculadoraCronograma.calcular(capital, plazo, ReglasPrestamo.TEA, hoy);
+        verificarLoRevisado(solicitud, hoy, cronograma);
 
         Prestamo prestamo = prestamos.save(new Prestamo(
                 cliente.getId(), asesor.getAgencia().getId(), asesor.getId(),
@@ -87,64 +93,46 @@ public class PrestamoServicio {
         Long numero = prestamos.obtenerNumero(prestamoId);
         return PrestamoRespuesta.de(prestamo, numero, cronograma);
     }
-    
-    /**
-     * Consulta de un préstamo con su cronograma guardado. Devuelve el mismo formato que el registro,
-     * reconstruido solo con lo que hay en la BD (nada se recalcula, para que los importes sean idénticos).
-     */
-    @Transactional(readOnly = true)
-    public PrestamoRespuesta consultar(UUID id) {
-        Prestamo prestamo = prestamos.findById(id)
-                .orElseThrow(() -> new PrestamoException(Codigo.PRESTAMO_NO_ENCONTRADO,
-                        "El préstamo indicado no existe."));
 
-        List<Cronograma.Cuota> filas = cuotas.findByIdPrestamoIdOrderByIdNumeroAsc(id).stream()
-                .map(q -> new Cronograma.Cuota(q.getId().getNumero(), q.getFechaVencimiento(),
-                        q.getCapital(), q.getInteres(), q.getImporteCuota(), q.getSaldo()))
-                .toList();
-        if (filas.isEmpty()) {
-            throw new IllegalStateException("El préstamo no tiene cronograma guardado.");
-        }
-
-        BigDecimal totalIntereses = filas.stream().map(Cronograma.Cuota::interes)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal totalContractual = filas.stream().map(Cronograma.Cuota::importeCuota)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        // Todas las cuotas valen lo mismo salvo la última, que absorbe el redondeo: la primera es la cuota fija.
-        Cronograma cronograma = new Cronograma(filas, filas.get(0).importeCuota(), totalIntereses, totalContractual);
-
-        return PrestamoRespuesta.de(prestamo, prestamo.getNumero(), cronograma);
-    }
-
-    /** Préstamos de un cliente con lo que tiene pendiente cada uno, leído del cronograma guardado. */
-    @Transactional(readOnly = true)
-    public List<PrestamoResumen> listarPorCliente(UUID clienteId) {
-        if (clienteId == null) {
-            throw new PrestamoException(Codigo.DATOS_INVALIDOS, "Indica el cliente.");
-        }
+    /** Condiciones para una solicitud nueva: lo que el formulario muestra antes de que haya monto o plazo. */
+    public CondicionesRespuesta condiciones() {
         LocalDate hoy = LocalDate.now(reloj);
-        return prestamos.findByClienteIdOrderByFechaDesembolsoDescNumeroDesc(clienteId).stream()
-                .map(p -> resumir(p, hoy))
-                .toList();
+        return new CondicionesRespuesta(ReglasPrestamo.MONEDA, ReglasPrestamo.TEA, ReglasPrestamo.CAPITAL_MINIMO,
+                ReglasPrestamo.LIMITE_ENDEUDAMIENTO, ReglasPrestamo.PLAZO_MINIMO_MESES,
+                ReglasPrestamo.PLAZO_MAXIMO_MESES, reloj.getZone().getId(), hoy, hoy.plusMonths(1));
     }
 
-    private PrestamoResumen resumir(Prestamo p, LocalDate hoy) {
-        List<Cuota> filas = cuotas.findByIdPrestamoIdOrderByIdNumeroAsc(p.getId());
-        BigDecimal totalContractual = filas.stream().map(Cuota::getImporteCuota)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-        boolean cancelado = "Cancelado".equals(p.getEstado());
-        BigDecimal capitalPendiente = cancelado ? BigDecimal.ZERO.setScale(2) : p.getCapital();
-        BigDecimal totalPendiente = cancelado ? BigDecimal.ZERO.setScale(2) : totalContractual;
-        LocalDate proximo = cancelado ? null : filas.stream()
-                .map(Cuota::getFechaVencimiento)
-                .filter(f -> !f.isBefore(hoy))
-                .findFirst()
-                .orElse(null);
-        return new PrestamoResumen(p.getId(), p.getNumero(), p.getCapital(), p.getPlazoMeses(),
-                p.getFechaDesembolso(), p.getEstado(), totalContractual, capitalPendiente, totalPendiente, proximo);
+    /** Calcula el cronograma que se guardaría hoy. No lee ni escribe en la base de datos. */
+    public SimulacionRespuesta simular(SolicitudSimulacion solicitud) {
+        if (solicitud == null) {
+            throw new PrestamoException(Codigo.DATOS_INVALIDOS, "Indica el capital y el plazo.");
+        }
+        BigDecimal capital = validarCapital(solicitud.capital());
+        int plazo = validarPlazo(solicitud.plazoMeses());
+        LocalDate hoy = LocalDate.now(reloj);
+        Cronograma c = CalculadoraCronograma.calcular(capital, plazo, ReglasPrestamo.TEA, hoy);
+        List<PrestamoRespuesta.CuotaRespuesta> filas = c.cuotas().stream()
+                .map(q -> new PrestamoRespuesta.CuotaRespuesta(q.numero(), q.fechaVencimiento(), q.capital(),
+                        q.interes(), q.importeCuota(), q.saldo()))
+                .toList();
+        return new SimulacionRespuesta(ReglasPrestamo.MONEDA, capital, plazo, ReglasPrestamo.TEA, hoy,
+                filas.get(0).fechaVencimiento(), c.cuotaMensual(), c.totalIntereses(), c.totalContractual(), filas);
     }
 
     // ---------------------------------------------------------------- validaciones
+
+    /** Si el asesor envió lo que revisó y el servidor calcula otra cosa, no se guarda nada distinto de lo revisado. */
+    private static void verificarLoRevisado(SolicitudPrestamo solicitud, LocalDate hoy, Cronograma cronograma) {
+        boolean otraFecha = solicitud.fechaDesembolsoEsperada() != null
+                && !solicitud.fechaDesembolsoEsperada().equals(hoy);
+        boolean otroTotal = solicitud.totalContractualEsperado() != null
+                && solicitud.totalContractualEsperado().compareTo(cronograma.totalContractual()) != 0;
+        if (otraFecha || otroTotal) {
+            throw new PrestamoException(Codigo.CONDICIONES_DESACTUALIZADAS,
+                    "Las condiciones cambiaron desde que las revisaste (fecha de desembolso o importes). "
+                            + "Revisa el cronograma actualizado y vuelve a confirmar.");
+        }
+    }
 
     private static BigDecimal validarCapital(BigDecimal capital) {
         if (capital == null) {

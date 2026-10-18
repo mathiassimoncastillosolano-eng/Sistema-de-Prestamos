@@ -1,80 +1,94 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { StatusBadge } from '@/components/data-display/status-badge';
-import { Button } from '@/components/ui/button';
 import { fecha } from '@/lib/dates';
 import { money } from '@/lib/format';
-import type { FilaPrestamo } from '@/lib/selectors';
-import type { EstadoPrestamo } from '@/types';
+import type { PrestamoListadoApi } from '@/services/prestamos-api';
+import { ESTADOS_PRESTAMO, codigoPrestamo } from './loan-utils';
 
-/** Orden en que se ofrecen los filtros y se ordena la columna de estado (de la solicitud al cierre). */
-export const ESTADOS_PRESTAMO: readonly EstadoPrestamo[] = ['En evaluación', 'Aprobado', 'Vigente', 'En mora', 'Cancelado', 'Rechazado'];
+const sinDato = <span className="text-ink-subtle" aria-label="No aplica">—</span>;
+const plural = (n: number) => `${n} ${n === 1 ? 'cuota vencida' : 'cuotas vencidas'}`;
 
-/** Importe o guion cuando no aplica (solicitudes sin desembolsar no tienen saldo). */
-const importe = (f: FilaPrestamo, valor: number) => (f.prestamo.etapa ? <span className="text-ink-subtle" aria-label="No aplica">—</span> : money(valor));
+/** Texto en el que busca el listado: código (PR-1001 o 1001), nombre del cliente y su documento. */
+export const textoBusquedaPrestamo = (p: PrestamoListadoApi) =>
+  [codigoPrestamo(p.numero), String(p.numero), p.clienteNombre, p.clienteNumeroDocumento].join(' ');
 
 /**
- * Columnas del listado de préstamos, pensadas para caber entre la barra lateral y el borde de la ventana sin scroll horizontal:
- * código y fecha de desembolso comparten celda, cliente y asesor también, y el total contractual pendiente solo aparece
- * desde pantallas anchas (en el detalle del préstamo está completo).
+ * Columnas del listado de préstamos (datos reales del servidor). La fila completa es clicable y se activa con teclado; el
+ * código es además un enlace real. No hay icono de ojo. Código y fecha, cliente y documento, agencia y asesor comparten celda
+ * para que la tabla quepa sin scroll horizontal; el total pendiente aparece desde pantallas anchas.
  */
-export function columnasPrestamo({ mostrarCliente = true }: { mostrarCliente?: boolean } = {}): ColumnDef<FilaPrestamo>[] {
-  const cols: ColumnDef<FilaPrestamo>[] = [
+export function columnasPrestamo(): ColumnDef<PrestamoListadoApi>[] {
+  return [
     {
-      id: 'id', header: 'Préstamo', accessorFn: (f) => f.prestamo.id, meta: { className: 'w-[7rem]' },
-      cell: ({ row: { original: f } }) => (
+      id: 'codigo', header: 'Préstamo', accessorFn: (p) => p.numero, meta: { className: 'w-[7.5rem]' },
+      cell: ({ row: { original: p } }) => (
         <div>
-          <Link to={`/prestamos/${f.prestamo.id}`} className="num font-medium text-teal-ink hover:underline">{f.prestamo.id}</Link>
-          <p className="num whitespace-nowrap text-xs text-ink-muted" title={f.prestamo.etapa ? 'Fecha prevista de desembolso' : 'Fecha de desembolso'}>{f.prestamo.etapa ? 'Prev. ' : ''}{fecha(f.prestamo.desembolso)}</p>
+          <Link to={`/prestamos/${p.id}`} className="num font-medium text-teal-ink hover:underline">{codigoPrestamo(p.numero)}</Link>
+          <p className="num whitespace-nowrap text-xs text-ink-muted" title="Fecha de desembolso">{fecha(p.fechaDesembolso)}</p>
+        </div>
+      )
+    },
+    {
+      id: 'cliente', header: 'Cliente', accessorFn: (p) => p.clienteNombre,
+      cell: ({ row: { original: p } }) => (
+        <div className="min-w-[10rem] max-w-[18rem]">
+          <p className="truncate font-medium text-ink" title={p.clienteNombre}>{p.clienteNombre}</p>
+          <p className="num truncate text-xs text-ink-muted">{p.clienteTipoDocumento} {p.clienteNumeroDocumento}</p>
+        </div>
+      )
+    },
+    {
+      id: 'responsable', header: 'Agencia / asesor', accessorFn: (p) => `${p.agenciaNombre} ${p.asesorNombre}`, meta: { className: 'hidden lg:table-cell' },
+      cell: ({ row: { original: p } }) => (
+        <div className="min-w-[8rem] max-w-[13rem]">
+          <p className="truncate text-ink" title={p.agenciaNombre}>{p.agenciaNombre}</p>
+          <p className="truncate text-xs text-ink-muted" title={p.asesorNombre}>{p.asesorNombre}</p>
+        </div>
+      )
+    },
+    { id: 'capital', header: 'Capital', accessorFn: (p) => p.capital, meta: { derecha: true }, cell: ({ row: { original: p } }) => money(p.capital) },
+    { id: 'capitalPend', header: 'Cap. pend.', accessorFn: (p) => p.capitalPendiente, meta: { derecha: true, descripcion: 'Capital que aún no figura como pagado' }, cell: ({ row: { original: p } }) => money(p.capitalPendiente) },
+    {
+      id: 'pendiente', header: 'Total pend.', accessorFn: (p) => p.totalPendiente,
+      meta: { derecha: true, className: 'hidden xl:table-cell', descripcion: 'Importe contractual pendiente (capital + intereses)' }, cell: ({ row: { original: p } }) => money(p.totalPendiente)
+    },
+    {
+      id: 'proxima', header: 'Próx. venc.', accessorFn: (p) => p.proximoVencimiento ?? '9999-12-31',
+      cell: ({ row: { original: p } }) => <span className="whitespace-nowrap">{p.proximoVencimiento ? fecha(p.proximoVencimiento) : sinDato}</span>
+    },
+    {
+      id: 'estado', header: 'Estado', accessorFn: (p) => p.estado, filterFn: 'equalsString',
+      sortingFn: (a, b) => ESTADOS_PRESTAMO.indexOf(a.original.estado) - ESTADOS_PRESTAMO.indexOf(b.original.estado),
+      cell: ({ row: { original: p } }) => (
+        <div className="flex flex-col items-start gap-0.5">
+          <StatusBadge estado={p.estado} />
+          {p.cuotasVencidas > 0 && <span className="num text-xs text-ink-muted">{plural(p.cuotasVencidas)}</span>}
         </div>
       )
     }
   ];
-  if (mostrarCliente) {
-    cols.push({
-      id: 'cliente', header: 'Cliente', accessorFn: (f) => f.cliente?.nombre ?? '',
-      cell: ({ row: { original: f } }) => (
-        <div className="min-w-[9rem] max-w-[16rem]"><p className="truncate font-medium text-ink" title={f.cliente?.nombre}>{f.cliente?.nombre ?? f.prestamo.clienteId}</p><p className="truncate text-xs text-ink-muted">{f.prestamo.asesor} · {f.prestamo.agencia}</p></div>
-      )
-    });
-  }
-  cols.push(
-    { id: 'capital', header: 'Capital', accessorFn: (f) => f.prestamo.capital, meta: { derecha: true }, cell: ({ row: { original: f } }) => money(f.prestamo.capital) },
-    { id: 'capitalPend', header: 'Cap. pend.', accessorFn: (f) => f.resumen.capitalPend, meta: { derecha: true, descripcion: 'Capital pendiente según el registro histórico' }, cell: ({ row: { original: f } }) => importe(f, f.resumen.capitalPend) },
-    {
-      id: 'pendiente', header: 'Total pend.', accessorFn: (f) => f.resumen.pendiente,
-      meta: { derecha: true, className: 'hidden xl:table-cell', descripcion: 'Importe contractual pendiente (capital + intereses)' }, cell: ({ row: { original: f } }) => importe(f, f.resumen.pendiente)
-    },
-    { id: 'proxima', header: 'Próx. venc.', accessorFn: (f) => f.resumen.proxima?.fecha ?? '9999', cell: ({ row: { original: f } }) => <span className="whitespace-nowrap">{f.resumen.proxima ? fecha(f.resumen.proxima.fecha) : <span className="text-ink-subtle" aria-label="No aplica">—</span>}</span> },
-    {
-      id: 'estado', header: 'Estado', accessorFn: (f) => f.estado, filterFn: 'equalsString', sortingFn: (a, b) => ESTADOS_PRESTAMO.indexOf(a.original.estado) - ESTADOS_PRESTAMO.indexOf(b.original.estado),
-      cell: ({ row: { original: f } }) => <StatusBadge estado={f.estado} />
-    },
-    {
-      id: 'acciones', header: () => <span className="sr-only">Acciones</span>, enableSorting: false, meta: { className: 'w-12 text-right' },
-      cell: ({ row: { original: f } }) => (
-        <Button asChild variant="ghost" size="iconSm" className="-my-1"><Link to={`/prestamos/${f.prestamo.id}`} aria-label={`Ver detalle del préstamo ${f.prestamo.id}`} onClick={(e) => e.stopPropagation()}><Eye className="size-4" aria-hidden /></Link></Button>
-      )
-    }
-  );
-  return cols;
 }
 
-export function TarjetaPrestamo({ f, mostrarCliente = true }: { f: FilaPrestamo; mostrarCliente?: boolean }) {
-  const sinDesembolso = !!f.prestamo.etapa;
+/** Tarjeta móvil: toda la tarjeta es un enlace al detalle. */
+export function TarjetaPrestamo({ p }: { p: PrestamoListadoApi }) {
   return (
-    <Link to={`/prestamos/${f.prestamo.id}`} className="block space-y-2.5 p-4 transition-colors active:bg-surface-2">
+    <Link to={`/prestamos/${p.id}`} className="block space-y-2.5 p-4 transition-colors active:bg-surface-2">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0"><p className="num font-medium text-teal-ink">{f.prestamo.id}</p>{mostrarCliente && <p className="truncate text-sm text-ink">{f.cliente?.nombre}</p>}</div>
-        <StatusBadge estado={f.estado} className="shrink-0" />
+        <div className="min-w-0">
+          <p className="num font-medium text-teal-ink">{codigoPrestamo(p.numero)}</p>
+          <p className="truncate text-sm text-ink">{p.clienteNombre}</p>
+          <p className="num truncate text-xs text-ink-muted">{p.clienteTipoDocumento} {p.clienteNumeroDocumento}</p>
+        </div>
+        <StatusBadge estado={p.estado} className="shrink-0" />
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-        <div><dt className="text-xs text-ink-muted">Capital</dt><dd className="num text-ink">{money(f.prestamo.capital)}</dd></div>
-        <div><dt className="text-xs text-ink-muted">Cap. pendiente</dt><dd className="num text-ink">{sinDesembolso ? '—' : money(f.resumen.capitalPend)}</dd></div>
-        <div><dt className="text-xs text-ink-muted">Total pendiente</dt><dd className="num font-medium text-ink">{sinDesembolso ? '—' : money(f.resumen.pendiente)}</dd></div>
-        <div><dt className="text-xs text-ink-muted">{sinDesembolso ? 'Desembolso previsto' : 'Próx. vencimiento'}</dt><dd className="text-ink">{sinDesembolso ? fecha(f.prestamo.desembolso) : f.resumen.proxima ? fecha(f.resumen.proxima.fecha) : '—'}</dd></div>
+        <div><dt className="text-xs text-ink-muted">Capital</dt><dd className="num text-ink">{money(p.capital)}</dd></div>
+        <div><dt className="text-xs text-ink-muted">Cap. pendiente</dt><dd className="num text-ink">{money(p.capitalPendiente)}</dd></div>
+        <div><dt className="text-xs text-ink-muted">Total pendiente</dt><dd className="num font-medium text-ink">{money(p.totalPendiente)}</dd></div>
+        <div><dt className="text-xs text-ink-muted">Próx. vencimiento</dt><dd className="text-ink">{p.proximoVencimiento ? fecha(p.proximoVencimiento) : '—'}</dd></div>
       </dl>
+      {p.cuotasVencidas > 0 && <p className="num text-xs font-medium text-danger-ink">{plural(p.cuotasVencidas)}</p>}
     </Link>
   );
 }

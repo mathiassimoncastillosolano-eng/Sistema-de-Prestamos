@@ -1,10 +1,16 @@
 package com.nexora.backend.prestamos.controladores;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
+import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
+import com.nexora.backend.prestamos.dto.PrestamoDetalle;
+import com.nexora.backend.prestamos.dto.PrestamoListado;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoResumen;
+import com.nexora.backend.prestamos.dto.SimulacionRespuesta;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
+import com.nexora.backend.prestamos.dto.SolicitudSimulacion;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
+import com.nexora.backend.prestamos.servicios.PrestamoConsultaServicio;
 import com.nexora.backend.prestamos.servicios.PrestamoServicio;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -27,37 +33,59 @@ public class PrestamoControlador {
     private static final String ATRIBUTO_PERFIL = "nexora.perfil";
 
     private final PrestamoServicio servicio;
+    private final PrestamoConsultaServicio consultas;
 
-    public PrestamoControlador(PrestamoServicio servicio) {
+    public PrestamoControlador(PrestamoServicio servicio, PrestamoConsultaServicio consultas) {
         this.servicio = servicio;
+        this.consultas = consultas;
     }
 
     @PostMapping
     public ResponseEntity<PrestamoRespuesta> registrar(
             HttpServletRequest request,
             @RequestBody SolicitudPrestamo solicitud) {
-
-        Object atributo = request.getAttribute(ATRIBUTO_PERFIL);
-        if (!(atributo instanceof Perfil perfil)) {
-            throw new PrestamoException(
-                    PrestamoException.Codigo.SIN_PERMISO,
-                    "No se pudo identificar al asesor de la sesión.",
-                    Map.of());
-        }
-
-        PrestamoRespuesta respuesta = servicio.registrar(perfil, solicitud);
+        PrestamoRespuesta respuesta = servicio.registrar(perfilDe(request), solicitud);
         return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
+    }
+
+    /** Fecha de desembolso, primera cuota y reglas vigentes (con la fecha de Lima). No escribe nada. */
+    @GetMapping("/condiciones")
+    public CondicionesRespuesta condiciones() {
+        return servicio.condiciones();
+    }
+
+    /** Cronograma que se guardaría hoy con ese capital y plazo. No escribe nada. */
+    @PostMapping("/simulacion")
+    public SimulacionRespuesta simular(@RequestBody SolicitudSimulacion solicitud) {
+        return servicio.simular(solicitud);
+    }
+
+    /** Listado de préstamos del alcance de la sesión (gerencia: todos; asesor: su agencia). */
+    @GetMapping
+    public List<PrestamoListado> listar(HttpServletRequest request) {
+        return consultas.listar(perfilDe(request));
     }
 
     /** Préstamos de un cliente (detalle del cliente). Cualquier usuario autenticado, igual que la consulta. */
     @GetMapping(params = "clienteId")
     public List<PrestamoResumen> listarPorCliente(@RequestParam UUID clienteId) {
-        return servicio.listarPorCliente(clienteId);
+        return consultas.listarPorCliente(clienteId);
     }
 
     /** Detalle del préstamo + cronograma. Cualquier usuario autenticado (la matriz de permisos PQ-15 sigue pendiente). */
     @GetMapping("/{id}")
-    public PrestamoRespuesta consultar(@PathVariable UUID id) {
-        return servicio.consultar(id);
+    public PrestamoDetalle consultar(@PathVariable UUID id) {
+        return consultas.detalle(id);
+    }
+
+    private static Perfil perfilDe(HttpServletRequest request) {
+        Object atributo = request.getAttribute(ATRIBUTO_PERFIL);
+        if (!(atributo instanceof Perfil perfil)) {
+            throw new PrestamoException(
+                    PrestamoException.Codigo.SIN_PERMISO,
+                    "No se pudo identificar al usuario de la sesión.",
+                    Map.of());
+        }
+        return perfil;
     }
 }

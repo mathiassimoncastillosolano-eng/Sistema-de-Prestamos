@@ -2,11 +2,11 @@
 
 Registro y consulta de préstamos: dashboard, clientes (DNI · RUC 10 · RUC 20), solicitudes, préstamos con cronograma, consulta del cronograma dentro de cada préstamo y PDF.
 
-> **Alcance: este sistema NO realiza ni registra pagos.** No hay pagos, abonos, amortizaciones, cancelaciones anticipadas ni liquidaciones: ni en la interfaz ni en los servicios (hay pruebas que lo comprueban).
+> **Alcance: este sistema NO realiza ni registra pagos.** No existe tabla de pagos: nada en la interfaz ni en los servicios marca una cuota como pagada. Una cuota solo figura PAGADA si así está guardada en la base de datos; el sistema no la cambia.
 
-> **Estados de demostración.** Los préstamos muestran los estados En evaluación, Aprobado, Vigente, En mora, Cancelado y Rechazado, y las cuotas Pendiente, Próxima a vencer, Vencida y Pagada. Se derivan en el navegador (`resumen()` y `estadoCuota()` en `src/lib/finance.ts`) de las fechas e importes de los datos ficticios; no hay conciliación real de pagos. «En evaluación», «Aprobado» y «Rechazado» son solicitudes sin desembolsar (`etapa`): no generan capital pendiente ni cuentan para el límite. La fecha de desembolso de una solicitud nueva es la fecha actual del sistema (no editable) y la primera cuota se calcula un mes después.
+> **Préstamos y cuotas (módulos reales).** Listado, detalle, cronograma, simulación, registro y PDF de préstamos usan el backend y PostgreSQL (`/api/prestamos`). Los estados del préstamo son solo **Vigente / En mora / Cancelado** y los de cuota **PENDIENTE / PAGADA / VENCIDA** (los CHECK de la BD). Se derivan al leer, en un único punto (`EvaluadorCartera`), de la fecha de hoy en Lima y de los vencimientos guardados: la lectura nunca escribe. Una cuota es VENCIDA si su fecha ya pasó y no está PAGADA; un préstamo está En mora si tiene alguna VENCIDA y Cancelado si todas son PAGADA. No hay solicitudes, aprobaciones ni rechazos: registrar un préstamo lo crea Vigente.
 
-> **Alcance real vs. ficticio.** Solo la **autenticación** es real: inicio de sesión con correo y contraseña, perfil, rol y agencia/ubicación vienen de PostgreSQL (`perfiles`, `agencias`, `ubicaciones`) a través del backend Spring Boot (`backend/`). Clientes, solicitudes, préstamos, cuotas y dashboard **siguen siendo datos ficticios en `localStorage`**; la consulta de DNI/RUC es simulada. Por eso el control de acceso a esos módulos es de navegación/presentación: no hay un servidor que proteja esos datos.
+> **Alcance real vs. ficticio.** Son reales: autenticación, clientes, dashboard y **préstamos/cuotas**. Siguen en datos ficticios del navegador (`localStorage`) solo piezas ajenas a esta remasterización, como el centro de notificaciones (`components/layout/notifications.tsx`). La ficha de cliente lista sus préstamos desde la API, pero conserva su propia tabla (con icono de ojo), que no se tocó.
 
 ## Ejecutar
 
@@ -71,19 +71,39 @@ Separación de responsabilidades: las reglas financieras viven **solo** en `lib/
 
 ## Reglas financieras (conservadas)
 
-Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda la empresa · TEA 30 % · plazo 1–60 meses · primera cuota un mes después del desembolso · sin cobro inicial. Parámetros en `src/lib/config.ts`.
+Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda la empresa · TEA 30 % · plazo 1–60 meses · sin cobro inicial. Las reglas viven en el backend y llegan al frontend por `GET /api/prestamos/condiciones`; ya no se duplican en el navegador.
 
-### Estados y capital pendiente (sin pagos)
+### Fórmula única y fechas
 
-- Las cuotas del cronograma **no muestran estado de pago** (pagada, pendiente, vencida…): el sistema aún no registra ni concilia pagos, así que esa etiqueta no sería fiable. Se muestran solo datos contractuales: N.º, vencimiento, capital, interés, cuota y saldo de capital.
-- Los datos mock incluyen un **registro histórico importado, de solo lectura**, que permite calcular el capital pendiente y los préstamos *Finalizados*. La interfaz no puede crear ni modificar ese registro.
-- Un préstamo nuevo no tiene cobertura: su capital pendiente es el capital original y **no disminuye con el paso del tiempo**.
+- `CalculadoraCronograma` (backend) es la **única** fórmula: sistema francés con cuotas iguales, **TEM = (1 + TEA)^(1/12) − 1**, interés = saldo × TEM, redondeo a 2 decimales y última cuota que cierra el saldo en 0.00. La simulación, el registro, el detalle y el PDF muestran exactamente lo que ella produce; el navegador no calcula cuotas.
+- **Fecha de desembolso** = fecha actual de Lima (`America/Lima`), calculada por el servidor y no editable. **Primera cuota** = un mes calendario después; la cuota *k* vence en `desembolso + k meses` calculado siempre desde la fecha original (el 31 de enero → 28/29 de febrero → 31 de marzo).
+- Al registrar, el cliente envía la fecha y el total que revisó; si el servidor calcula otra cosa (por ejemplo, cambió el día), responde **409 `CONDICIONES_DESACTUALIZADAS`** y no guarda nada.
+- El registro es **atómico** (préstamo + cuotas en una transacción) y el botón bloquea el doble envío.
+
+### API de préstamos (requiere sesión; CSRF en POST)
+
+| Método y ruta | Uso |
+|---|---|
+| `GET /api/prestamos/condiciones` | Reglas vigentes, fecha de desembolso y de primera cuota |
+| `POST /api/prestamos/simulacion` `{capital, plazoMeses}` | Cronograma que se guardaría hoy. **No persiste nada** |
+| `GET /api/prestamos` | Listado del alcance de la sesión (gerencia: todos; asesor: su agencia) con estado y saldos derivados |
+| `GET /api/prestamos?clienteId=…` | Préstamos de un cliente (ficha de cliente) |
+| `GET /api/prestamos/{id}` | Detalle: cabecera, KPI, cuotas con estado y historial |
+| `POST /api/prestamos` | Registro atómico (acepta `fechaDesembolsoEsperada` y `totalContractualEsperado`) |
+
+### Historial, saldos y límites del esquema
+
+- El **historial administrativo** muestra solo eventos reales que se pueden reconstruir de las tablas existentes (alta del préstamo con su asesor y fecha); no hay tabla de auditoría ni se inventan eventos.
+- **Capital pendiente** = capital de las cuotas no PAGADAS; **pendiente contractual** = importe de esas cuotas. Como no hay pagos, solo bajan si una cuota está guardada como PAGADA.
+- Sin tabla de pagos, el detalle de una cuota indica «Fecha de pago: No registrada».
+- «Solo mis préstamos» filtra por el dato real `propio` (el asesor del préstamo es la persona en sesión).
+
 
 ## PDF
 
-`Descargar PDF` (detalle del préstamo) genera «Ficha y cronograma del préstamo» en el navegador con jsPDF + autotable (carga diferida). A4, cabecera de tabla repetida en cada página, filas sin partir, totales al final y numeración «Página X de Y». Es informativo; no afirma validez legal. **No existe envío por correo**: no hay integración; «Mensaje para el cliente» solo prepara texto para copiar.
+Hay dos documentos, generados en el navegador con jsPDF + autotable (carga diferida), con los datos que entrega el servidor: (1) **Simulación de cronograma de cuotas**, marcada «SIMULACIÓN NO REGISTRADA» y **sin código de préstamo**, desde la revisión previa al registro; (2) **Ficha y cronograma del préstamo** (`PR-{número}`), desde el detalle, con los datos persistidos y el estado de cada cuota. A4, cabecera de tabla repetida, filas sin partir, totales, hora de generación en Lima y «Página X de Y». Son informativos; no afirman validez legal. **No existe envío por correo ni mensajería**: «Mensaje para el cliente» solo prepara texto para copiar.
 
-**Garantía de no regresión:** `npm run fixtures:legacy` ejecuta el código original (`legacy/`) y guarda sus resultados; `tests/finance.test.ts` y `tests/seed.test.ts` exigen que la versión TypeScript produzca cronogramas, pagos, resúmenes y estados **idénticos**.
+**Pruebas:** `./mvnw test` (en `backend/`) cubre la fórmula, las fechas (fin de mes, año bisiesto, Lima vs. UTC), el evaluador de estados, la consulta por alcance y el registro; `npm test` cubre la interfaz de Préstamos contra un servidor falso (`tests/prestamos-ui.test.tsx`) y el PDF (`tests/pdf-cronograma.test.ts`).
 
 ### ⚠ Discrepancia abierta (decisión de negocio pendiente)
 

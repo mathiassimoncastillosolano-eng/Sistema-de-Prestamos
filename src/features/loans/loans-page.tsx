@@ -1,5 +1,5 @@
-import { FilePlus2, Landmark, Search, SearchX } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { FilePlus2, Landmark, Search, SearchX, TriangleAlert } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DataTable } from '@/components/data-display/data-table';
 import { PageHeader } from '@/components/layout/page-header';
@@ -8,37 +8,47 @@ import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
-import { useUsuario } from '@/hooks/use-auth';
-import { useDb } from '@/hooks/use-db';
-import { useSimulatedLoading } from '@/hooks/use-simulated-loading';
-import { filasPrestamos } from '@/lib/selectors';
-import type { EstadoPrestamo } from '@/types';
-import { ESTADOS_PRESTAMO, TarjetaPrestamo, columnasPrestamo } from './loan-columns';
+import { PrestamoApiError, prestamosApi, type EstadoPrestamoApi, type PrestamoListadoApi } from '@/services/prestamos-api';
+import { TarjetaPrestamo, columnasPrestamo, textoBusquedaPrestamo } from './loan-columns';
+import { ESTADOS_PRESTAMO } from './loan-utils';
 
 const columnas = columnasPrestamo();
-type FiltroEstado = 'todos' | EstadoPrestamo;
+type FiltroEstado = 'todos' | EstadoPrestamoApi;
 
+/**
+ * Listado de préstamos con datos reales (GET /api/prestamos). Estados y saldos los calcula el servidor; los contadores salen de
+ * esos mismos datos. «Solo mis préstamos» filtra por `propio` (el asesor del préstamo es la persona en sesión).
+ */
 export default function LoansPage() {
-  const db = useDb();
-  const usuario = useUsuario();
   const navigate = useNavigate();
-  const cargando = useSimulatedLoading(260);
+  const [datos, setDatos] = useState<PrestamoListadoApi[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [q, setQ] = useState('');
   const [solo, setSolo] = useState(false);
   const [estado, setEstado] = useState<FiltroEstado>('todos');
 
-  const todas = useMemo(() => filasPrestamos(db), [db]);
-  const base = useMemo(() => (solo ? todas.filter((f) => f.prestamo.asesor === usuario.nombre) : todas), [todas, solo, usuario.nombre]);
+  useEffect(() => {
+    let vigente = true;
+    setError(null);
+    setDatos(null);
+    prestamosApi.listar()
+      .then((l) => { if (vigente) setDatos(l); })
+      .catch((e: unknown) => { if (vigente) setError(e instanceof PrestamoApiError ? e.message : 'No se pudo cargar el listado de préstamos.'); });
+    return () => { vigente = false; };
+  }, [intento]);
+
+  const base = useMemo(() => (solo ? (datos ?? []).filter((p) => p.propio) : (datos ?? [])), [datos, solo]);
   const hayFiltros = !!q || solo || estado !== 'todos';
   const filtros = useMemo(() => (estado === 'todos' ? [] : [{ id: 'estado', value: estado }]), [estado]);
   const opciones = useMemo(() => [
     { value: 'todos' as const, label: <>Todos <span className="num ml-1 text-xs opacity-70">{base.length}</span></> },
-    ...ESTADOS_PRESTAMO.map((e) => ({ value: e, label: <>{e} <span className="num ml-1 text-xs opacity-70">{base.filter((f) => f.estado === e).length}</span></> }))
+    ...ESTADOS_PRESTAMO.map((e) => ({ value: e, label: <>{e} <span className="num ml-1 text-xs opacity-70">{base.filter((p) => p.estado === e).length}</span></> }))
   ], [base]);
 
   return (
     <>
-      <PageHeader title="Préstamos" description="Cartera completa de la empresa, con sus solicitudes. Filtra por estado, ordena y abre el detalle de cada operación."
+      <PageHeader title="Préstamos" description="Préstamos registrados dentro de tu alcance. Filtra por estado, busca por código, cliente o documento y abre el detalle de cada uno."
         actions={<Button variant="primary" onClick={() => navigate('/solicitud')}><FilePlus2 className="size-4" />Nueva solicitud</Button>} />
 
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -52,13 +62,17 @@ export default function LoansPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <DataTable data={base} columns={columnas} getRowId={(f) => f.prestamo.id} busqueda={q} filtros={filtros} tamanoPagina={10} cargando={cargando}
-          textoBusqueda={(f) => [f.prestamo.id, f.cliente?.nombre ?? '', f.cliente?.doc ?? ''].join(' ')}
-          ordenInicial={[{ id: 'desembolso', desc: true }]} alAbrir={(f) => navigate(`/prestamos/${f.prestamo.id}`)} tarjeta={(f) => <TarjetaPrestamo f={f} />}
-          etiqueta="Listado de préstamos" unidad="préstamos"
-          vacio={hayFiltros
-            ? <EmptyState icon={SearchX} title="No hay préstamos con estos filtros" description="Quita algún filtro o cambia la búsqueda." action={<Button onClick={() => { setQ(''); setSolo(false); setEstado('todos'); }}>Limpiar filtros</Button>} />
-            : <EmptyState icon={Landmark} title="Aún no hay préstamos" description="Crea la primera solicitud para generar un cronograma." action={<Button variant="primary" onClick={() => navigate('/solicitud')}>Nueva solicitud</Button>} />} />
+        {error ? (
+          <EmptyState icon={TriangleAlert} title="No se pudo cargar el listado" description={error} action={<Button variant="primary" onClick={() => setIntento((n) => n + 1)}>Reintentar</Button>} />
+        ) : (
+          <DataTable data={base} columns={columnas} getRowId={(p) => p.id} busqueda={q} filtros={filtros} tamanoPagina={10} cargando={datos === null}
+            textoBusqueda={textoBusquedaPrestamo}
+            ordenInicial={[{ id: 'codigo', desc: true }]} alAbrir={(p) => navigate(`/prestamos/${p.id}`)} tarjeta={(p) => <TarjetaPrestamo p={p} />}
+            etiqueta="Listado de préstamos" unidad="préstamos"
+            vacio={hayFiltros
+              ? <EmptyState icon={SearchX} title="No hay préstamos con estos filtros" description="Quita algún filtro o cambia la búsqueda." action={<Button onClick={() => { setQ(''); setSolo(false); setEstado('todos'); }}>Limpiar filtros</Button>} />
+              : <EmptyState icon={Landmark} title="Aún no hay préstamos" description="Registra el primer préstamo para generar su cronograma." action={<Button variant="primary" onClick={() => navigate('/solicitud')}>Nueva solicitud</Button>} />} />
+        )}
       </Card>
     </>
   );

@@ -22,6 +22,7 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
   let sesionDe: CuentaFalsa | null = null;
   let retenerMe: Promise<void> | null = null;
   let logoutFalla = false;
+  let desactualizado = false;
   const llamadas: { ruta: string; metodo: string; cuerpo?: unknown }[] = [];
   const cliente = {
     id: '11111111-1111-4111-8111-111111111111', numero: 1,
@@ -97,6 +98,20 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     if (ruta.startsWith('/api/prestamos?clienteId=') && metodo === 'GET') {
       return sesionDe ? json(200, []) : json(401);
     }
+    if (ruta.startsWith('/api/prestamos')) {
+      if (!sesionDe) return json(401);
+      if (ruta === '/api/prestamos/condiciones' && metodo === 'GET') return json(200, CONDICIONES);
+      if (ruta === '/api/prestamos/simulacion' && metodo === 'POST') return json(200, armarSimulacion(cuerpo.capital, cuerpo.plazoMeses));
+      if (ruta === '/api/prestamos' && metodo === 'GET') return json(200, LISTADO);
+      if (ruta === '/api/prestamos' && metodo === 'POST') {
+        if (desactualizado || cuerpo.totalContractualEsperado !== armarSimulacion(cuerpo.capital, cuerpo.plazoMeses).totalContractual) {
+          return json(409, { codigo: 'CONDICIONES_DESACTUALIZADAS', mensaje: 'Las condiciones cambiaron desde la revisión.' });
+        }
+        return json(201, { ...DETALLE, capital: cuerpo.capital, plazoMeses: cuerpo.plazoMeses });
+      }
+      const id = ruta.slice('/api/prestamos/'.length);
+      if (metodo === 'GET') return id === DETALLE.id ? json(200, DETALLE) : json(404, { codigo: 'PRESTAMO_NO_ENCONTRADO', mensaje: 'x' });
+    }
     return json(404);
   });
 
@@ -109,6 +124,8 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     abrirSesion: (c: CuentaFalsa) => { sesionDe = c; },
     expirarSesion: () => { sesionDe = null; },
     fallarLogout: (v: boolean) => { logoutFalla = v; },
+    /** El próximo registro responde 409 CONDICIONES_DESACTUALIZADAS (como si hubiera cambiado el día). */
+    desactualizarCondiciones: (v: boolean) => { desactualizado = v; },
     retenerMe: () => { let soltar!: () => void; retenerMe = new Promise<void>((r) => { soltar = r; }); return () => { retenerMe = null; soltar(); }; }
   };
 }
@@ -141,3 +158,42 @@ export const CARTERA = {
     ]
   }]
 };
+
+/* ---------- Préstamos (contrato de /api/prestamos). Cifras sencillas y coherentes; NO reproducen la fórmula del backend. ---------- */
+export const CONDICIONES = {
+  moneda: 'PEN', tea: 0.3, capitalMinimo: 1000, limiteEndeudamiento: 10000, plazoMinimoMeses: 1, plazoMaximoMeses: 60,
+  zonaHoraria: 'America/Lima', fechaDesembolso: '2026-10-18', fechaPrimerVencimiento: '2026-11-18'
+};
+
+/** Cronograma de cuotas iguales: capital e interés repartidos a partes iguales (suficiente para probar la interfaz). */
+export function armarSimulacion(capital: number, plazoMeses: number) {
+  const interesTotal = Math.round(capital * 0.1 * 100) / 100;
+  const cuotas = Array.from({ length: plazoMeses }, (_, i) => {
+    const k = i + 1;
+    const cap = Math.round((capital / plazoMeses) * 100) / 100;
+    const int = Math.round((interesTotal / plazoMeses) * 100) / 100;
+    const mes = ((9 + k) % 12) + 1;
+    return { numero: k, fechaVencimiento: `2026-${String(mes).padStart(2, '0')}-18`, capital: cap, interes: int, importeCuota: Math.round((cap + int) * 100) / 100, saldo: Math.round((capital - cap * k) * 100) / 100 };
+  });
+  return {
+    moneda: 'PEN', capital, plazoMeses, tea: 0.3, fechaDesembolso: '2026-10-18', fechaPrimerVencimiento: '2026-11-18',
+    cuotaMensual: cuotas[0]?.importeCuota ?? 0, totalIntereses: interesTotal, totalContractual: Math.round((capital + interesTotal) * 100) / 100, cuotas
+  };
+}
+
+const sim2 = armarSimulacion(1000, 2);
+export const DETALLE = {
+  id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', numero: 1001, clienteId: '11111111-1111-4111-8111-111111111111',
+  clienteNombre: 'Cliente de prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '99999991',
+  agenciaNombre: 'Sur Prueba', asesorNombre: 'Valeria Quintana', moneda: 'PEN', capital: 1000, plazoMeses: 2, tea: 0.3,
+  fechaDesembolso: '2026-08-18', fechaPrimerVencimiento: '2026-09-18', fechaUltimoVencimiento: '2026-10-18',
+  estado: 'En mora', observaciones: null, cuotaMensual: sim2.cuotaMensual, totalIntereses: sim2.totalIntereses, totalContractual: sim2.totalContractual,
+  capitalPendiente: 1000, totalPendiente: sim2.totalContractual, proximoVencimiento: '2026-10-18', cuotasVencidas: 1,
+  cuotas: sim2.cuotas.map((c, i) => ({ ...c, estado: i === 0 ? 'VENCIDA' : 'PENDIENTE', importePendiente: c.importeCuota, diasAtraso: i === 0 ? 30 : 0 })),
+  historial: [{ fechaHora: '2026-08-18 10:15', tipo: 'Alta de préstamo', descripcion: 'Préstamo registrado con su cronograma', usuario: 'Valeria Quintana' }]
+};
+
+export const LISTADO = [
+  { id: DETALLE.id, numero: 1001, clienteId: DETALLE.clienteId, clienteNombre: 'Cliente de prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '99999991', agenciaNombre: 'Sur Prueba', asesorNombre: 'Valeria Quintana', propio: true, capital: 1000, plazoMeses: 2, fechaDesembolso: '2026-08-18', estado: 'En mora', totalContractual: sim2.totalContractual, capitalPendiente: 1000, totalPendiente: sim2.totalContractual, proximoVencimiento: '2026-10-18', cuotasVencidas: 1 },
+  { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', numero: 1002, clienteId: 'c2', clienteNombre: 'Otra Persona Prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '88888882', agenciaNombre: 'Sur Prueba', asesorNombre: 'Colega Prueba', propio: false, capital: 2000, plazoMeses: 4, fechaDesembolso: '2026-10-01', estado: 'Vigente', totalContractual: 2200, capitalPendiente: 2000, totalPendiente: 2200, proximoVencimiento: '2026-11-01', cuotasVencidas: 0 }
+];

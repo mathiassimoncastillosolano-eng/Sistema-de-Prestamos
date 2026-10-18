@@ -96,7 +96,10 @@ export function DataTable<T>({ data, columns, getRowId, textoBusqueda, busqueda 
             </thead>
             <tbody>
               {filas.map((row) => (
-                <tr key={row.id} onClick={alAbrir ? () => alAbrir(row.original) : undefined} className={cn('border-b border-line last:border-0 transition-colors', alAbrir && 'cursor-pointer hover:bg-surface-2/60')}>
+                <tr key={row.id} onClick={alAbrir ? () => alAbrir(row.original) : undefined}
+                  tabIndex={alAbrir ? 0 : undefined}
+                  onKeyDown={alAbrir ? (e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); alAbrir(row.original); } } : undefined}
+                  className={cn('border-b border-line last:border-0 transition-colors', alAbrir && 'cursor-pointer hover:bg-surface-2/60 focus-visible:bg-surface-2/60 focus-visible:outline-offset-[-2px]')}>
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta;
                     return <td key={cell.id} className={cn('px-3 py-3 align-middle first:pl-4 last:pr-4', meta?.derecha && 'num whitespace-nowrap text-right', meta?.className)}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>;

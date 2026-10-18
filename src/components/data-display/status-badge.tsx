@@ -1,8 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import type { EstadoCliente } from '@/lib/selectors';
+import type { EstadoCuotaApi } from '@/services/prestamos-api';
 import type { EstadoCuota, EstadoPrestamo } from '@/types';
 
-type Estado = EstadoPrestamo | EstadoCliente | EstadoCuota;
+type Estado = EstadoPrestamo | EstadoCliente | EstadoCuota | EstadoCuotaApi;
 type Tono = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'teal';
 
 /**
@@ -15,7 +16,9 @@ const TONOS: Record<Estado, Tono> = {
   // Clientes
   'Al día': 'success', 'Con cuotas vencidas': 'danger', 'Cerca del límite': 'warning', 'Sin préstamos activos': 'neutral',
   // Cuotas
-  Pendiente: 'neutral', 'Próxima a vencer': 'warning', Vencida: 'danger', Pagada: 'success'
+  Pendiente: 'neutral', 'Próxima a vencer': 'warning', Vencida: 'danger', Pagada: 'success',
+  // Cuotas según la base de datos (únicos estados permitidos en el módulo de cuotas)
+  PENDIENTE: 'neutral', PAGADA: 'success', VENCIDA: 'danger'
 };
 
 export const tonoDeEstado = (e: Estado): Tono => TONOS[e];

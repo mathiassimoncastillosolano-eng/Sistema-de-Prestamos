@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
+import com.nexora.backend.prestamos.servicios.PrestamoConsultaServicio;
 import com.nexora.backend.prestamos.servicios.PrestamoServicio;
 import java.util.List;
 import java.util.UUID;
@@ -18,13 +19,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class PrestamoControladorConsultaTest {
 
-    private PrestamoServicio servicio;
+    private PrestamoConsultaServicio servicio;
     private MockMvc mvc;
 
     @BeforeEach
     void preparar() {
-        servicio = mock(PrestamoServicio.class);
-        mvc = MockMvcBuilders.standaloneSetup(new PrestamoControlador(servicio))
+        servicio = mock(PrestamoConsultaServicio.class);
+        mvc = MockMvcBuilders.standaloneSetup(new PrestamoControlador(mock(PrestamoServicio.class), servicio))
                 .setControllerAdvice(new ManejadorErroresPrestamo())
                 .build();
     }
@@ -38,7 +39,7 @@ class PrestamoControladorConsultaTest {
 
     @Test
     void prestamoInexistenteDevuelve404() throws Exception {
-        when(servicio.consultar(any())).thenThrow(new PrestamoException(
+        when(servicio.detalle(any())).thenThrow(new PrestamoException(
                 PrestamoException.Codigo.PRESTAMO_NO_ENCONTRADO, "El préstamo indicado no existe."));
 
         mvc.perform(get("/api/prestamos/" + UUID.randomUUID()))

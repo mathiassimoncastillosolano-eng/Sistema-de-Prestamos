@@ -15,7 +15,8 @@ public class PrestamoException extends RuntimeException {
         PLAZO_FUERA_DE_RANGO(HttpStatus.UNPROCESSABLE_ENTITY),
         MONEDA_NO_PERMITIDA(HttpStatus.UNPROCESSABLE_ENTITY),
         LIMITE_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY),
-        PRESTAMO_NO_ENCONTRADO(HttpStatus.NOT_FOUND);
+        PRESTAMO_NO_ENCONTRADO(HttpStatus.NOT_FOUND),
+        CONDICIONES_DESACTUALIZADAS(HttpStatus.CONFLICT);
 
         private final HttpStatus estado;
 

@@ -6,7 +6,7 @@ import { DUR, EASE } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 
-const anchos = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl' };
+const anchos = { sm: 'max-w-md', md: 'max-w-lg', lg: 'max-w-2xl', xl: 'max-w-4xl' };
 
 interface ModalProps {
   open: boolean;

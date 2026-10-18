@@ -68,7 +68,7 @@ class PrestamoServicioTest {
 
     private PrestamoRespuesta registrar(String capital, Integer plazo, String moneda) {
         BigDecimal c = capital == null ? null : new BigDecimal(capital);
-        return servicio.registrar(asesor, new SolicitudPrestamo(clienteId, c, plazo, moneda, null));
+        return servicio.registrar(asesor, new SolicitudPrestamo(clienteId, c, plazo, moneda, null, null, null));
     }
 
     private PrestamoException rechaza(Codigo esperado, Executable accion) {
@@ -134,7 +134,7 @@ class PrestamoServicioTest {
         UUID otro = UUID.randomUUID();
         when(clientes.buscarBloqueando(otro)).thenReturn(Optional.empty());
         rechaza(Codigo.CLIENTE_NO_ENCONTRADO, () ->
-                servicio.registrar(asesor, new SolicitudPrestamo(otro, new BigDecimal("1000"), 6, null, null)));
+                servicio.registrar(asesor, new SolicitudPrestamo(otro, new BigDecimal("1000"), 6, null, null, null, null)));
     }
 
     @Test
@@ -149,5 +149,72 @@ class PrestamoServicioTest {
         PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1001", 12, null));
         assertEquals(new BigDecimal("9000.00"), ex.getDetalle().get("acumulado"));
         assertEquals(new BigDecimal("1.00"), ex.getDetalle().get("excedente"));
+    }
+
+    // ------------------------------------------------------------ condiciones y simulación
+
+    @Test
+    void condiciones_usan_la_fecha_de_lima_y_la_primera_cuota_un_mes_calendario_despues() {
+        var c = servicio.condiciones();
+        assertEquals(LocalDate.of(2026, 10, 17), c.fechaDesembolso()); // no el 18 de UTC
+        assertEquals(LocalDate.of(2026, 11, 17), c.fechaPrimerVencimiento());
+        assertEquals("America/Lima", c.zonaHoraria());
+        assertEquals(0, new BigDecimal("1000.00").compareTo(c.capitalMinimo()));
+        assertEquals(60, c.plazoMaximoMeses());
+    }
+
+    @Test
+    void simulacion_coincide_con_lo_que_se_registra_y_no_toca_la_base() {
+        var sim = servicio.simular(new com.nexora.backend.prestamos.dto.SolicitudSimulacion(new BigDecimal("1000"), 12));
+        PrestamoRespuesta real = registrar("1000", 12, null);
+
+        assertEquals(12, sim.cuotas().size());
+        assertEquals(real.fechaDesembolso(), sim.fechaDesembolso());
+        assertEquals(real.fechaPrimerVencimiento(), sim.fechaPrimerVencimiento());
+        assertEquals(0, real.cuotaMensual().compareTo(sim.cuotaMensual()));
+        assertEquals(0, real.totalContractual().compareTo(sim.totalContractual()));
+        for (int i = 0; i < 12; i++) {
+            assertEquals(real.cuotas().get(i), sim.cuotas().get(i));
+        }
+    }
+
+    @Test
+    void simulacion_no_guarda_nada() {
+        clearInvocations(prestamos, cuotas, clientes);
+        servicio.simular(new com.nexora.backend.prestamos.dto.SolicitudSimulacion(new BigDecimal("2500"), 6));
+        verify(prestamos, never()).save(any());
+        verify(cuotas, never()).saveAll(any());
+        verify(clientes, never()).buscarBloqueando(any());
+    }
+
+    @Test
+    void simulacion_valida_capital_y_plazo_como_el_registro() {
+        assertEquals(Codigo.CAPITAL_BAJO_MINIMO, assertThrows(PrestamoException.class, () ->
+                servicio.simular(new com.nexora.backend.prestamos.dto.SolicitudSimulacion(new BigDecimal("0"), 12))).getCodigo());
+        assertEquals(Codigo.PLAZO_FUERA_DE_RANGO, assertThrows(PrestamoException.class, () ->
+                servicio.simular(new com.nexora.backend.prestamos.dto.SolicitudSimulacion(new BigDecimal("1000"), 0))).getCodigo());
+        assertEquals(Codigo.PLAZO_FUERA_DE_RANGO, assertThrows(PrestamoException.class, () ->
+                servicio.simular(new com.nexora.backend.prestamos.dto.SolicitudSimulacion(new BigDecimal("1000"), 61))).getCodigo());
+    }
+
+    // ------------------------------------------------------------ lo revisado = lo registrado
+
+    @Test
+    void si_la_fecha_revisada_ya_no_es_la_de_hoy_no_se_registra() {
+        rechaza(Codigo.CONDICIONES_DESACTUALIZADAS, () -> servicio.registrar(asesor, new SolicitudPrestamo(
+                clienteId, new BigDecimal("1000"), 12, null, null, LocalDate.of(2026, 10, 16), null)));
+    }
+
+    @Test
+    void si_el_total_revisado_no_coincide_no_se_registra() {
+        rechaza(Codigo.CONDICIONES_DESACTUALIZADAS, () -> servicio.registrar(asesor, new SolicitudPrestamo(
+                clienteId, new BigDecimal("1000"), 12, null, null, null, new BigDecimal("1200.00"))));
+    }
+
+    @Test
+    void si_lo_revisado_coincide_se_registra() {
+        PrestamoRespuesta r = servicio.registrar(asesor, new SolicitudPrestamo(clienteId, new BigDecimal("1000"), 12,
+                null, null, LocalDate.of(2026, 10, 17), new BigDecimal("1149.43")));
+        assertEquals(12, r.cuotas().size());
     }
 }
