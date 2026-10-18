@@ -39,11 +39,14 @@ describe('A · login correcto como asesor', () => {
 
     // El listado usa la API de clientes y la ficha consulta el mismo ID.
     window.location.hash = '#/clientes';
-    const enlace = await screen.findByRole('link', { name: /Ver detalle/ });
+    const enlace = await screen.findByRole('link', { name: /Ver detalle/ }, { timeout: 5000 });
+    expect(screen.getByText('cliente@example.com')).toBeInTheDocument();
     await userEvent.setup().click(enlace);
     expect(await screen.findByRole('heading', { name: 'Datos del cliente' })).toBeInTheDocument();
-    expect(screen.getAllByText('99999991').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/99999991/).length).toBeGreaterThan(0);
     expect(screen.getByText('cliente@example.com')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Actividad crediticia' })).toBeInTheDocument();
+    expect(await screen.findByText('Sin préstamos')).toBeInTheDocument();
   });
 
   it('abre la ficha con el UUID devuelto por el registro real', async () => {
@@ -81,13 +84,12 @@ describe('A · login correcto como asesor', () => {
     await iniciarSesion(ASESORA);
 
     window.location.hash = '#/clientes/33333333-3333-4333-8333-333333333333';
-    expect(await screen.findByRole('heading', { name: 'Datos de RUC 10' })).toBeInTheDocument();
-    expect(screen.getByText('DNI del titular')).toBeInTheDocument();
-    expect(screen.queryByText('DNI del representante')).not.toBeInTheDocument();
+    expect(await screen.findByText('DNI del titular')).toBeInTheDocument();
+    expect(screen.queryByText('Representante legal')).not.toBeInTheDocument();
 
     window.location.hash = '#/clientes/44444444-4444-4444-8444-444444444444';
-    expect(await screen.findByRole('heading', { name: 'Datos de RUC 20' })).toBeInTheDocument();
-    expect(screen.getByText('DNI del representante')).toBeInTheDocument();
+    expect(await screen.findByText('Representante legal')).toBeInTheDocument();
+    expect(screen.getByText('Lucía Torres Vega · DNI 77776666')).toBeInTheDocument();
     expect(screen.queryByText('DNI del titular')).not.toBeInTheDocument();
   });
 
@@ -98,6 +100,20 @@ describe('A · login correcto como asesor', () => {
     const claves = Object.keys(localStorage).join(' ').toLowerCase();
     expect(claves).not.toMatch(/sesion|token|clave|auth/);
     expect(JSON.stringify({ ...localStorage })).not.toContain(ASESORA.clave);
+  });
+
+  it('la búsqueda global encuentra clientes de la base de datos y abre su ficha', async () => {
+    const servidor = montar();
+    servidor.agregarCliente({ id: '55555555-5555-4555-8555-555555555555', numero: 48, numeroDocumento: '60902621', nombre: 'Poemape Saldaña, Maria Teresa' });
+    const usuario = await iniciarSesion(ASESORA);
+    window.location.hash = '#/clientes/11111111-1111-4111-8111-111111111111';
+    await screen.findByRole('heading', { name: 'Datos del cliente' });
+
+    await usuario.keyboard('{Control>}k{/Control}');
+    await usuario.type(await screen.findByRole('combobox', { name: 'Buscar clientes' }), 'poemape');
+    await usuario.click(await screen.findByRole('option', { name: /Poemape Saldaña/ }));
+
+    await waitFor(() => expect(window.location.hash).toBe('#/clientes/55555555-5555-4555-8555-555555555555'));
   });
 
   it('muestra un mensaje si el cliente solicitado no existe', async () => {

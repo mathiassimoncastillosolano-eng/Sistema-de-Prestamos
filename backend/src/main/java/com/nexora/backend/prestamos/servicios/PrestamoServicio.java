@@ -7,6 +7,7 @@ import com.nexora.backend.prestamos.dominio.CalculadoraCronograma;
 import com.nexora.backend.prestamos.dominio.Cronograma;
 import com.nexora.backend.prestamos.dominio.ReglasPrestamo;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
+import com.nexora.backend.prestamos.dto.PrestamoResumen;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
 import com.nexora.backend.prestamos.entidades.ClienteResumen;
 import com.nexora.backend.prestamos.entidades.Prestamo;
@@ -113,6 +114,34 @@ public class PrestamoServicio {
         Cronograma cronograma = new Cronograma(filas, filas.get(0).importeCuota(), totalIntereses, totalContractual);
 
         return PrestamoRespuesta.de(prestamo, prestamo.getNumero(), cronograma);
+    }
+
+    /** Préstamos de un cliente con lo que tiene pendiente cada uno, leído del cronograma guardado. */
+    @Transactional(readOnly = true)
+    public List<PrestamoResumen> listarPorCliente(UUID clienteId) {
+        if (clienteId == null) {
+            throw new PrestamoException(Codigo.DATOS_INVALIDOS, "Indica el cliente.");
+        }
+        LocalDate hoy = LocalDate.now(reloj);
+        return prestamos.findByClienteIdOrderByFechaDesembolsoDescNumeroDesc(clienteId).stream()
+                .map(p -> resumir(p, hoy))
+                .toList();
+    }
+
+    private PrestamoResumen resumir(Prestamo p, LocalDate hoy) {
+        List<Cuota> filas = cuotas.findByIdPrestamoIdOrderByIdNumeroAsc(p.getId());
+        BigDecimal totalContractual = filas.stream().map(Cuota::getImporteCuota)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        boolean cancelado = "Cancelado".equals(p.getEstado());
+        BigDecimal capitalPendiente = cancelado ? BigDecimal.ZERO.setScale(2) : p.getCapital();
+        BigDecimal totalPendiente = cancelado ? BigDecimal.ZERO.setScale(2) : totalContractual;
+        LocalDate proximo = cancelado ? null : filas.stream()
+                .map(Cuota::getFechaVencimiento)
+                .filter(f -> !f.isBefore(hoy))
+                .findFirst()
+                .orElse(null);
+        return new PrestamoResumen(p.getId(), p.getNumero(), p.getCapital(), p.getPlazoMeses(),
+                p.getFechaDesembolso(), p.getEstado(), totalContractual, capitalPendiente, totalPendiente, proximo);
     }
 
     // ---------------------------------------------------------------- validaciones

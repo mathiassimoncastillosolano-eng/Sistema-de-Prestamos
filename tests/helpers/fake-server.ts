@@ -94,6 +94,9 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     if (ruta === '/api/dashboard' && metodo === 'GET') {
       return sesionDe ? json(200, CARTERA) : json(401);
     }
+    if (ruta.startsWith('/api/prestamos?clienteId=') && metodo === 'GET') {
+      return sesionDe ? json(200, []) : json(401);
+    }
     return json(404);
   });
 

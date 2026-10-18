@@ -2,10 +2,12 @@ package com.nexora.backend.prestamos.controladores;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
+import com.nexora.backend.prestamos.dto.PrestamoResumen;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
 import com.nexora.backend.prestamos.servicios.PrestamoServicio;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -44,6 +47,12 @@ public class PrestamoControlador {
 
         PrestamoRespuesta respuesta = servicio.registrar(perfil, solicitud);
         return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
+    }
+
+    /** Préstamos de un cliente (detalle del cliente). Cualquier usuario autenticado, igual que la consulta. */
+    @GetMapping(params = "clienteId")
+    public List<PrestamoResumen> listarPorCliente(@RequestParam UUID clienteId) {
+        return servicio.listarPorCliente(clienteId);
     }
 
     /** Detalle del préstamo + cronograma. Cualquier usuario autenticado (la matriz de permisos PQ-15 sigue pendiente). */

@@ -53,6 +53,13 @@ const columnas: ColumnDef<ClienteListado>[] = [
     cell: ({ row }) => row.original.telefono || '—'
   },
   {
+    accessorKey: 'correo',
+    header: 'Correo',
+    cell: ({ row }) => row.original.correo
+      ? <span className="block max-w-[16rem] truncate" title={row.original.correo}>{row.original.correo}</span>
+      : '—'
+  },
+  {
     id: 'detalle',
     header: 'Detalle',
     enableSorting: false,
@@ -73,6 +80,7 @@ function TarjetaCliente({ cliente }: { cliente: ClienteListado }) {
         <p className="truncate font-medium text-ink">{cliente.nombre}</p>
         <p className="num text-xs text-ink-muted">{cliente.tipoDocumento} · {cliente.numeroDocumento}</p>
         <p className="num text-xs text-ink-muted">{cliente.telefono || 'Sin teléfono'}</p>
+        <p className="truncate text-xs text-ink-muted">{cliente.correo || 'Sin correo'}</p>
         <p className="mt-1 text-xs font-medium text-teal-ink">Ver detalle</p>
       </div>
     </Link>
