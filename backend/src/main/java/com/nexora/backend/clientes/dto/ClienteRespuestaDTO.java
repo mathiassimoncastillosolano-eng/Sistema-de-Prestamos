@@ -19,13 +19,9 @@ public record ClienteRespuestaDTO(
         String representanteNombre,
         String representanteDni,
         UUID agenciaId,
-        String nombreAgencia,
         OffsetDateTime creadoEn
 ) {
-    public static ClienteRespuestaDTO desde(
-            Cliente cliente,
-            String nombreAgencia
-    ) {
+    public static ClienteRespuestaDTO desde(Cliente cliente) {
         return new ClienteRespuestaDTO(
                 cliente.getId(),
                 cliente.getNumero(),
@@ -40,7 +36,6 @@ public record ClienteRespuestaDTO(
                 cliente.getRepresentanteNombre(),
                 cliente.getRepresentanteDni(),
                 cliente.getAgenciaId(),
-                nombreAgencia,
                 cliente.getCreadoEn()
         );
     }

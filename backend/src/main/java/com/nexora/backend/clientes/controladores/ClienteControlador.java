@@ -2,6 +2,8 @@
 package com.nexora.backend.clientes.controladores;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
+import com.nexora.backend.clientes.dto.ClienteListadoDTO;
+import com.nexora.backend.clientes.dto.ClienteRespuestaDTO;
 import com.nexora.backend.clientes.dto.RegistroClienteDTO;
 import com.nexora.backend.clientes.entidades.Cliente;
 import com.nexora.backend.clientes.servicios.ClienteServicio;
@@ -13,9 +15,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.nexora.backend.clientes.dto.ConsultaDniRespuestaDTO;
 import com.nexora.backend.clientes.repositorios.ClienteRepositorio;
 import com.nexora.backend.clientes.servicios.ApiPeruCliente;
-import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @RestController
@@ -62,6 +66,25 @@ public class ClienteControlador {
     }
 
 
+    @GetMapping
+    public List<ClienteListadoDTO> listar() {
+        List<ClienteListadoDTO> respuesta = new ArrayList<>();
+
+        for (Cliente cliente : clienteServicio.listar()) {
+            respuesta.add(ClienteListadoDTO.desde(cliente));
+        }
+
+        return respuesta;
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ClienteRespuestaDTO> consultar(@PathVariable UUID id) {
+        Optional<Cliente> cliente = clienteServicio.consultar(id);
+        if (cliente.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(ClienteRespuestaDTO.desde(cliente.get()));
+    }
     @GetMapping("/consulta-dni")
     public ConsultaDniRespuestaDTO consultarDni(
             @RequestParam String dni) {

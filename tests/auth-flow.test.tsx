@@ -25,7 +25,7 @@ function montar(cuentas: CuentaFalsa[] = [ASESORA, GERENTE]) {
 }
 
 describe('A · login correcto como asesor', () => {
-  it('muestra el nombre y la agencia reales y el menú completo; los módulos siguen con sus datos ficticios', async () => {
+  it('muestra la sesión real y permite abrir un cliente obtenido de la API', async () => {
     montar();
     await iniciarSesion(ASESORA);
 
@@ -37,11 +37,12 @@ describe('A · login correcto como asesor', () => {
     expect(screen.queryByText(/Camila Ortiz/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Lima Centro/)).not.toBeInTheDocument();
 
-    // los mocks de clientes siguen ahí
+    // El listado usa la API de clientes y la ficha consulta el mismo ID.
     window.location.hash = '#/clientes';
-    // (la tabla está paginada y ordenada: basta con que aparezca algún cliente de la semilla)
-    const semilla = /Quispe|Cárdenas|Flores Ccori|Salas Vidal|Paredes Luna|Mamani|Torres Gómez|Ramos Ticona|Vargas Soto|Chávez Ruiz|Arce Linares|Benavides|Valle Verde|Pacífico Norte|Cáceres|Zúñiga/;
-    expect((await screen.findAllByText(semilla, undefined, { timeout: 4000 })).length).toBeGreaterThan(0);
+    const enlace = await screen.findByRole('link', { name: /Cliente de prueba/ });
+    await userEvent.setup().click(enlace);
+    expect(await screen.findByRole('heading', { name: 'Datos del cliente' })).toBeInTheDocument();
+    expect(screen.getAllByText('99999991').length).toBeGreaterThan(0);
   });
 
   it('no guarda ningún token ni sesión en el almacenamiento del navegador', async () => {
@@ -51,6 +52,13 @@ describe('A · login correcto como asesor', () => {
     const claves = Object.keys(localStorage).join(' ').toLowerCase();
     expect(claves).not.toMatch(/sesion|token|clave|auth/);
     expect(JSON.stringify({ ...localStorage })).not.toContain(ASESORA.clave);
+  });
+
+  it('muestra un mensaje si el cliente solicitado no existe', async () => {
+    montar();
+    await iniciarSesion(ASESORA);
+    window.location.hash = '#/clientes/00000000-0000-0000-0000-000000000000';
+    expect(await screen.findByText('Cliente no encontrado')).toBeInTheDocument();
   });
 });
 
