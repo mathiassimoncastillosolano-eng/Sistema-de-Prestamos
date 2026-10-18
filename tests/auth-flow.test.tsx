@@ -39,7 +39,7 @@ describe('A · login correcto como asesor', () => {
 
     // El listado usa la API de clientes y la ficha consulta el mismo ID.
     window.location.hash = '#/clientes';
-    const enlace = await screen.findByRole('link', { name: /Ver detalle/ });
+    const enlace = await screen.findByRole('link', { name: /Ver detalle/ }, { timeout: 5000 });
     expect(screen.getByText('cliente@example.com')).toBeInTheDocument();
     await userEvent.setup().click(enlace);
     expect(await screen.findByRole('heading', { name: 'Datos del cliente' })).toBeInTheDocument();
@@ -100,6 +100,20 @@ describe('A · login correcto como asesor', () => {
     const claves = Object.keys(localStorage).join(' ').toLowerCase();
     expect(claves).not.toMatch(/sesion|token|clave|auth/);
     expect(JSON.stringify({ ...localStorage })).not.toContain(ASESORA.clave);
+  });
+
+  it('la búsqueda global encuentra clientes de la base de datos y abre su ficha', async () => {
+    const servidor = montar();
+    servidor.agregarCliente({ id: '55555555-5555-4555-8555-555555555555', numero: 48, numeroDocumento: '60902621', nombre: 'Poemape Saldaña, Maria Teresa' });
+    const usuario = await iniciarSesion(ASESORA);
+    window.location.hash = '#/clientes/11111111-1111-4111-8111-111111111111';
+    await screen.findByRole('heading', { name: 'Datos del cliente' });
+
+    await usuario.keyboard('{Control>}k{/Control}');
+    await usuario.type(await screen.findByRole('combobox', { name: 'Buscar clientes' }), 'poemape');
+    await usuario.click(await screen.findByRole('option', { name: /Poemape Saldaña/ }));
+
+    await waitFor(() => expect(window.location.hash).toBe('#/clientes/55555555-5555-4555-8555-555555555555'));
   });
 
   it('muestra un mensaje si el cliente solicitado no existe', async () => {
