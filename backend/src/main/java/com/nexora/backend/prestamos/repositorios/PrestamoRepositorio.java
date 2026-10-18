@@ -11,6 +11,7 @@ import org.springframework.data.repository.query.Param;
 public interface PrestamoRepositorio extends Repository<Prestamo, UUID> {
 
     Prestamo save(Prestamo prestamo);
+    Optional<Prestamo> findById(UUID id);
 
     /** Capital de los préstamos activos del cliente en TODAS las agencias (vacío si no tiene). */
     @Query("select sum(p.capital) from Prestamo p where p.clienteId = :clienteId and p.estado = 'activo'")

@@ -21,6 +21,7 @@ import java.time.LocalDate;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -84,6 +85,34 @@ public class PrestamoServicio {
 
         Long numero = prestamos.obtenerNumero(prestamoId);
         return PrestamoRespuesta.de(prestamo, numero, cronograma);
+    }
+    
+    /**
+     * Consulta de un préstamo con su cronograma guardado. Devuelve el mismo formato que el registro,
+     * reconstruido solo con lo que hay en la BD (nada se recalcula, para que los importes sean idénticos).
+     */
+    @Transactional(readOnly = true)
+    public PrestamoRespuesta consultar(UUID id) {
+        Prestamo prestamo = prestamos.findById(id)
+                .orElseThrow(() -> new PrestamoException(Codigo.PRESTAMO_NO_ENCONTRADO,
+                        "El préstamo indicado no existe."));
+
+        List<Cronograma.Cuota> filas = cuotas.findByIdPrestamoIdOrderByIdNumeroAsc(id).stream()
+                .map(q -> new Cronograma.Cuota(q.getId().getNumero(), q.getFechaVencimiento(),
+                        q.getCapital(), q.getInteres(), q.getImporteCuota(), q.getSaldo()))
+                .toList();
+        if (filas.isEmpty()) {
+            throw new IllegalStateException("El préstamo no tiene cronograma guardado.");
+        }
+
+        BigDecimal totalIntereses = filas.stream().map(Cronograma.Cuota::interes)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal totalContractual = filas.stream().map(Cronograma.Cuota::importeCuota)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Todas las cuotas valen lo mismo salvo la última, que absorbe el redondeo: la primera es la cuota fija.
+        Cronograma cronograma = new Cronograma(filas, filas.get(0).importeCuota(), totalIntereses, totalContractual);
+
+        return PrestamoRespuesta.de(prestamo, prestamo.getNumero(), cronograma);
     }
 
     // ---------------------------------------------------------------- validaciones

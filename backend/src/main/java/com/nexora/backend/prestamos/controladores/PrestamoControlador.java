@@ -6,14 +6,16 @@ import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
 import com.nexora.backend.prestamos.servicios.PrestamoServicio;
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/prestamos")
@@ -42,5 +44,11 @@ public class PrestamoControlador {
 
         PrestamoRespuesta respuesta = servicio.registrar(perfil, solicitud);
         return ResponseEntity.status(HttpStatus.CREATED).body(respuesta);
+    }
+
+    /** Detalle del préstamo + cronograma. Cualquier usuario autenticado (la matriz de permisos PQ-15 sigue pendiente). */
+    @GetMapping("/{id}")
+    public PrestamoRespuesta consultar(@PathVariable UUID id) {
+        return servicio.consultar(id);
     }
 }

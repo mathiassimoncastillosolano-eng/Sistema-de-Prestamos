@@ -14,7 +14,8 @@ public class PrestamoException extends RuntimeException {
         CAPITAL_BAJO_MINIMO(HttpStatus.UNPROCESSABLE_ENTITY),
         PLAZO_FUERA_DE_RANGO(HttpStatus.UNPROCESSABLE_ENTITY),
         MONEDA_NO_PERMITIDA(HttpStatus.UNPROCESSABLE_ENTITY),
-        LIMITE_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY);
+        LIMITE_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY),
+        PRESTAMO_NO_ENCONTRADO(HttpStatus.NOT_FOUND);
 
         private final HttpStatus estado;
 

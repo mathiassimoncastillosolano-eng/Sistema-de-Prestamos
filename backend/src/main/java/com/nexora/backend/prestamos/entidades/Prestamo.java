@@ -64,7 +64,6 @@ public class Prestamo {
 
     public Prestamo(UUID clienteId, UUID agenciaId, UUID asesorId, BigDecimal capital,
                     int plazoMeses, BigDecimal tea, LocalDate fechaDesembolso, String observaciones) {
-        this.id = UUID.randomUUID();
         this.clienteId = clienteId;
         this.agenciaId = agenciaId;
         this.asesorId = asesorId;
