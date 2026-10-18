@@ -39,10 +39,56 @@ describe('A · login correcto como asesor', () => {
 
     // El listado usa la API de clientes y la ficha consulta el mismo ID.
     window.location.hash = '#/clientes';
-    const enlace = await screen.findByRole('link', { name: /Cliente de prueba/ });
+    const enlace = await screen.findByRole('link', { name: /Ver detalle/ });
     await userEvent.setup().click(enlace);
     expect(await screen.findByRole('heading', { name: 'Datos del cliente' })).toBeInTheDocument();
     expect(screen.getAllByText('99999991').length).toBeGreaterThan(0);
+    expect(screen.getByText('cliente@example.com')).toBeInTheDocument();
+  });
+
+  it('abre la ficha con el UUID devuelto por el registro real', async () => {
+    const servidor = montar();
+    const usuario = await iniciarSesion(ASESORA);
+    await usuario.click(await screen.findByRole('button', { name: 'Registrar cliente' }));
+
+    const formulario = screen.getByRole('dialog', { name: 'Registrar cliente' });
+    await usuario.type(within(formulario).getByPlaceholderText('8 dígitos'), '88887777');
+    await usuario.click(within(formulario).getByRole('button', { name: 'Consultar DNI' }));
+    expect(await within(formulario).findByDisplayValue('Ana Salazar Quispe')).toBeInTheDocument();
+    await usuario.type(within(formulario).getByLabelText('Celular'), '988877766');
+    await usuario.type(within(formulario).getByLabelText('Correo electrónico'), 'ana.salazar@example.com');
+    await usuario.click(within(formulario).getByRole('button', { name: 'Revisar y registrar' }));
+    await usuario.click(screen.getByRole('button', { name: 'Confirmar registro' }));
+
+    await waitFor(() => expect(window.location.hash).toBe('#/clientes/22222222-2222-4222-8222-222222222222'));
+    expect(await screen.findByRole('heading', { name: 'Datos del cliente' })).toBeInTheDocument();
+    expect(servidor.llamadas.some((llamada) => llamada.ruta === '/api/clientes' && llamada.metodo === 'POST')).toBe(true);
+  });
+
+  it('muestra en la ficha solo los campos que corresponden a RUC 10 o RUC 20', async () => {
+    const servidor = montar();
+    servidor.agregarCliente({
+      id: '33333333-3333-4333-8333-333333333333', tipoDocumento: 'RUC 10',
+      numeroDocumento: '10888877771', nombre: 'Ana Salazar Quispe',
+      dniTitular: '88887777', estadoSunat: 'ACTIVO', condicionSunat: 'HABIDO'
+    });
+    servidor.agregarCliente({
+      id: '44444444-4444-4444-8444-444444444444', tipoDocumento: 'RUC 20',
+      numeroDocumento: '20888877771', nombre: 'Andes del Sur SAC',
+      domicilio: 'Av. Los Andes 123', representanteNombre: 'Lucía Torres Vega',
+      representanteDni: '77776666', estadoSunat: 'ACTIVO', condicionSunat: 'HABIDO'
+    });
+    await iniciarSesion(ASESORA);
+
+    window.location.hash = '#/clientes/33333333-3333-4333-8333-333333333333';
+    expect(await screen.findByRole('heading', { name: 'Datos de RUC 10' })).toBeInTheDocument();
+    expect(screen.getByText('DNI del titular')).toBeInTheDocument();
+    expect(screen.queryByText('DNI del representante')).not.toBeInTheDocument();
+
+    window.location.hash = '#/clientes/44444444-4444-4444-8444-444444444444';
+    expect(await screen.findByRole('heading', { name: 'Datos de RUC 20' })).toBeInTheDocument();
+    expect(screen.getByText('DNI del representante')).toBeInTheDocument();
+    expect(screen.queryByText('DNI del titular')).not.toBeInTheDocument();
   });
 
   it('no guarda ningún token ni sesión en el almacenamiento del navegador', async () => {

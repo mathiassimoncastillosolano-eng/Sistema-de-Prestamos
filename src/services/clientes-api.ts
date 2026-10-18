@@ -70,8 +70,8 @@ export class ClientesApiError extends Error {
 
 const BASE = '/api/clientes';
 
-const MENSAJE_RED = 'No se pudo conectar con el servidor. Revisa tu conexiÃ³n e intÃ©ntalo nuevamente.';
-const MENSAJE_DESCONOCIDO = 'No se pudo completar la operaciÃ³n. IntÃ©ntalo nuevamente.';
+const MENSAJE_RED = 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo nuevamente.';
+const MENSAJE_DESCONOCIDO = 'No se pudo completar la operación. Inténtalo nuevamente.';
 
 function leerCookie(nombre: string): string | null {
   const par = document.cookie.split('; ').find((c) => c.startsWith(nombre + '='));
@@ -103,22 +103,22 @@ async function llamar<T>(ruta: string, init: { method: 'GET' | 'POST'; body?: un
     try { return (await r.json()) as T; } catch { throw new ClientesApiError('DESCONOCIDO', MENSAJE_DESCONOCIDO, r.status); }
   }
 
-  if (r.status === 401) throw new ClientesApiError('NO_AUTENTICADO', 'Tu sesiÃ³n ha expirado. Inicia sesiÃ³n nuevamente.', 401);
-  // 403 sin cuerpo propio: el servidor rechazÃ³ el token CSRF (p. ej. la pÃ¡gina quedÃ³ abierta tras cerrar sesiÃ³n).
+  if (r.status === 401) throw new ClientesApiError('NO_AUTENTICADO', 'Tu sesión ha expirado. Inicia sesión nuevamente.', 401);
+  // 403 sin cuerpo propio: el servidor rechazó el token CSRF (p. ej. la página quedó abierta tras cerrar sesión).
   let codigo = 'DESCONOCIDO';
-  let mensaje = r.status === 403 ? 'No se pudo validar la solicitud. Recarga la pÃ¡gina e intÃ©ntalo nuevamente.' : MENSAJE_DESCONOCIDO;
+  let mensaje = r.status === 403 ? 'No se pudo validar la solicitud. Recarga la página e inténtalo nuevamente.' : MENSAJE_DESCONOCIDO;
   try {
     const j = (await r.json()) as { codigo?: string; mensaje?: string };
     if (j.codigo) codigo = j.codigo;
     if (j.mensaje) mensaje = j.mensaje;
-  } catch { /* cuerpo no JSON (servidor caÃ­do o proxy) */ }
+  } catch { /* cuerpo no JSON (servidor caído o proxy) */ }
   throw new ClientesApiError(codigo, mensaje, r.status);
 }
 
 export const clientesApi = {
 
   consultar(tipo: TipoCliente, numero: string) {
-    // encodeURIComponent: Â«RUC 10Â» viaja como RUC%2010 (no con Â«+Â»).
+    // encodeURIComponent: «RUC 10» viaja como RUC%2010 (no con «+»).
     return llamar<ConsultaDocumento>(`/consulta?tipo=${encodeURIComponent(tipo)}&numero=${encodeURIComponent(numero)}`, { method: 'GET' });
   },
 

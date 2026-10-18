@@ -44,6 +44,6 @@ public class ManejadorErroresClientes {
     public ResponseEntity<ErrorRespuesta> inesperado(Exception e) {
         LOG.error("Error inesperado en la API de clientes: {}", e.getClass().getName());
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ErrorRespuesta("DESCONOCIDO", "No se pudo completar la operaciÃ³n. IntÃ©ntalo nuevamente."));
+                .body(new ErrorRespuesta("DESCONOCIDO", "No se pudo completar la operación. Inténtalo nuevamente."));
     }
 }

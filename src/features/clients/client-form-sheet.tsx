@@ -37,7 +37,7 @@ const Seccion = ({ titulo, children }: { titulo: string; children: React.ReactNo
 
 type Estado = { tipo: 'idle' | 'cargando' | 'ok' | 'sin-datos' | 'invalido'; texto?: string };
 
-/** Campos que completa la consulta a API PERÃš (solo lectura en el formulario). */
+/** Campos que completa la consulta a API PERÚ (solo lectura en el formulario). */
 const CAMPOS_CONSULTA = ['nombre', 'dniTitular', 'domicilio', 'repNombre', 'repDni', 'estadoSunat', 'condicionSunat'] as const;
 
 const MENSAJE_OK: Record<TipoCliente, string> = {
@@ -52,7 +52,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
   const yo = useIdentidad();
   const [confirmar, setConfirmar] = useState<ClienteForm | null>(null);
   const [guardando, setGuardando] = useState(false);
-  /** Ãšltima consulta vÃ¡lida. Solo con ella (y para el mismo documento) se puede registrar. */
+  /** Última consulta válida. Solo con ella (y para el mismo documento) se puede registrar. */
   const [datos, setDatos] = useState<ConsultaDocumento | null>(null);
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<ClienteForm>({
@@ -82,13 +82,13 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
         tipo: 'invalido',
         texto:
           tipo === 'DNI'
-            ? 'El DNI debe tener exactamente 8 dÃ­gitos.'
-            : `El RUC debe tener 11 dÃ­gitos y empezar con ${tipo === 'RUC 10' ? '10' : '20'}.`
+            ? 'El DNI debe tener exactamente 8 dígitos.'
+            : `El RUC debe tener 11 dígitos y empezar con ${tipo === 'RUC 10' ? '10' : '20'}.`
       });
       return;
     }
 
-    setConsulta({ tipo: 'cargando', texto: tipo === 'DNI' ? 'Consultando DNIâ€¦' : 'Consultando RUCâ€¦' });
+    setConsulta({ tipo: 'cargando', texto: tipo === 'DNI' ? 'Consultando DNI…' : 'Consultando RUC…' });
     setDatos(null);
     CAMPOS_CONSULTA.forEach((k) => setValue(k, ''));
 
@@ -116,12 +116,12 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
         tipo: 'sin-datos',
         texto: error instanceof Error
           ? error.message
-          : 'No se pudo consultar el documento. IntÃ©ntalo nuevamente.'
+          : 'No se pudo consultar el documento. Inténtalo nuevamente.'
       });
     }
   };
 
-  /** Solo se pasa a la confirmaciÃ³n con una consulta vigente, del mismo documento y que permita el registro. */
+  /** Solo se pasa a la confirmación con una consulta vigente, del mismo documento y que permita el registro. */
   const revisar = (v: ClienteForm) => {
     if (!datos || datos.tipoDocumento !== v.tipo || datos.numeroDocumento !== v.doc) {
       setConsulta({ tipo: 'invalido', texto: 'Consulta el documento antes de registrar al cliente.' });
@@ -134,10 +134,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
     setConfirmar(v);
   };
 
-  /**
-   * Registra en el servidor (base de datos) y despuÃ©s refleja el cliente en los datos locales del navegador,
-   * de los que aÃºn leen el listado, el expediente y las solicitudes de prÃ©stamo.
-   */
+  /** La solicitud de préstamo aún usa el almacén local; solo allí necesita una copia temporal. */
   const reflejarEnLocal = (c: ClienteRegistrado) =>
     registrarCliente(yo, {
       nombre: c.nombre, tipo: c.tipoDocumento, doc: c.numeroDocumento, telefono: c.telefono ?? '',
@@ -155,7 +152,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
     } catch (error) {
       setGuardando(false);
       setConfirmar(null);
-      const mensaje = error instanceof Error ? error.message : 'No se pudo registrar al cliente. IntÃ©ntalo nuevamente.';
+      const mensaje = error instanceof Error ? error.message : 'No se pudo registrar al cliente. Inténtalo nuevamente.';
       toast.error(mensaje);
       if (error instanceof ClientesApiError && (error.codigo === 'DOCUMENTO_REGISTRADO' || error.codigo === 'CLIENTE_NO_HABILITADO')) {
         setConsulta({ tipo: 'sin-datos', texto: mensaje });
@@ -167,13 +164,17 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
     setConfirmar(null);
     cerrar(false);
 
-    const r = reflejarEnLocal(creado);
-    if (!r.ok) { navigate('/clientes'); return; }
-    if (onCreated) onCreated(r.cliente); else navigate(`/clientes/${r.cliente.id}`);
+    if (onCreated) {
+      const r = reflejarEnLocal(creado);
+      if (r.ok) onCreated(r.cliente);
+      else navigate(`/clientes/${creado.id}`);
+    } else {
+      navigate(`/clientes/${creado.id}`);
+    }
   };
 
   const dniLen = tipo === 'DNI' ? 8 : 11;
-  const nombreLabel = tipo === 'RUC 20' ? 'RazÃ³n social' : tipo === 'RUC 10' ? 'Nombre del titular' : 'Nombres y apellidos';
+  const nombreLabel = tipo === 'RUC 20' ? 'Razón social' : tipo === 'RUC 10' ? 'Nombre del titular' : 'Nombres y apellidos';
 
 
   return (
@@ -182,7 +183,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
         open={open}
         onOpenChange={cerrar}
         title="Registrar cliente"
-        description="Persona natural, persona con negocio o persona jurÃ­dica."
+        description="Persona natural, persona con negocio o persona jurídica."
         footer={
           <>
             <Button variant="secondary" onClick={() => cerrar(false)}>
@@ -213,7 +214,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
             />
           </Seccion>
 
-          <Seccion titulo="IdentificaciÃ³n">
+          <Seccion titulo="Identificación">
             <div className="flex items-start gap-3 rounded-control bg-info-soft p-3 text-[0.8125rem] text-info-ink">
               <ShieldAlert
                 className="mt-0.5 size-4 shrink-0"
@@ -223,9 +224,9 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
                 {tipo === 'DNI'
                   ? 'Los nombres y apellidos se obtienen de RENIEC al consultar el DNI.'
                   : tipo === 'RUC 10'
-                    ? 'El titular, su DNI, el estado y la condiciÃ³n se obtienen de SUNAT.'
-                    : 'La razÃ³n social, el domicilio fiscal, el estado, la condiciÃ³n y el representante legal se obtienen de SUNAT.'}
-                {tipo !== 'DNI' && ' Solo se registran contribuyentes con estado ACTIVO y condiciÃ³n HABIDO.'}
+                    ? 'El titular, su DNI, el estado y la condición se obtienen de SUNAT.'
+                    : 'La razón social, el domicilio fiscal, el estado, la condición y el representante legal se obtienen de SUNAT.'}
+                {tipo !== 'DNI' && ' Solo se registran contribuyentes con estado ACTIVO y condición HABIDO.'}
               </p>
             </div>
 
@@ -238,14 +239,14 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
               error={errors.doc?.message}
               hint={
                 <span className="num">
-                  {doc.length}/{dniLen} dÃ­gitos
+                  {doc.length}/{dniLen} dígitos
                 </span>
               }
             >
               <Input
                 inputMode="numeric"
                 maxLength={dniLen}
-                placeholder={`${dniLen} dÃ­gitos`}
+                placeholder={`${dniLen} dígitos`}
                 autoComplete="off"
                 {...register('doc', {
                   onChange: limpiarConsulta
@@ -271,8 +272,8 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
                 {consulta.tipo === 'idle' && (
                   <>
                     {tipo === 'DNI'
-                      ? 'Ingresa el DNI de 8 dÃ­gitos para consultar.'
-                      : 'Ingresa el RUC de 11 dÃ­gitos para consultar.'}
+                      ? 'Ingresa el DNI de 8 dígitos para consultar.'
+                      : 'Ingresa el RUC de 11 dígitos para consultar.'}
                   </>
                 )}
 
@@ -346,10 +347,10 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
             {tipo !== 'DNI' && (
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Estado SUNAT">
-                  <Input readOnly placeholder="â€”" {...register('estadoSunat')} />
+                  <Input readOnly placeholder="—" {...register('estadoSunat')} />
                 </Field>
-                <Field label="CondiciÃ³n SUNAT">
-                  <Input readOnly placeholder="â€”" {...register('condicionSunat')} />
+                <Field label="Condición SUNAT">
+                  <Input readOnly placeholder="—" {...register('condicionSunat')} />
                 </Field>
               </div>
             )}
@@ -398,7 +399,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
             </Field>
 
             <Field
-              label="Correo electrÃ³nico"
+              label="Correo electrónico"
               error={errors.correo?.message}
             >
               <Input
@@ -420,7 +421,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
           if (!o && !guardando) setConfirmar(null);
         }}
         title="Confirmar registro"
-        description="Se crearÃ¡ un expediente con un identificador Ãºnico."
+        description="Se creará un expediente con un identificador único."
         footer={
           <>
             <Button
@@ -454,7 +455,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
               {
                 label:
                   confirmar.tipo === 'RUC 20'
-                    ? 'RazÃ³n social'
+                    ? 'Razón social'
                     : 'Nombre',
                 value: confirmar.nombre
               },
@@ -474,7 +475,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
                   },
                   {
                     label: 'Representante',
-                    value: `${confirmar.repNombre} Â· DNI ${confirmar.repDni}`
+                    value: `${confirmar.repNombre} · DNI ${confirmar.repDni}`
                   }
                 ]
                 : []),
@@ -482,7 +483,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
                 ? [
                   {
                     label: 'SUNAT',
-                    value: `${confirmar.estadoSunat} Â· ${confirmar.condicionSunat}`
+                    value: `${confirmar.estadoSunat} · ${confirmar.condicionSunat}`
                   }
                 ]
                 : []),
