@@ -14,10 +14,8 @@ import { Sheet } from '@/components/ui/sheet';
 import { toast } from '@/components/ui/toast';
 import { useIdentidad } from '@/hooks/use-auth';
 import { TIPOS_CLIENTE, clienteSchema, clienteVacio, esDocumentoValido, type ClienteForm } from '@/lib/validation';
-import { delay } from '@/lib/utils';
 import { registrarCliente } from '@/services/actions';
-import { EJEMPLOS_CONSULTA, consultarDni, consultarRuc, esEmpresaMock } from '@/services/identity';
-import { getDb } from '@/services/store';
+import { ClientesApiError, clientesApi, type ClienteRegistrado, type ConsultaDocumento } from '@/services/clientes-api';
 import type { Cliente, TipoCliente } from '@/types';
 
 interface Props {
@@ -39,123 +37,469 @@ const Seccion = ({ titulo, children }: { titulo: string; children: React.ReactNo
 
 type Estado = { tipo: 'idle' | 'cargando' | 'ok' | 'sin-datos' | 'invalido'; texto?: string };
 
+/** Campos que completa la consulta a API PERÃš (solo lectura en el formulario). */
+const CAMPOS_CONSULTA = ['nombre', 'dniTitular', 'domicilio', 'repNombre', 'repDni', 'estadoSunat', 'condicionSunat'] as const;
+
+const MENSAJE_OK: Record<TipoCliente, string> = {
+  DNI: 'Nombre obtenido de RENIEC.',
+  'RUC 10': 'Datos obtenidos de SUNAT. DNI del titular verificado.',
+  'RUC 20': 'Datos obtenidos de SUNAT.'
+};
+
 export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
   const navigate = useNavigate();
   const [consulta, setConsulta] = useState<Estado>({ tipo: 'idle' });
   const yo = useIdentidad();
   const [confirmar, setConfirmar] = useState<ClienteForm | null>(null);
   const [guardando, setGuardando] = useState(false);
+  /** Ãšltima consulta vÃ¡lida. Solo con ella (y para el mismo documento) se puede registrar. */
+  const [datos, setDatos] = useState<ConsultaDocumento | null>(null);
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<ClienteForm>({
-    // El esquema se reconstruye en cada validación para ver siempre los documentos ya registrados
-    resolver: (values, ctx, opts) => zodResolver(clienteSchema(getDb().clientes.map((c) => c.doc)))(values, ctx, opts),
+    resolver: zodResolver(clienteSchema),
     defaultValues: clienteVacio(), mode: 'onTouched', reValidateMode: 'onChange'
   });
   const tipo = watch('tipo');
   const doc = watch('doc');
 
-  const cambiarTipo = (t: TipoCliente) => { reset(clienteVacio(t)); setConsulta({ tipo: 'idle' }); };
-  const cerrar = (o: boolean) => { onOpenChange(o); if (!o) { reset(clienteVacio()); setConsulta({ tipo: 'idle' }); } };
+  const cambiarTipo = (t: TipoCliente) => { reset(clienteVacio(t)); setConsulta({ tipo: 'idle' }); setDatos(null); };
+  const cerrar = (o: boolean) => { onOpenChange(o); if (!o) { reset(clienteVacio()); setConsulta({ tipo: 'idle' }); setDatos(null); } };
+
+  /** Al cambiar el documento, los datos consultados dejan de valer. */
+  const limpiarConsulta = () => {
+    setConsulta({ tipo: 'idle' });
+    if (!datos) return;
+    setDatos(null);
+    CAMPOS_CONSULTA.forEach((k) => setValue(k, ''));
+  };
+
 
   const consultar = async () => {
-    if (!esDocumentoValido(tipo, doc.trim())) { setConsulta({ tipo: 'invalido', texto: 'Revisa el número: el DNI tiene 8 dígitos y el RUC 11 (10… o 20…).' }); return; }
-    setConsulta({ tipo: 'cargando', texto: 'Consultando datos de demostración…' });
-    const sv = (k: keyof ClienteForm, v: string) => setValue(k, v, { shouldValidate: true, shouldDirty: true });
-    if (tipo === 'DNI') {
-      const nombre = await consultarDni(doc.trim());
-      if (!nombre) { setConsulta({ tipo: 'sin-datos' }); return; }
-      sv('nombre', nombre);
-    } else {
-      const r = await consultarRuc(doc.trim());
-      if (!r) { setConsulta({ tipo: 'sin-datos' }); return; }
-      if (esEmpresaMock(r)) { sv('nombre', r.razon); sv('repNombre', r.rep); sv('repDni', r.repDni); sv('domicilio', r.domicilio); }
-      else { sv('nombre', r.titular); sv('dniTitular', r.dni); sv('negocio', r.negocio); }
+    const documento = doc.trim();
+
+    if (!esDocumentoValido(tipo, documento)) {
+      setConsulta({
+        tipo: 'invalido',
+        texto:
+          tipo === 'DNI'
+            ? 'El DNI debe tener exactamente 8 dÃ­gitos.'
+            : `El RUC debe tener 11 dÃ­gitos y empezar con ${tipo === 'RUC 10' ? '10' : '20'}.`
+      });
+      return;
     }
-    setConsulta({ tipo: 'ok' });
+
+    setConsulta({ tipo: 'cargando', texto: tipo === 'DNI' ? 'Consultando DNIâ€¦' : 'Consultando RUCâ€¦' });
+    setDatos(null);
+    CAMPOS_CONSULTA.forEach((k) => setValue(k, ''));
+
+    try {
+      const r = await clientesApi.consultar(tipo, documento);
+
+      const sv = (k: keyof ClienteForm, v: string | null) =>
+        setValue(k, v ?? '', { shouldValidate: k === 'nombre', shouldDirty: true });
+      sv('nombre', r.nombre);
+      sv('dniTitular', r.dniTitular);
+      sv('domicilio', r.domicilio);
+      sv('repNombre', r.representanteNombre);
+      sv('repDni', r.representanteDni);
+      sv('estadoSunat', r.estadoSunat);
+      sv('condicionSunat', r.condicionSunat);
+      setDatos(r);
+
+      setConsulta(
+        r.habilitado
+          ? { tipo: 'ok', texto: MENSAJE_OK[tipo] }
+          : { tipo: 'sin-datos', texto: r.motivo ?? 'Este cliente no se puede registrar.' }
+      );
+    } catch (error) {
+      setConsulta({
+        tipo: 'sin-datos',
+        texto: error instanceof Error
+          ? error.message
+          : 'No se pudo consultar el documento. IntÃ©ntalo nuevamente.'
+      });
+    }
   };
+
+  /** Solo se pasa a la confirmaciÃ³n con una consulta vigente, del mismo documento y que permita el registro. */
+  const revisar = (v: ClienteForm) => {
+    if (!datos || datos.tipoDocumento !== v.tipo || datos.numeroDocumento !== v.doc) {
+      setConsulta({ tipo: 'invalido', texto: 'Consulta el documento antes de registrar al cliente.' });
+      return;
+    }
+    if (!datos.habilitado) {
+      setConsulta({ tipo: 'sin-datos', texto: datos.motivo ?? 'Este cliente no se puede registrar.' });
+      return;
+    }
+    setConfirmar(v);
+  };
+
+  /**
+   * Registra en el servidor (base de datos) y despuÃ©s refleja el cliente en los datos locales del navegador,
+   * de los que aÃºn leen el listado, el expediente y las solicitudes de prÃ©stamo.
+   */
+  const reflejarEnLocal = (c: ClienteRegistrado) =>
+    registrarCliente(yo, {
+      nombre: c.nombre, tipo: c.tipoDocumento, doc: c.numeroDocumento, telefono: c.telefono ?? '',
+      ...(c.tipoDocumento === 'RUC 10' ? { dniTitular: c.dniTitular ?? '' } : {}),
+      ...(c.tipoDocumento === 'RUC 20'
+        ? { domicilio: c.domicilio ?? '', representante: { nombre: c.representanteNombre ?? '', dni: c.representanteDni ?? '' } }
+        : {})
+    });
 
   const guardar = async (v: ClienteForm) => {
     setGuardando(true);
-    await delay(450); // simula la latencia de un servicio
-    const r = registrarCliente(yo, {
-      nombre: v.nombre, tipo: v.tipo, doc: v.doc, telefono: v.telefono,
-      ...(v.tipo === 'RUC 10' ? { negocio: v.negocio, dniTitular: v.dniTitular } : {}),
-      ...(v.tipo === 'RUC 20' ? { domicilio: v.domicilio, representante: { nombre: v.repNombre, dni: v.repDni } } : {})
-    });
+    let creado: ClienteRegistrado;
+    try {
+      creado = await clientesApi.registrar(v.tipo, v.doc, v.telefono, v.correo);
+    } catch (error) {
+      setGuardando(false);
+      setConfirmar(null);
+      const mensaje = error instanceof Error ? error.message : 'No se pudo registrar al cliente. IntÃ©ntalo nuevamente.';
+      toast.error(mensaje);
+      if (error instanceof ClientesApiError && (error.codigo === 'DOCUMENTO_REGISTRADO' || error.codigo === 'CLIENTE_NO_HABILITADO')) {
+        setConsulta({ tipo: 'sin-datos', texto: mensaje });
+      }
+      return;
+    }
     setGuardando(false);
-    if (!r.ok) { toast.error(r.error); setConfirmar(null); return; }
-    toast.success(`Cliente registrado: ${r.cliente.nombre}`);
+    toast.success(`Cliente registrado: ${creado.nombre}`);
     setConfirmar(null);
     cerrar(false);
+
+    const r = reflejarEnLocal(creado);
+    if (!r.ok) { navigate('/clientes'); return; }
     if (onCreated) onCreated(r.cliente); else navigate(`/clientes/${r.cliente.id}`);
   };
 
   const dniLen = tipo === 'DNI' ? 8 : 11;
-  const nombreLabel = tipo === 'RUC 20' ? 'Razón social' : tipo === 'RUC 10' ? 'Nombre del titular' : 'Nombres y apellidos';
+  const nombreLabel = tipo === 'RUC 20' ? 'RazÃ³n social' : tipo === 'RUC 10' ? 'Nombre del titular' : 'Nombres y apellidos';
+
 
   return (
     <>
-      <Sheet open={open} onOpenChange={cerrar} title="Registrar cliente" description="Persona natural, persona con negocio o persona jurídica."
-        footer={<><Button variant="secondary" onClick={() => cerrar(false)}>Cancelar</Button><Button variant="primary" type="submit" form="form-cliente">Revisar y registrar</Button></>}>
-        <form id="form-cliente" noValidate onSubmit={handleSubmit((v) => setConfirmar(v))}>
+      <Sheet
+        open={open}
+        onOpenChange={cerrar}
+        title="Registrar cliente"
+        description="Persona natural, persona con negocio o persona jurÃ­dica."
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => cerrar(false)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              type="submit"
+              form="form-cliente"
+            >
+              Revisar y registrar
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="form-cliente"
+          noValidate
+          onSubmit={handleSubmit(revisar)}
+        >
           <Seccion titulo="Tipo de cliente">
-            <Segmented aria-label="Tipo de cliente" value={tipo} onValueChange={cambiarTipo} options={TIPOS_CLIENTE} fill />
+            <Segmented
+              aria-label="Tipo de cliente"
+              value={tipo}
+              onValueChange={cambiarTipo}
+              options={TIPOS_CLIENTE}
+              fill
+            />
           </Seccion>
 
-          <Seccion titulo="Identificación">
+          <Seccion titulo="IdentificaciÃ³n">
             <div className="flex items-start gap-3 rounded-control bg-info-soft p-3 text-[0.8125rem] text-info-ink">
-              <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-              <p>Consulta <b className="font-semibold">simulada</b> con datos locales. No se conecta con RENIEC, SUNAT ni servicios de identidad reales.</p>
+              <ShieldAlert
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden
+              />
+              <p>
+                {tipo === 'DNI'
+                  ? 'Los nombres y apellidos se obtienen de RENIEC al consultar el DNI.'
+                  : tipo === 'RUC 10'
+                    ? 'El titular, su DNI, el estado y la condiciÃ³n se obtienen de SUNAT.'
+                    : 'La razÃ³n social, el domicilio fiscal, el estado, la condiciÃ³n y el representante legal se obtienen de SUNAT.'}
+                {tipo !== 'DNI' && ' Solo se registran contribuyentes con estado ACTIVO y condiciÃ³n HABIDO.'}
+              </p>
             </div>
-            <Field label={tipo === 'DNI' ? 'DNI' : `RUC (inicia con ${tipo === 'RUC 10' ? '10' : '20'})`} error={errors.doc?.message} hint={<span className="num">{doc.length}/{dniLen} dígitos</span>}>
-              <Input inputMode="numeric" maxLength={dniLen} placeholder={`${dniLen} dígitos`} autoComplete="off" {...register('doc', { onChange: () => setConsulta({ tipo: 'idle' }) })} />
+
+            <Field
+              label={
+                tipo === 'DNI'
+                  ? 'DNI'
+                  : `RUC (inicia con ${tipo === 'RUC 10' ? '10' : '20'})`
+              }
+              error={errors.doc?.message}
+              hint={
+                <span className="num">
+                  {doc.length}/{dniLen} dÃ­gitos
+                </span>
+              }
+            >
+              <Input
+                inputMode="numeric"
+                maxLength={dniLen}
+                placeholder={`${dniLen} dÃ­gitos`}
+                autoComplete="off"
+                {...register('doc', {
+                  onChange: limpiarConsulta
+                })}
+              />
             </Field>
+
             <div className="flex flex-wrap items-center gap-3">
-              <Button size="sm" onClick={consultar} loading={consulta.tipo === 'cargando'}><Search className="size-4" />Consultar (simulado)</Button>
-              <p role="status" className="text-[0.8125rem] text-ink-muted">
-                {consulta.tipo === 'idle' && <>Prueba con {EJEMPLOS_CONSULTA[tipo]} (datos ficticios).</>}
+              <Button
+                size="sm"
+                onClick={consultar}
+                loading={consulta.tipo === 'cargando'}
+                disabled={consulta.tipo === 'cargando'}
+              >
+                <Search className="size-4" />
+                {tipo === 'DNI' ? 'Consultar DNI' : 'Consultar RUC'}
+              </Button>
+
+              <p
+                role="status"
+                className="text-[0.8125rem] text-ink-muted"
+              >
+                {consulta.tipo === 'idle' && (
+                  <>
+                    {tipo === 'DNI'
+                      ? 'Ingresa el DNI de 8 dÃ­gitos para consultar.'
+                      : 'Ingresa el RUC de 11 dÃ­gitos para consultar.'}
+                  </>
+                )}
+
                 {consulta.tipo === 'cargando' && consulta.texto}
-                {consulta.tipo === 'invalido' && <span className="font-medium text-danger-ink">{consulta.texto}</span>}
-                {consulta.tipo === 'sin-datos' && 'Sin coincidencia en los datos simulados. Completa los campos manualmente.'}
-                {consulta.tipo === 'ok' && <span className="inline-flex items-center gap-1 font-medium text-success-ink"><Check className="size-3.5" aria-hidden />Datos simulados cargados. Verifícalos antes de registrar.</span>}
+
+                {consulta.tipo === 'invalido' && (
+                  <span className="font-medium text-danger-ink">
+                    {consulta.texto}
+                  </span>
+                )}
+
+                {consulta.tipo === 'sin-datos' && (
+                  <span className="font-medium text-danger-ink">
+                    {consulta.texto ??
+                      'No se encontraron datos. Puedes completar los campos manualmente.'}
+                  </span>
+                )}
+
+                {consulta.tipo === 'ok' && (
+                  <span className="inline-flex items-center gap-1 font-medium text-success-ink">
+                    <Check className="size-3.5" aria-hidden />
+                    {consulta.texto ?? 'Datos consultados correctamente.'}
+                  </span>
+                )}
               </p>
             </div>
           </Seccion>
 
-          <Seccion titulo={tipo === 'RUC 20' ? 'Empresa' : 'Datos del cliente'}>
-            <Field label={nombreLabel} error={errors.nombre?.message}><Input autoComplete="off" {...register('nombre')} /></Field>
+          <Seccion
+            titulo={
+              tipo === 'RUC 20' ? 'Empresa' : 'Datos del cliente'
+            }
+          >
+            <Field
+              label={nombreLabel}
+              error={errors.nombre?.message}
+            >
+              <Input
+                autoComplete="off"
+                readOnly
+                placeholder="Se completa al consultar"
+                {...register('nombre')}
+              />
+            </Field>
+
             {tipo === 'RUC 10' && (
               <>
-                <Field label="DNI del titular" error={errors.dniTitular?.message}><Input inputMode="numeric" maxLength={8} placeholder="8 dígitos" {...register('dniTitular')} /></Field>
-                <Field label="Actividad del negocio" error={errors.negocio?.message}><Input {...register('negocio')} /></Field>
+                <Field
+                  label="DNI del titular"
+                  error={errors.dniTitular?.message}
+                >
+                  <Input
+                    inputMode="numeric"
+                    readOnly
+                    placeholder="Obtenido de SUNAT"
+                    {...register('dniTitular')}
+                  />
+                </Field>
               </>
             )}
-            {tipo === 'RUC 20' && <Field label="Domicilio fiscal" error={errors.domicilio?.message}><Input {...register('domicilio')} /></Field>}
+
+            {tipo === 'RUC 20' && (
+              <Field
+                label="Domicilio fiscal"
+                error={errors.domicilio?.message}
+              >
+                <Input readOnly placeholder="Se completa al consultar" {...register('domicilio')} />
+              </Field>
+            )}
+
+            {tipo !== 'DNI' && (
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Estado SUNAT">
+                  <Input readOnly placeholder="â€”" {...register('estadoSunat')} />
+                </Field>
+                <Field label="CondiciÃ³n SUNAT">
+                  <Input readOnly placeholder="â€”" {...register('condicionSunat')} />
+                </Field>
+              </div>
+            )}
           </Seccion>
 
           {tipo === 'RUC 20' && (
             <Seccion titulo="Representante legal">
-              <Field label="Nombre del representante" error={errors.repNombre?.message}><Input autoComplete="off" {...register('repNombre')} /></Field>
-              <Field label="DNI del representante" error={errors.repDni?.message}><Input inputMode="numeric" maxLength={8} placeholder="8 dígitos" {...register('repDni')} /></Field>
+              <Field
+                label="Nombre del representante"
+                error={errors.repNombre?.message}
+              >
+                <Input
+                  autoComplete="off"
+                  readOnly
+                  placeholder="Se completa al consultar"
+                  {...register('repNombre')}
+                />
+              </Field>
+
+              <Field
+                label="DNI del representante"
+                error={errors.repDni?.message}
+              >
+                <Input
+                  inputMode="numeric"
+                  readOnly
+                  placeholder="Se completa al consultar"
+                  {...register('repDni')}
+                />
+              </Field>
             </Seccion>
           )}
 
           <Seccion titulo="Contacto">
-            <Field label="Celular" optional error={errors.telefono?.message}><Input inputMode="numeric" maxLength={9} placeholder="9XXXXXXXX" autoComplete="off" {...register('telefono')} /></Field>
+            <Field
+              label="Celular"
+              error={errors.telefono?.message}
+            >
+              <Input
+                inputMode="numeric"
+                maxLength={9}
+                placeholder="9XXXXXXXX"
+                autoComplete="off"
+                {...register('telefono')}
+              />
+            </Field>
+
+            <Field
+              label="Correo electrÃ³nico"
+              error={errors.correo?.message}
+            >
+              <Input
+                type="email"
+                inputMode="email"
+                maxLength={120}
+                placeholder="nombre@dominio.com"
+                autoComplete="off"
+                {...register('correo')}
+              />
+            </Field>
           </Seccion>
         </form>
       </Sheet>
 
-      <Modal open={!!confirmar} onOpenChange={(o) => { if (!o && !guardando) setConfirmar(null); }} title="Confirmar registro" description="Se creará un expediente con un identificador único."
-        footer={<><Button variant="secondary" onClick={() => setConfirmar(null)} disabled={guardando}>Volver</Button><Button variant="primary" loading={guardando} onClick={() => confirmar && guardar(confirmar)}>Confirmar registro</Button></>}>
+      <Modal
+        open={!!confirmar}
+        onOpenChange={(o) => {
+          if (!o && !guardando) setConfirmar(null);
+        }}
+        title="Confirmar registro"
+        description="Se crearÃ¡ un expediente con un identificador Ãºnico."
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmar(null)}
+              disabled={guardando}
+            >
+              Volver
+            </Button>
+            <Button
+              variant="primary"
+              loading={guardando}
+              onClick={() => confirmar && guardar(confirmar)}
+            >
+              Confirmar registro
+            </Button>
+          </>
+        }
+      >
         {confirmar && (
-          <DefinitionList items={[
-            { label: 'Tipo', value: <Badge tone="teal">{confirmar.tipo}</Badge> },
-            { label: 'Documento', value: confirmar.doc },
-            { label: confirmar.tipo === 'RUC 20' ? 'Razón social' : 'Nombre', value: confirmar.nombre },
-            ...(confirmar.tipo === 'RUC 20' ? [{ label: 'Representante', value: `${confirmar.repNombre} · DNI ${confirmar.repDni}` }] : []),
-            { label: 'Agencia', value: yo.agencia }
-          ]} />
+          <DefinitionList
+            items={[
+              {
+                label: 'Tipo',
+                value: <Badge tone="teal">{confirmar.tipo}</Badge>
+              },
+              {
+                label: 'Documento',
+                value: confirmar.doc
+              },
+              {
+                label:
+                  confirmar.tipo === 'RUC 20'
+                    ? 'RazÃ³n social'
+                    : 'Nombre',
+                value: confirmar.nombre
+              },
+              ...(confirmar.tipo === 'RUC 10'
+                ? [
+                  {
+                    label: 'DNI del titular',
+                    value: confirmar.dniTitular
+                  }
+                ]
+                : []),
+              ...(confirmar.tipo === 'RUC 20'
+                ? [
+                  {
+                    label: 'Domicilio fiscal',
+                    value: confirmar.domicilio
+                  },
+                  {
+                    label: 'Representante',
+                    value: `${confirmar.repNombre} Â· DNI ${confirmar.repDni}`
+                  }
+                ]
+                : []),
+              ...(confirmar.tipo !== 'DNI'
+                ? [
+                  {
+                    label: 'SUNAT',
+                    value: `${confirmar.estadoSunat} Â· ${confirmar.condicionSunat}`
+                  }
+                ]
+                : []),
+              {
+                label: 'Celular',
+                value: confirmar.telefono
+              },
+              {
+                label: 'Correo',
+                value: confirmar.correo
+              },
+              {
+                label: 'Agencia',
+                value: yo.agencia
+              }
+            ]}
+          />
         )}
       </Modal>
     </>

@@ -12,6 +12,7 @@ public record ClienteRespuestaDTO(
         String numeroDocumento,
         String nombre,
         String telefono,
+        String correo,
         String dniTitular,
         String domicilio,
         String estadoSunat,
@@ -19,9 +20,14 @@ public record ClienteRespuestaDTO(
         String representanteNombre,
         String representanteDni,
         UUID agenciaId,
+        String nombreAgencia,
         OffsetDateTime creadoEn
 ) {
     public static ClienteRespuestaDTO desde(Cliente cliente) {
+        return desde(cliente, null);
+    }
+
+    public static ClienteRespuestaDTO desde(Cliente cliente, String nombreAgencia) {
         return new ClienteRespuestaDTO(
                 cliente.getId(),
                 cliente.getNumero(),
@@ -29,6 +35,7 @@ public record ClienteRespuestaDTO(
                 cliente.getNumeroDocumento(),
                 cliente.getNombre(),
                 cliente.getTelefono(),
+                cliente.getCorreo(),
                 cliente.getDniTitular(),
                 cliente.getDomicilio(),
                 cliente.getEstadoSunat(),
@@ -36,6 +43,7 @@ public record ClienteRespuestaDTO(
                 cliente.getRepresentanteNombre(),
                 cliente.getRepresentanteDni(),
                 cliente.getAgenciaId(),
+                nombreAgencia,
                 cliente.getCreadoEn()
         );
     }
