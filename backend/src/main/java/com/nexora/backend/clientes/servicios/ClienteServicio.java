@@ -5,6 +5,7 @@ import com.nexora.backend.autenticacion.entidades.Agencia;
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.autenticacion.repositorios.AgenciaRepositorio;
 import com.nexora.backend.autenticacion.repositorios.PerfilRepositorio;
+import com.nexora.backend.clientes.dto.ActualizarContactoDTO;
 import com.nexora.backend.clientes.dto.ClienteRespuestaDTO;
 import com.nexora.backend.clientes.dto.ConsultaClienteRespuestaDTO;
 import com.nexora.backend.clientes.dto.RegistroClienteDTO;
@@ -227,6 +228,25 @@ public class ClienteServicio {
         // Se relee para obtener los valores que pone la base de datos (numero y creado_en).
         Cliente guardado = clienteRepositorio.findById(cliente.getId()).orElse(cliente);
         return ClienteRespuestaDTO.desde(guardado, agencia.getNombre());
+    }
+
+    /* Edición de contacto */
+
+    /** Cambia solo el celular y el correo; el resto de datos viene de RENIEC/SUNAT y no se edita. */
+    @Transactional
+    public ClienteRespuestaDTO actualizarContacto(UUID id, ActualizarContactoDTO dto, Perfil perfil) {
+        if (perfil.getAgencia() == null) {
+            throw new ClienteException(Codigo.AGENCIA_NO_ASIGNADA,
+                    "Tu cuenta no tiene una agencia asignada. Solo un asesor de agencia puede editar clientes.");
+        }
+        Cliente cliente = clienteRepositorio.findById(id)
+                .orElseThrow(() -> new ClienteException(Codigo.CLIENTE_NO_ENCONTRADO));
+
+        cliente.setTelefono(dto.getTelefono().trim());
+        cliente.setCorreo(dto.getCorreo().trim().toLowerCase(Locale.ROOT));
+        clienteRepositorio.saveAndFlush(cliente);
+
+        return consultar(id).orElseThrow(() -> new ClienteException(Codigo.CLIENTE_NO_ENCONTRADO));
     }
 
     /* Apoyo */

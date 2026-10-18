@@ -13,6 +13,7 @@ public class ClienteException extends RuntimeException {
         DOCUMENTO_INVALIDO(HttpStatus.BAD_REQUEST, "El número de documento no es válido."),
         DOCUMENTO_REGISTRADO(HttpStatus.CONFLICT, "Este documento ya está registrado como cliente."),
         DOCUMENTO_NO_ENCONTRADO(HttpStatus.NOT_FOUND, "No se encontraron datos para ese documento."),
+        CLIENTE_NO_ENCONTRADO(HttpStatus.NOT_FOUND, "El cliente no existe."),
         RUC_NO_COINCIDE(HttpStatus.UNPROCESSABLE_CONTENT, "El RUC no corresponde al DNI del titular."),
         CLIENTE_NO_HABILITADO(HttpStatus.UNPROCESSABLE_CONTENT,
                 "El cliente no cumple los requisitos para ser registrado."),
