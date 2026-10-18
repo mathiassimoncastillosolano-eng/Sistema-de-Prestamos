@@ -23,7 +23,8 @@ export function alcancesPara(rol: Rol | null, agencia: string | null, agencias: 
   const empresa: OpcionAlcance = { value: 'empresa', label: 'Toda la empresa' };
   if (rol === 'gerencia') return [empresa, ...agencias.map(deAgencia)];
   if (rol !== 'asesor') return [empresa];
-  return [{ value: 'mis', label: 'Mi cartera' }, ...(agencia ? [deAgencia(agencia)] : []), empresa];
+  // El asesor trabaja en una sola sucursal: ve su cartera y su agencia, nunca toda la empresa.
+  return [{ value: 'mis', label: 'Mi cartera' }, ...(agencia ? [deAgencia(agencia)] : [])];
 }
 
 /** Filtro de un alcance: sirve igual para clientes y préstamos, porque ambos tienen asesor y agencia. */

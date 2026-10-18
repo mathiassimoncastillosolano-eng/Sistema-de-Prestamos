@@ -14,8 +14,8 @@ describe('alcances por rol', () => {
     const valores = alcancesPara('gerencia', null).map((a) => a.value);
     expect(valores).toEqual(['empresa', ...AGENCIAS.map((a) => `agencia:${a}`)]);
   });
-  it('el asesor ve su cartera, su agencia y la empresa', () => {
-    expect(alcancesPara('asesor', 'Cusco').map((a) => a.value)).toEqual(['mis', 'agencia:Cusco', 'empresa']);
+  it('el asesor solo ve su cartera y su agencia, no toda la empresa', () => {
+    expect(alcancesPara('asesor', 'Cusco').map((a) => a.value)).toEqual(['mis', 'agencia:Cusco']);
   });
 });
 

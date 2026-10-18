@@ -139,6 +139,16 @@ describe('B · login correcto como gerencia', () => {
     expect(await screen.findByRole('option', { name: 'Agencia Norte Prueba' })).toBeInTheDocument();
   });
 
+  it('el asesor solo puede ver su cartera y su agencia, no toda la empresa', async () => {
+    montar();
+    const u = await iniciarSesion(ASESORA);
+    await u.click(await screen.findByRole('combobox', { name: 'Alcance de los indicadores' }, { timeout: 4000 }));
+    expect(await screen.findByRole('option', { name: 'Mi cartera' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Agencia Sur Prueba' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Toda la empresa' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Resumen por agencia')).not.toBeInTheDocument();
+  });
+
   it('entrar por la URL de un módulo prohibido nunca llega a montar ese módulo', async () => {
     window.location.hash = '#/prestamos';
     const srv = crearServidor([GERENTE]); srv.instalar(); srv.abrirSesion(GERENTE);
