@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
 import com.nexora.backend.prestamos.servicios.PrestamoServicio;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,5 +44,22 @@ class PrestamoControladorConsultaTest {
         mvc.perform(get("/api/prestamos/" + UUID.randomUUID()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.codigo").value("PRESTAMO_NO_ENCONTRADO"));
+    }
+
+    @Test
+    void listarPorClienteDevuelveLosPrestamosDelCliente() throws Exception {
+        UUID clienteId = UUID.randomUUID();
+        when(servicio.listarPorCliente(clienteId)).thenReturn(List.of());
+
+        mvc.perform(get("/api/prestamos").param("clienteId", clienteId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+    }
+
+    @Test
+    void listarConClienteQueNoEsUuidDevuelve400() throws Exception {
+        mvc.perform(get("/api/prestamos").param("clienteId", "no-es-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
     }
 }

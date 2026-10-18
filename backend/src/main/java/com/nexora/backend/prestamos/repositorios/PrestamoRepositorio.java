@@ -2,6 +2,7 @@ package com.nexora.backend.prestamos.repositorios;
 
 import com.nexora.backend.prestamos.entidades.Prestamo;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.Query;
@@ -12,6 +13,9 @@ public interface PrestamoRepositorio extends Repository<Prestamo, UUID> {
 
     Prestamo save(Prestamo prestamo);
     Optional<Prestamo> findById(UUID id);
+
+    /** Préstamos del cliente en todas las agencias, del más reciente al más antiguo. */
+    List<Prestamo> findByClienteIdOrderByFechaDesembolsoDescNumeroDesc(UUID clienteId);
 
     /** Capital de los préstamos activos del cliente en TODAS las agencias (vacío si no tiene). */
     @Query("select sum(p.capital) from Prestamo p where p.clienteId = :clienteId and p.estado in ('Vigente', 'En mora')")

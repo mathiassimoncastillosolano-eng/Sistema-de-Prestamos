@@ -61,9 +61,9 @@ public class ClienteControlador {
 
     @GetMapping("/{id}")
     public ResponseEntity<ClienteRespuestaDTO> consultarCliente(@PathVariable UUID id) {
-        Optional<Cliente> cliente = clienteServicio.consultar(id);
+        Optional<ClienteRespuestaDTO> cliente = clienteServicio.consultar(id);
         if (cliente.isEmpty()) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok(ClienteRespuestaDTO.desde(cliente.get()));
+        return ResponseEntity.ok(cliente.get());
     }
 
     private static Perfil perfilDe(HttpServletRequest peticion) {

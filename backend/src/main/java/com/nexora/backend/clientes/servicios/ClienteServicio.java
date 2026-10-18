@@ -3,6 +3,8 @@ package com.nexora.backend.clientes.servicios;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.nexora.backend.autenticacion.entidades.Agencia;
 import com.nexora.backend.autenticacion.entidades.Perfil;
+import com.nexora.backend.autenticacion.repositorios.AgenciaRepositorio;
+import com.nexora.backend.autenticacion.repositorios.PerfilRepositorio;
 import com.nexora.backend.clientes.dto.ClienteRespuestaDTO;
 import com.nexora.backend.clientes.dto.ConsultaClienteRespuestaDTO;
 import com.nexora.backend.clientes.dto.RegistroClienteDTO;
@@ -35,6 +37,8 @@ public class ClienteServicio {
 
     private final ClienteRepositorio clienteRepositorio;
     private final ApiPeruCliente apiPeru;
+    private final AgenciaRepositorio agencias;
+    private final PerfilRepositorio perfiles;
     private final Clock reloj;
 
     /** Consultas recientes por usuario y documento. Solo en memoria, como las sesiones (una sola instancia). */
@@ -44,13 +48,17 @@ public class ClienteServicio {
 
     /** Hay dos constructores (el otro es para las pruebas): @Autowired le indica a Spring cuál usar. */
     @Autowired
-    public ClienteServicio(ClienteRepositorio clienteRepositorio, ApiPeruCliente apiPeru) {
-        this(clienteRepositorio, apiPeru, Clock.systemUTC());
+    public ClienteServicio(ClienteRepositorio clienteRepositorio, ApiPeruCliente apiPeru,
+                           AgenciaRepositorio agencias, PerfilRepositorio perfiles) {
+        this(clienteRepositorio, apiPeru, agencias, perfiles, Clock.systemUTC());
     }
 
-    ClienteServicio(ClienteRepositorio clienteRepositorio, ApiPeruCliente apiPeru, Clock reloj) {
+    ClienteServicio(ClienteRepositorio clienteRepositorio, ApiPeruCliente apiPeru,
+                    AgenciaRepositorio agencias, PerfilRepositorio perfiles, Clock reloj) {
         this.clienteRepositorio = clienteRepositorio;
         this.apiPeru = apiPeru;
+        this.agencias = agencias;
+        this.perfiles = perfiles;
         this.reloj = reloj;
     }
 
@@ -59,9 +67,16 @@ public class ClienteServicio {
         return clienteRepositorio.findAll(Sort.by("nombre").ascending());
     }
 
+    /** Ficha del cliente con el nombre de su agencia y del asesor que lo registró. */
     @Transactional(readOnly = true)
-    public Optional<Cliente> consultar(UUID id) {
-        return clienteRepositorio.findById(id);
+    public Optional<ClienteRespuestaDTO> consultar(UUID id) {
+        return clienteRepositorio.findById(id).map(cliente -> {
+            String agencia = agencias.findById(cliente.getAgenciaId()).map(Agencia::getNombre).orElse(null);
+            String asesor = cliente.getCreadoPor() == null ? null : perfiles.buscarPorId(cliente.getCreadoPor())
+                    .map(p -> (p.getNombres() + " " + p.getApellidos()).trim())
+                    .orElse(null);
+            return ClienteRespuestaDTO.desde(cliente, agencia, asesor);
+        });
     }
 
     /*Consulta */

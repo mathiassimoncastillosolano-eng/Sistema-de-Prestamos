@@ -46,6 +46,20 @@ export interface PrestamoApi {
   cuotas: CuotaApi[];
 }
 
+/** Fila de GET /api/prestamos?clienteId=… (sin registro de pagos: Vigente/En mora tienen todo pendiente, Cancelado nada). */
+export interface PrestamoResumenApi {
+  id: string;
+  numero: number;
+  capital: number;
+  plazoMeses: number;
+  fechaDesembolso: string; // yyyy-MM-dd
+  estado: PrestamoApi['estado'];
+  totalContractual: number;
+  capitalPendiente: number;
+  totalPendiente: number;
+  proximoVencimiento: string | null;
+}
+
 export interface SolicitudPrestamoApi {
   clienteId: string;
   capital: number;
@@ -155,6 +169,10 @@ export const prestamosApi = {
   /** US-04/05/06: registra el préstamo y su cronograma de forma atómica. */
   registrar(solicitud: SolicitudPrestamoApi): Promise<PrestamoApi> {
     return llamar<PrestamoApi>('', { method: 'POST', body: solicitud });
+  },
+  /** Préstamos de un cliente en todas las agencias, del más reciente al más antiguo. */
+  listarPorCliente(clienteId: string): Promise<PrestamoResumenApi[]> {
+    return llamar<PrestamoResumenApi[]>(`?clienteId=${encodeURIComponent(clienteId)}`, { method: 'GET' });
   },
   /** US-06: consulta el préstamo con el cronograma guardado. */
   consultar(id: string): Promise<PrestamoApi> {

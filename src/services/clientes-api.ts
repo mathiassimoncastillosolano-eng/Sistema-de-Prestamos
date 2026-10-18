@@ -9,11 +9,11 @@ export interface ClienteListado {
   numeroDocumento: string;
   nombre: string;
   telefono: string | null;
+  correo: string | null;
 }
 
 /** Ficha que devuelve GET /api/clientes/{id}. */
 export interface ClienteDetalle extends ClienteListado {
-  correo: string | null;
   dniTitular: string | null;
   domicilio: string | null;
   estadoSunat: string | null;
@@ -22,6 +22,8 @@ export interface ClienteDetalle extends ClienteListado {
   representanteDni: string | null;
   agenciaId: string;
   nombreAgencia: string | null;
+  /** Asesor que registró al cliente. */
+  nombreAsesor: string | null;
   creadoEn: string;
 }
 
