@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nexora.backend.autenticacion.excepciones.AutenticacionException;
 import com.nexora.backend.autenticacion.servicios.LimitadorIntentos;
-import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class LimitadorIntentosTest {
