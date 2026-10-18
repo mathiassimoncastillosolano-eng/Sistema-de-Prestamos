@@ -55,7 +55,7 @@ Notas de decisión:
 src/
   app/              App, rutas (carga diferida por pantalla), proveedores
   components/ui/    design system: button, field, modal, sheet, tabs, toast, stepper…
-  components/layout/ shell, sidebar, header, búsqueda global, notificaciones
+  components/layout/ shell, sidebar, header (título de sección y fecha), notificaciones
   components/data-display/  DataTable, StatusBadge (préstamo/cliente), AnimatedNumber, tooltips de gráficos…
   features/         dashboard · clients · loans · installments · auth
   lib/              config · finance · analytics · selectors · validation · format · dates · motion · pdf
@@ -88,7 +88,7 @@ Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda l
 | `POST /api/prestamos/simulacion` `{capital, plazoMeses}` | Cronograma que se guardaría hoy. **No persiste nada** |
 | `GET /api/prestamos` | Listado del alcance de la sesión (gerencia: todos; asesor: su agencia) con estado y saldos derivados |
 | `GET /api/prestamos?clienteId=…` | Préstamos de un cliente (ficha de cliente) |
-| `GET /api/prestamos/{id}` | Detalle: cabecera, KPI, cuotas con estado y historial |
+| `GET /api/prestamos/{id}` | Detalle: cabecera (incl. código y celular del cliente), KPI, cuotas con estado y historial |
 | `POST /api/prestamos` | Registro atómico (acepta `fechaDesembolsoEsperada` y `totalContractualEsperado`) |
 
 ### Historial, saldos y límites del esquema
@@ -102,6 +102,8 @@ Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda l
 ## PDF
 
 Hay dos documentos, generados en el navegador con jsPDF + autotable (carga diferida), con los datos que entrega el servidor: (1) **Simulación de cronograma de cuotas**, marcada «SIMULACIÓN NO REGISTRADA» y **sin código de préstamo**, desde la revisión previa al registro; (2) **Ficha y cronograma del préstamo** (`PR-{número}`), desde el detalle, con los datos persistidos y el estado de cada cuota. A4, cabecera de tabla repetida, filas sin partir, totales, hora de generación en Lima y «Página X de Y». Son informativos; no afirman validez legal. **No existe envío por correo ni mensajería**: «Mensaje para el cliente» solo prepara texto para copiar.
+
+**Cronogramas paginados:** la simulación (modal), la confirmación y el detalle del préstamo usan el mismo `ScheduleTable` con paginación en el navegador (10 por página, selector 10/20/30, «Mostrando cuotas 11–20 de 60»). Solo se pagina lo visible: los totales y el PDF usan siempre el cronograma completo y la numeración de cuotas no se reinicia. Cambiar de cronograma vuelve a la primera página. La lógica pura está en `paginar()` y `paginasVisibles()` (`features/loans/loan-utils.ts`).
 
 **Pruebas:** `./mvnw test` (en `backend/`) cubre la fórmula, las fechas (fin de mes, año bisiesto, Lima vs. UTC), el evaluador de estados, la consulta por alcance y el registro; `npm test` cubre la interfaz de Préstamos contra un servidor falso (`tests/prestamos-ui.test.tsx`) y el PDF (`tests/pdf-cronograma.test.ts`).
 

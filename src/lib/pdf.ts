@@ -4,7 +4,7 @@
    - «registrado»: el préstamo guardado, con su cronograma persistido.
    Se generan en el navegador con jsPDF + autotable (carga diferida). NO recalculan nada: los importes y las fechas son los
    que entrega el servidor (la simulación y el detalle comparten fórmula y fecha de Lima). No registran ni modifican datos.
-   Es un documento informativo: no afirma validez contractual ni legal.
+   Es un documento informativo: no afirma validez contractual ni legal. La simulación lleva una sola leyenda discreta.
    ========================================================= */
 import { BRAND } from './config';
 import { fecha } from './dates';
@@ -16,8 +16,6 @@ const APAGADO: [number, number, number] = [92, 102, 118];
 const LINEA: [number, number, number] = [214, 219, 227];
 const MARCA: [number, number, number] = [18, 54, 90]; // azul corporativo #12365A
 const FONDO_CABECERA: [number, number, number] = [236, 241, 245];
-const AVISO_FONDO: [number, number, number] = [251, 240, 217];
-const AVISO_TEXTO: [number, number, number] = [143, 91, 10];
 
 /** Los PDF usan fuentes estándar (WinAnsi): se sustituyen los pocos caracteres fuera de Latin-1. */
 const seguro = (t: string) => t.replace(/[‐-―−]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/ /g, ' ');
@@ -38,9 +36,13 @@ export interface DatosPdf {
   /** PR-1001. Solo existe en un préstamo registrado: una simulación NO tiene código. */
   codigo?: string;
   clienteNombre?: string;
+  /** «DNI 12345678». */
   clienteDocumento?: string;
+  clienteCodigo?: string;
+  clienteTelefono?: string;
   agencia?: string;
   asesor?: string;
+  moneda?: string;
   capital: number;
   plazoMeses: number;
   tea: number;
@@ -62,6 +64,8 @@ export const marcaDeTiempoLima = (d: Date = new Date()) => formatoGeneracion.for
 export const nombreArchivoPdf = (d: DatosPdf) =>
   d.tipo === 'registrado' ? `PeruCred-${d.codigo ?? 'prestamo'}-cronograma.pdf` : 'PeruCred-simulacion-cronograma.pdf';
 
+const porcentaje = (t: number) => `${(t * 100).toFixed(2).replace(/\.00$/, '')} %`;
+
 /** Construye el documento (jsPDF). Se separa de la generación del Blob para poder inspeccionarlo en pruebas. */
 export async function crearDocumentoPdf(d: DatosPdf, generadoEn: Date = new Date()) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
@@ -72,85 +76,107 @@ export async function crearDocumentoPdf(d: DatosPdf, generadoEn: Date = new Date
   const simulacion = d.tipo === 'simulacion';
   const ultima = d.cuotas[d.cuotas.length - 1];
   const conEstado = !simulacion && d.cuotas.some((q) => q.estado);
+  const moneda = d.moneda === 'PEN' || !d.moneda ? 'Soles (PEN)' : d.moneda;
+  const tituloCorto = simulacion ? 'Cronograma de cuotas (propuesta)' : `Cronograma de cuotas · ${d.codigo ?? ''}`;
 
-  /* ---- Encabezado ---- */
-  doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...MARCA);
-  doc.text(BRAND.nombre, MARGEN, 16);
-  doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO);
-  doc.text(BRAND.descriptor, MARGEN, 19.8);
-  doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...APAGADO);
-  doc.text(seguro(`Generado el ${marcaDeTiempoLima(generadoEn)} (hora de Lima)`), ancho - MARGEN, 16, { align: 'right' });
-  doc.setFont('helvetica', 'bold').setFontSize(17).setTextColor(...TINTA);
-  doc.text(simulacion ? 'Simulación de cronograma de cuotas' : 'Ficha y cronograma del préstamo', MARGEN, 26);
-  doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(...APAGADO);
-  doc.text(simulacion ? 'Simulación no registrada' : `Código ${d.codigo ?? '-'}${d.estado ? ` · Estado ${d.estado}` : ''}`, MARGEN, 32);
-  doc.setDrawColor(...LINEA).setLineWidth(0.3).line(MARGEN, 36, ancho - MARGEN, 36);
+  /** Título de sección: texto en la marca, con filete fino. Devuelve la y siguiente. */
+  const seccion = (titulo: string, y: number) => {
+    doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...MARCA);
+    doc.text(seguro(titulo.toUpperCase()), MARGEN, y);
+    doc.setDrawColor(...LINEA).setLineWidth(0.25).line(MARGEN, y + 1.6, ancho - MARGEN, y + 1.6);
+    return y + 6;
+  };
 
-  let y = 40;
-  if (simulacion) {
-    doc.setFillColor(...AVISO_FONDO).roundedRect(MARGEN, y, util, 9, 1.5, 1.5, 'F');
-    doc.setFont('helvetica', 'bold').setFontSize(8.5).setTextColor(...AVISO_TEXTO);
-    doc.text('SIMULACIÓN NO REGISTRADA: no existe un préstamo con estas condiciones. Las cifras son referenciales.', MARGEN + 3, y + 5.7);
-    y += 13;
-  }
-
-  /* ---- Bloques de datos (dos columnas, texto con ajuste para nombres largos) ---- */
-  const columna = (x: number, yy0: number, titulo: string, filas: [string, string][], w: number) => {
-    doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...MARCA);
-    doc.text(titulo, x, yy0);
-    let yy = yy0 + 5;
-    filas.forEach(([k, v]) => {
-      doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...APAGADO);
-      doc.text(seguro(k), x, yy);
-      doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(...TINTA);
-      const lineas = doc.splitTextToSize(seguro(v || '-'), w) as string[];
-      doc.text(lineas, x, yy + 4.2);
-      yy += 4.2 + lineas.length * 4.4 + 1.6;
-    });
+  /** Cuadrícula de pares etiqueta/valor en `cols` columnas. Devuelve la y siguiente. */
+  const cuadricula = (pares: [string, string][], y: number, cols: number) => {
+    const w = util / cols;
+    let yy = y;
+    for (let i = 0; i < pares.length; i += cols) {
+      let alturaFila = 0;
+      pares.slice(i, i + cols).forEach(([k, v], j) => {
+        const x = MARGEN + w * j;
+        doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO).text(seguro(k), x, yy);
+        doc.setFont('helvetica', 'bold').setFontSize(9.5).setTextColor(...TINTA);
+        const lineas = doc.splitTextToSize(seguro(v || '-'), w - 4) as string[];
+        doc.text(lineas, x, yy + 4.3);
+        alturaFila = Math.max(alturaFila, 4.3 + lineas.length * 4.2);
+      });
+      yy += alturaFila + 2.6;
+    }
     return yy;
   };
 
-  const colW = (util - 8) / 2;
-  const x2 = MARGEN + colW + 8;
-  const cliFilas: [string, string][] = [['Cliente', d.clienteNombre ?? '-'], ['Documento', d.clienteDocumento ?? '-']];
-  if (d.agencia || d.asesor) cliFilas.push(['Agencia / asesor', `${d.agencia ?? '-'} / ${d.asesor ?? '-'}`]);
-  const conFilas: [string, string][] = [
-    [simulacion ? 'Capital solicitado' : 'Capital', money(d.capital)],
-    ['Plazo y tasa', `${d.plazoMeses} cuotas mensuales · TEA ${(d.tea * 100).toFixed(0)} %`],
-    [simulacion ? 'Fecha de desembolso propuesta' : 'Fecha de desembolso registrada', fecha(d.fechaDesembolso)],
-    ['Primera y última cuota', `${fecha(d.fechaPrimerVencimiento)} · ${ultima ? fecha(ultima.fechaVencimiento) : '-'}`]
-  ];
-  const y1 = columna(MARGEN, y + 3, simulacion ? 'Cliente (referencia)' : 'Cliente', cliFilas, colW);
-  const y2 = columna(x2, y + 3, 'Condiciones', conFilas, colW);
-  y = Math.max(y1, y2) + 1;
-
-  /* ---- Resumen de importes ---- */
-  doc.setFillColor(...FONDO_CABECERA).roundedRect(MARGEN, y, util, 19, 1.5, 1.5, 'F');
-  const celdas: [string, string][] = [
-    ['Capital', money(d.capital)], ['Total de intereses', money(d.totalIntereses)],
-    ['Total contractual', money(d.totalContractual)],
-    simulacion ? ['Cuota mensual', money(d.cuotaMensual)] : ['Capital pendiente', money(d.capitalPendiente ?? 0)]
-  ];
-  const cw = util / celdas.length;
-  celdas.forEach(([k, v], i) => {
-    const cx = MARGEN + cw * i + 4;
-    doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...APAGADO).text(seguro(k), cx, y + 6.5);
-    doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...TINTA).text(seguro(v), cx, y + 13.5);
-  });
-  y += 19;
+  /* ---- 1. Encabezado institucional ---- */
+  doc.setFont('helvetica', 'bold').setFontSize(13).setTextColor(...MARCA);
+  doc.text(BRAND.nombre, MARGEN, 16);
   doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO);
-  doc.text(seguro(simulacion
-    ? 'Calculado con TEA convertida a tasa efectiva mensual, cuotas iguales y vencimientos por mes calendario.'
-    : `Importe contractual pendiente: ${money(d.totalPendiente ?? 0)}. El sistema no registra pagos: PAGADA refleja el estado guardado de la cuota.`), MARGEN, y + 4.5);
-  y += 9;
+  doc.text(seguro(BRAND.descriptor), MARGEN, 20);
+  doc.setFontSize(8).text(seguro(`Emitido: ${marcaDeTiempoLima(generadoEn)} (hora de Lima)`), ancho - MARGEN, 16, { align: 'right' });
+  doc.setDrawColor(...MARCA).setLineWidth(0.6).line(MARGEN, 24, ancho - MARGEN, 24);
 
-  /* ---- Cronograma ---- */
-  doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...MARCA).text('Cronograma de cuotas', MARGEN, y + 3);
+  /* ---- 2. Título y código ---- */
+  doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(...TINTA);
+  doc.text(simulacion ? 'Cronograma de cuotas' : 'Ficha y cronograma del préstamo', MARGEN, 33);
+  doc.setFont('helvetica', 'normal').setFontSize(9.5).setTextColor(...APAGADO);
+  if (simulacion) {
+    doc.text('Propuesta de préstamo', MARGEN, 38.5);
+    // Única mención de su carácter previo: una leyenda, sin recuadros ni colores de alerta.
+    doc.setFontSize(8).setTextColor(...APAGADO).text('Documento referencial previo a la formalización del préstamo.', MARGEN, 43);
+  } else {
+    doc.text(seguro(`Código ${d.codigo ?? '-'}${d.estado ? `  ·  Estado: ${d.estado}` : ''}`), MARGEN, 38.5);
+  }
+  let y = simulacion ? 52 : 48;
+
+  /* ---- 3. Datos del cliente ---- */
+  y = seccion('Datos del cliente', y);
+  const cliente: [string, string][] = [['Nombre completo', d.clienteNombre ?? '-'], ['Documento', d.clienteDocumento ?? '-']];
+  if (d.clienteCodigo) cliente.push(['Código de cliente', d.clienteCodigo]);
+  if (d.clienteTelefono) cliente.push(['Teléfono', d.clienteTelefono]);
+  y = cuadricula(cliente, y, 2) + 2;
+
+  /* ---- 4. Condiciones del préstamo ---- */
+  y = seccion('Condiciones del préstamo', y);
+  const condiciones: [string, string][] = [
+    [simulacion ? 'Capital solicitado' : 'Capital', money(d.capital)],
+    ['Moneda', moneda],
+    ['Tasa efectiva anual (TEA)', porcentaje(d.tea)],
+    ['Plazo', `${d.plazoMeses} cuotas`],
+    ['Frecuencia de pago', 'Mensual'],
+    [simulacion ? 'Fecha de desembolso (propuesta)' : 'Fecha de desembolso', fecha(d.fechaDesembolso)],
+    ['Primera cuota', fecha(d.fechaPrimerVencimiento)],
+    ['Última cuota', ultima ? fecha(ultima.fechaVencimiento) : '-']
+  ];
+  if (!simulacion && (d.agencia || d.asesor)) condiciones.push(['Agencia', d.agencia ?? '-'], ['Asesor responsable', d.asesor ?? '-']);
+  y = cuadricula(condiciones, y, 3) + 2;
+
+  /* ---- 5. Resumen financiero ---- */
+  y = seccion('Resumen financiero', y);
+  const tiles: [string, string][] = [
+    ['Cuota mensual', money(d.cuotaMensual)], ['Total de intereses', money(d.totalIntereses)],
+    ['Total contractual', money(d.totalContractual)], ['Número de cuotas', String(d.plazoMeses)]
+  ];
+  doc.setFillColor(...FONDO_CABECERA).roundedRect(MARGEN, y - 1, util, 15, 1.5, 1.5, 'F');
+  const cw = util / tiles.length;
+  tiles.forEach(([k, v], i) => {
+    const cx = MARGEN + cw * i + 4;
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO).text(seguro(k), cx, y + 3.8);
+    doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...TINTA).text(seguro(v), cx, y + 10.2);
+  });
+  y += 15;
+  if (!simulacion) {
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO);
+    doc.text(seguro(`Capital pendiente: ${money(d.capitalPendiente ?? 0)}  ·  Pendiente contractual: ${money(d.totalPendiente ?? 0)}. El sistema no registra pagos; PAGADA refleja el estado guardado de la cuota.`), MARGEN, y + 3.5, { maxWidth: util });
+    y += 5;
+  }
+  y += 5;
+
+  /* ---- 6-7. Cronograma de amortización y totales ---- */
+  y = seccion('Cronograma de amortización', y);
   const cabecera = ['N.º', 'Vence', 'Capital', 'Interés', 'Cuota', 'Saldo de capital', ...(conEstado ? ['Estado'] : [])];
   const derecha = [2, 3, 4, 5];
   autoTable(doc, {
-    startY: y + 6,
-    margin: { left: MARGEN, right: MARGEN, top: 18, bottom: 18 },
+    startY: y,
+    margin: { left: MARGEN, right: MARGEN, top: 20, bottom: 18 },
     tableWidth: util,
     theme: 'plain',
     showHead: 'everyPage',
@@ -159,7 +185,7 @@ export async function crearDocumentoPdf(d: DatosPdf, generadoEn: Date = new Date
     head: [cabecera],
     body: d.cuotas.map((q) => [String(q.numero), fecha(q.fechaVencimiento), money(q.capital), money(q.interes), money(q.importeCuota), money(q.saldo), ...(conEstado ? [q.estado ?? '-'] : [])].map(seguro)),
     foot: [[{ content: 'Totales', colSpan: 2, styles: { halign: 'left' as const } }, seguro(money(d.capital)), seguro(money(d.totalIntereses)), seguro(money(d.totalContractual)), ...(conEstado ? ['', ''] : [''])]],
-    styles: { font: 'helvetica', fontSize: 8.5, textColor: TINTA, cellPadding: { top: 1.9, bottom: 1.9, left: 2, right: 2 }, overflow: 'linebreak', valign: 'middle', lineColor: LINEA, lineWidth: { bottom: 0.2 } },
+    styles: { font: 'helvetica', fontSize: 8.5, textColor: TINTA, cellPadding: { top: 1.7, bottom: 1.7, left: 2, right: 2 }, overflow: 'linebreak', valign: 'middle', lineColor: LINEA, lineWidth: { bottom: 0.2 } },
     headStyles: { fillColor: FONDO_CABECERA, textColor: APAGADO, fontStyle: 'bold', fontSize: 8, lineWidth: { bottom: 0.4 } },
     footStyles: { fillColor: FONDO_CABECERA, textColor: TINTA, fontStyle: 'bold', lineWidth: { top: 0.4 } },
     columnStyles: {
@@ -169,17 +195,25 @@ export async function crearDocumentoPdf(d: DatosPdf, generadoEn: Date = new Date
     },
     didParseCell: (c) => {
       if ((c.section === 'head' || c.section === 'foot') && derecha.includes(c.column.index)) c.cell.styles.halign = 'right';
+    },
+    // Páginas de continuación: referencia mínima del documento (la primera ya tiene el encabezado completo).
+    didDrawPage: (datos) => {
+      if (datos.pageNumber > 1) {
+        doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...APAGADO);
+        doc.text(BRAND.nombre, MARGEN, 11);
+        doc.text(seguro(`${tituloCorto}${d.clienteNombre ? ` · ${d.clienteNombre}` : ''}`), ancho - MARGEN, 11, { align: 'right', maxWidth: util - 30 });
+        doc.setDrawColor(...LINEA).setLineWidth(0.2).line(MARGEN, 13.5, ancho - MARGEN, 13.5);
+      }
     }
   });
 
-  /* ---- Pie y numeración en todas las páginas ---- */
+  /* ---- 8. Pie con numeración en todas las páginas (sin repetir leyendas) ---- */
   const total = doc.getNumberOfPages();
-  const pie = simulacion ? 'Simulación no registrada · Documento informativo' : `${d.codigo ?? ''} · Documento informativo`;
   for (let i = 1; i <= total; i++) {
     doc.setPage(i);
     doc.setDrawColor(...LINEA).setLineWidth(0.2).line(MARGEN, alto - 14, ancho - MARGEN, alto - 14);
     doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO);
-    doc.text(seguro(`${pie} generado por ${BRAND.nombre}`), MARGEN, alto - 9);
+    doc.text(seguro(`${BRAND.nombre} · ${BRAND.descriptor}`), MARGEN, alto - 9);
     doc.text(`Página ${i} de ${total}`, ancho - MARGEN, alto - 9, { align: 'right' });
   }
 

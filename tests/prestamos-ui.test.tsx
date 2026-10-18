@@ -65,8 +65,13 @@ describe('Registrar préstamo · condiciones', () => {
 
       await u.click(boton);
       const dialogo = await screen.findByRole('dialog');
-      expect(within(dialogo).getByText(/Simulación no registrada/)).toBeInTheDocument();
+      expect(within(dialogo).getAllByText(/Simulación previa al registro/)).toHaveLength(1); // aviso único y discreto
+      expect(within(dialogo).queryByText(/Simulación no registrada/)).not.toBeInTheDocument();
       expect(within(dialogo).queryByText(/PR-\d+/)).not.toBeInTheDocument();
+      // el mismo cliente elegido en el paso 1, con su documento
+      expect(within(dialogo).getByText('Cliente de prueba')).toBeInTheDocument();
+      expect(within(dialogo).getByText(/DNI 99999991/)).toBeInTheDocument();
+      expect(within(dialogo).getByText('Mostrando cuotas 1–2 de 2')).toBeInTheDocument();
       const tabla = within(dialogo).getByRole('table', { name: 'Cronograma de cuotas simulado' });
       expect(within(tabla).getAllByRole('columnheader').map((h) => h.textContent?.trim())).toEqual(['N.º', 'Vence', 'Capital', 'Interés', 'Cuota', 'Saldo cap.']);
       expect(within(dialogo).getByRole('button', { name: 'Descargar cronograma PDF' })).toBeEnabled();
@@ -105,9 +110,17 @@ describe('Registrar préstamo · confirmación', () => {
   it('repite el cronograma completo, registra con lo revisado y redirige al detalle real', async () => {
     const srv = montar('#/solicitud');
     const u = await hastaConfirmacion(srv);
-    const region = screen.getByRole('region', { name: 'Cronograma de cuotas' });
-    expect(within(region).getByText(/Simulación no registrada/)).toBeInTheDocument();
-    expect(within(region).getByRole('button', { name: 'Descargar cronograma PDF' })).toBeInTheDocument();
+    // bloques: cliente, condiciones, resumen financiero, detalle de cuotas y acciones
+    expect(screen.getByRole('region', { name: 'Cliente seleccionado' })).toHaveTextContent('Cliente de prueba');
+    const condiciones = screen.getByRole('region', { name: 'Condiciones del préstamo' });
+    for (const t of ['Capital solicitado', 'Plazo', 'Tasa aplicada', 'Moneda', 'Frecuencia de cuotas', 'Asesor responsable', 'Fecha de desembolso', 'Primera fecha de vencimiento']) {
+      expect(within(condiciones).getByText(t)).toBeInTheDocument();
+    }
+    const resumen = screen.getByLabelText('Resumen financiero');
+    for (const t of ['Cuota mensual', 'Intereses totales', 'Total contractual', 'Número de cuotas']) expect(within(resumen).getByText(t)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Detalle de cuotas' })).toBeInTheDocument();
+    expect(screen.queryByText(/Simulación previa al registro/)).not.toBeInTheDocument(); // el aviso no se repite aquí
+    expect(screen.getByRole('button', { name: 'Descargar cronograma PDF' })).toBeInTheDocument();
 
     await u.click(screen.getByRole('button', { name: /Registrar préstamo/ }));
     await u.click(await within(await screen.findByRole('dialog')).findByRole('button', { name: 'Registrar' }));
@@ -221,7 +234,7 @@ describe('Detalle del préstamo y cuotas', () => {
 
 describe('Datos del PDF', () => {
   it('la simulación no lleva código de préstamo y el registrado sí (PR-{número})', () => {
-    const simulacion = datosPdfSimulacion(armarSimulacion(1000, 2), { clienteNombre: 'X' });
+    const simulacion = datosPdfSimulacion(armarSimulacion(1000, 2), { cliente: { nombre: 'X', tipoDocumento: 'DNI', numeroDocumento: '1' } });
     expect(simulacion.tipo).toBe('simulacion');
     expect(simulacion.codigo).toBeUndefined();
     expect(nombreArchivoPdf(simulacion)).toBe('PeruCred-simulacion-cronograma.pdf');
@@ -231,5 +244,77 @@ describe('Datos del PDF', () => {
     expect(registrado.codigo).toBe('PR-1001');
     expect(registrado.totalContractual).toBe(DETALLE.totalContractual);
     expect(nombreArchivoPdf(registrado)).toBe('PeruCred-PR-1001-cronograma.pdf');
+  });
+});
+
+describe('Cliente durante el proceso', () => {
+  it('se identifica en condiciones y confirmación, y al cambiar de cliente no queda el anterior', async () => {
+    window.location.hash = '#/solicitud';
+    const srv = crearServidor([ASESORA]);
+    srv.instalar();
+    srv.abrirSesion(ASESORA);
+    srv.agregarCliente({ id: '33333333-3333-4333-8333-333333333333', numero: 7, numeroDocumento: '77777777', nombre: 'Segundo Cliente Prueba' });
+    render(<App />);
+    const u = userEvent.setup();
+
+    await u.click(await screen.findByRole('button', { name: /Cliente de prueba/ }));
+    await u.click(screen.getByRole('button', { name: 'Continuar' }));
+    await screen.findByRole('heading', { name: 'Condiciones del préstamo' });
+    const tarjeta = screen.getByRole('region', { name: 'Cliente seleccionado' });
+    expect(tarjeta).toHaveTextContent('Cliente de prueba');
+    expect(tarjeta).toHaveTextContent('DNI 99999991');
+    expect(tarjeta).toHaveTextContent('999999999'); // celular real del cliente
+
+    await u.click(screen.getByRole('button', { name: 'Atrás' }));
+    await screen.findByRole('heading', { name: 'Selecciona al cliente' });
+    await u.click(screen.getByRole('button', { name: /Segundo Cliente Prueba/ }));
+    await u.click(screen.getByRole('button', { name: 'Continuar' }));
+    await screen.findByRole('heading', { name: 'Condiciones del préstamo' });
+    const nueva = screen.getByRole('region', { name: 'Cliente seleccionado' });
+    expect(nueva).toHaveTextContent('Segundo Cliente Prueba');
+    expect(nueva).toHaveTextContent('DNI 77777777');
+    expect(screen.queryByText('Cliente de prueba')).not.toBeInTheDocument();
+  });
+});
+
+describe('Paginación del cronograma', () => {
+  it('con 60 cuotas: 1–10, 11–20…, tamaños 10/20/30, numeración original y totales completos', async () => {
+    await conEscritorio(async () => {
+      montar('#/solicitud');
+      const u = userEvent.setup();
+      await irACondiciones(u);
+      await u.type(screen.getByLabelText(/Monto solicitado/), '6000');
+      await u.type(screen.getByLabelText(/Plazo/), '60');
+      await waitFor(() => expect(screen.getByRole('button', { name: /Ver cronograma de cuotas/ })).toBeEnabled(), { timeout: 4000 });
+      await u.click(screen.getByRole('button', { name: /Ver cronograma de cuotas/ }));
+      const dialogo = await screen.findByRole('dialog');
+
+      const numeros = () => within(within(dialogo).getByRole('table', { name: 'Cronograma de cuotas simulado' })).getAllByRole('row').slice(1, -1).map((r) => within(r).getAllByRole('cell')[0]?.textContent);
+      expect(within(dialogo).getByText('Mostrando cuotas 1–10 de 60')).toBeInTheDocument();
+      expect(numeros()).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
+      expect(within(dialogo).getByRole('button', { name: 'Página anterior' })).toBeDisabled();
+
+      await u.click(within(dialogo).getByRole('button', { name: 'Página siguiente' }));
+      expect(within(dialogo).getByText('Mostrando cuotas 11–20 de 60')).toBeInTheDocument();
+      expect(numeros()[0]).toBe('11'); // la numeración no se reinicia
+
+      await u.click(within(dialogo).getByRole('button', { name: 'Página 6' }));
+      expect(within(dialogo).getByText('Mostrando cuotas 51–60 de 60')).toBeInTheDocument();
+      expect(within(dialogo).getByRole('button', { name: 'Página siguiente' })).toBeDisabled();
+      expect(within(dialogo).getByText('Totales')).toBeInTheDocument(); // los totales siguen siendo los del cronograma completo
+
+      await u.selectOptions(within(dialogo).getByLabelText('Por página'), '30');
+      expect(within(dialogo).getByText('Mostrando cuotas 1–30 de 60')).toBeInTheDocument(); // vuelve a la primera página
+      expect(numeros()).toHaveLength(30);
+    });
+  });
+
+  it('el detalle de un préstamo registrado también se pagina y conserva el clic en la fila', async () => {
+    await conEscritorio(async () => {
+      montar(`#/prestamos/${DETALLE.id}`);
+      const tabla = await screen.findByRole('table', { name: 'Cronograma de cuotas' });
+      expect(screen.getByText('Mostrando cuotas 1–2 de 2')).toBeInTheDocument();
+      expect(within(tabla).getAllByRole('row', { name: /Ver detalle de la cuota/ })).toHaveLength(2);
+    });
   });
 });

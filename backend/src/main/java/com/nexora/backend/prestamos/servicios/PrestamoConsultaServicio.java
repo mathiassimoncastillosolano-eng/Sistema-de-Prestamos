@@ -80,7 +80,7 @@ public class PrestamoConsultaServicio {
                 "PR-" + c.numero() + " por " + soles(c.capital()) + " a " + c.clienteNombre(), c.asesorNombre()));
 
         return new PrestamoDetalle(c.id(), c.numero(), c.clienteId(), c.clienteNombre(), c.clienteTipoDocumento(),
-                c.clienteNumeroDocumento(), c.agenciaNombre(), c.asesorNombre(), "PEN", c.capital(), c.plazoMeses(),
+                c.clienteNumeroDocumento(), c.clienteCodigo(), c.clienteTelefono(), c.agenciaNombre(), c.asesorNombre(), "PEN", c.capital(), c.plazoMeses(),
                 c.tea(), c.fechaDesembolso(), cuotas.get(0).fechaVencimiento(),
                 cuotas.get(cuotas.size() - 1).fechaVencimiento(), e.estado(), c.observaciones(), cuotaMensual,
                 totalIntereses, e.totalContractual(), e.capitalPendiente(), e.totalPendiente(), e.proximoVencimiento(),

@@ -149,6 +149,9 @@ export interface PrestamoDetalleApi {
   clienteNombre: string;
   clienteTipoDocumento: string;
   clienteNumeroDocumento: string;
+  /** Código de cliente (clientes.numero) y celular; el celular puede no existir. */
+  clienteCodigo: number | null;
+  clienteTelefono: string | null;
   agenciaNombre: string;
   asesorNombre: string;
   moneda: string;

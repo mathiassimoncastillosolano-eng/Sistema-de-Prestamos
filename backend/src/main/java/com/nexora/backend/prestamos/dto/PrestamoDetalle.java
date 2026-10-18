@@ -13,6 +13,8 @@ public record PrestamoDetalle(
         String clienteNombre,
         String clienteTipoDocumento,
         String clienteNumeroDocumento,
+        Long clienteCodigo,
+        String clienteTelefono,
         String agenciaNombre,
         String asesorNombre,
         String moneda,

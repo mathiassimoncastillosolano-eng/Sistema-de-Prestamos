@@ -44,7 +44,7 @@ class PrestamoConsultaServicioTest {
 
     private CabeceraPrestamo cabecera(UUID id, long numero, UUID asesor, BigDecimal capital, LocalDate desembolso, String estado) {
         return new CabeceraPrestamo(id, numero, UUID.randomUUID(), "Rosa Elena Quispe Huamán", "DNI", "12345678",
-                "Lima Centro", "Camila Ortiz", asesor, capital, 6, ReglasPrestamo.TEA, desembolso, estado, null,
+                27L, "987654321", "Lima Centro", "Camila Ortiz", asesor, capital, 6, ReglasPrestamo.TEA, desembolso, estado, null,
                 "2026-07-13 15:38");
     }
 

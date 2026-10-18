@@ -5,12 +5,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { DefinitionList } from '@/components/data-display/definition-list';
 import { InfoFact, InfoPanel } from '@/components/data-display/info-fact';
 import { PageHeader } from '@/components/layout/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardBody } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardBody, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
 import { FormSection } from '@/components/ui/form-section';
@@ -27,7 +27,10 @@ import { cn, normalizar } from '@/lib/utils';
 import { codigoPrestamo } from './loan-utils';
 import { listarClientes, type ClienteListado } from '@/services/clientes-api';
 import { detalleLimite, prestamosApi, PrestamoApiError, type CondicionesApi } from '@/services/prestamos-api';
-import { ScheduleReview, ScheduleReviewModal } from './schedule-review';
+import { ClienteCard } from './client-card';
+import { BotonPdfSimulacion, ResumenFinanciero, ScheduleReviewModal } from './schedule-review';
+import { aFilas } from './loan-utils';
+import { ScheduleTable } from './schedule-table';
 import { SimulationSummary } from './simulation-summary';
 import { useSimulacion } from './use-simulacion';
 
@@ -57,6 +60,16 @@ const PASOS = [
   { titulo: 'Condiciones', descripcion: 'Monto y plazo' },
   { titulo: 'Confirmación', descripcion: 'Revisar y registrar' }
 ];
+
+/** Dato de la cuadrícula de confirmación. */
+function Dato({ k, v, fuerte }: { k: string; v: string; fuerte?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-ink-muted">{k}</dt>
+      <dd className={cn('num mt-0.5 truncate text-ink', fuerte ? 'text-lg font-semibold' : 'text-sm font-medium')} title={v}>{v}</dd>
+    </div>
+  );
+}
 
 export default function RequestPage() {
   const { clienteId: param } = useParams();
@@ -138,7 +151,8 @@ export default function RequestPage() {
   const simVigente = estadoSim === 'lista' && !!sim && sim.capital === capitalNum && sim.plazoMeses === plazoNum;
   const desembolso = sim?.fechaDesembolso ?? cond?.fechaDesembolso ?? '';
   const primerVencimiento = sim?.fechaPrimerVencimiento ?? cond?.fechaPrimerVencimiento ?? '';
-  const extras = { clienteNombre: cliente?.nombre, clienteDocumento: cliente ? `${cliente.tipoDocumento} ${cliente.numeroDocumento}` : undefined, asesor: usuario.nombre, agencia: usuario.agencia?.nombre };
+  const extras = { asesor: usuario.nombre, agencia: usuario.agencia?.nombre };
+  const filasSim = useMemo(() => (sim ? aFilas(sim.cuotas) : []), [sim]);
 
   const elegir = (id: string) => {
     setErrorServidor(null);
@@ -181,6 +195,22 @@ export default function RequestPage() {
   const cancelar = () => (isDirty || paso > 1 ? setDescartar(true) : navigate('/prestamos'));
   const limite = detalleLimite(errorServidor);
 
+  /** Acciones del flujo. En la confirmación quedan fijas al borde inferior para no perderlas con un cronograma largo. */
+  const acciones = (
+    <div className={cn('flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between', paso === 3 ? 'sticky bottom-3 z-10 mt-4 rounded-card border border-line bg-surface/95 px-4 py-3 shadow-pop backdrop-blur' : 'mt-6 border-t border-line pt-5')}>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        <Button variant="ghost" onClick={cancelar}>Cancelar</Button>
+        {paso === 3 && simVigente && sim && <BotonPdfSimulacion sim={sim} cliente={cliente} extras={extras} />}
+      </div>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row">
+        {paso > 1 && <Button onClick={() => setPaso(paso - 1)}>Atrás</Button>}
+        {paso < 3
+          ? <Button variant="primary" onClick={siguiente} disabled={(paso === 1 && !valores.clienteId) || (paso === 2 && !simVigente)}>Continuar</Button>
+          : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || guardando}><Send className="size-4" />Registrar préstamo</Button>}
+      </div>
+    </div>
+  );
+
   return (
     <>
       <PageHeader title="Registrar préstamo" description="Elige al cliente, define el monto y el plazo, y registra el préstamo con su cronograma. El sistema valida el límite de endeudamiento por cliente." />
@@ -190,8 +220,8 @@ export default function RequestPage() {
       <div className="min-w-0">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={paso} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: DUR.base, ease: EASE }}>
-            <Card>
-              <CardBody>
+            <Card className={paso === 3 ? 'border-0 bg-transparent shadow-none' : undefined}>
+              <CardBody className={paso === 3 ? 'p-0' : undefined}>
                 {paso === 1 && (
                   <>
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -248,6 +278,7 @@ export default function RequestPage() {
                       <EmptyState icon={TriangleAlert} title="No se pudieron cargar las condiciones" description={errorCond} className="py-8"
                         action={<Button variant="primary" onClick={() => setIntentoCond((n) => n + 1)}>Reintentar</Button>} />
                     )}
+                    {cliente && <ClienteCard cliente={cliente} className="mt-4" />}
                     {cond && (
                     <div className="mt-5 space-y-5">
                       <FormSection title="Importe y plazo">
@@ -289,8 +320,10 @@ export default function RequestPage() {
 
                 {paso === 3 && (
                   <>
-                    <h2 className="text-lg font-semibold text-ink">Revisión y confirmación</h2>
-                    <p className="mt-1 text-sm text-ink-muted">Al confirmar se registra el préstamo y su cronograma de cuotas en una sola operación: si algo falla, no se guarda nada.</p>
+                    <div>
+                      <h2 className="text-lg font-semibold text-ink">Revisión y confirmación</h2>
+                      <p className="mt-0.5 text-sm text-ink-muted">Verifica los datos antes de registrar el préstamo.</p>
+                    </div>
 
                     {errorServidor && (
                       <div role="alert" className="mt-4 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
@@ -310,54 +343,54 @@ export default function RequestPage() {
                       </div>
                     )}
 
-                    {cliente && (
-                      <div className="mt-4 flex items-center gap-3 rounded-control bg-surface-2 p-3">
-                        <Avatar nombre={cliente.nombre} tipo={cliente.tipoDocumento} />
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-ink">{cliente.nombre}</p>
-                          <p className="num text-xs text-ink-muted">{cliente.tipoDocumento} {cliente.numeroDocumento}</p>
-                        </div>
-                      </div>
-                    )}
+                    <div className="mt-4 space-y-4">
+                      {/* 1 · Cliente */}
+                      {cliente && <ClienteCard cliente={cliente} variante="destacada" />}
 
-                    <section aria-label="Condiciones del préstamo" className="mt-5">
-                      <h3 className="mb-1 text-sm font-semibold text-ink">Condiciones</h3>
-                      <DefinitionList items={[
-                        { label: 'Capital solicitado', value: money(capitalNum), strong: true },
-                        { label: 'Moneda', value: cond?.moneda === 'PEN' ? 'Soles (PEN)' : (cond?.moneda ?? '—') },
-                        { label: 'Plazo', value: `${plazoNum} meses` },
-                        { label: 'Tasa aplicada', value: cond ? `TEA ${(cond.tea * 100).toFixed(0)} %` : '—' },
-                        { label: 'Frecuencia de cuotas', value: 'Mensual' },
-                        { label: 'Fecha de desembolso', value: desembolso ? fecha(desembolso) : '—' },
-                        { label: 'Primera cuota', value: primerVencimiento ? fecha(primerVencimiento) : '—' },
-                        { label: 'Asesor responsable', value: usuario.nombre },
-                        { label: 'Observaciones', value: valores.observaciones.trim() || '—' }
-                      ]} />
-                    </section>
+                      {/* 2 · Condiciones del préstamo */}
+                      <Card aria-label="Condiciones del préstamo">
+                        <CardHeader title="Condiciones del préstamo" as="h3" />
+                        <CardBody>
+                          <dl className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                            <Dato k="Capital solicitado" v={money(capitalNum)} fuerte />
+                            <Dato k="Plazo" v={`${plazoNum} meses`} fuerte />
+                            <Dato k="Tasa aplicada" v={cond ? `TEA ${(cond.tea * 100).toFixed(0)} %` : '—'} fuerte />
+                          </dl>
+                          <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <Dato k="Moneda" v={cond?.moneda === 'PEN' ? 'Soles (PEN)' : (cond?.moneda ?? '—')} />
+                            <Dato k="Frecuencia de cuotas" v="Mensual" />
+                            <Dato k="Asesor responsable" v={usuario.nombre} />
+                            <Dato k="Fecha de desembolso" v={desembolso ? fecha(desembolso) : '—'} />
+                            <Dato k="Primera fecha de vencimiento" v={primerVencimiento ? fecha(primerVencimiento) : '—'} />
+                            {valores.observaciones.trim() && <Dato k="Observaciones" v={valores.observaciones.trim()} />}
+                          </dl>
+                        </CardBody>
+                      </Card>
 
-                    <section aria-label="Cronograma de cuotas" className="mt-6">
-                      <h3 className="mb-2 text-sm font-semibold text-ink">Cronograma de cuotas</h3>
-                      {simVigente && sim && <ScheduleReview sim={sim} extras={extras} />}
-                      {estadoSim === 'cargando' && <p role="status" className="py-6 text-center text-sm text-ink-muted">Calculando cronograma…</p>}
-                      {estadoSim === 'error' && (
-                        <div role="alert" className="rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
-                          <p>{errorSim?.message ?? 'No se pudo calcular el cronograma.'}</p>
-                          <button type="button" onClick={recalcular} className="mt-1 font-medium underline">Reintentar</button>
-                        </div>
-                      )}
-                    </section>
+                      {/* 3 · Resumen financiero */}
+                      {simVigente && sim && <ResumenFinanciero sim={sim} />}
+
+                      {/* 4 · Detalle de cuotas */}
+                      <Card aria-label="Detalle de cuotas" className="overflow-hidden">
+                        <CardHeader title="Detalle de cuotas" as="h3" description="Cronograma de amortización. El PDF incluye todas las cuotas, no solo la página visible."
+                          action={sim ? <Badge tone="neutral" className="num">{sim.plazoMeses} cuotas</Badge> : undefined} className="pb-3" />
+                        {simVigente && sim && (
+                          <ScheduleTable filas={filasSim} totales={{ capital: sim.capital, intereses: sim.totalIntereses, total: sim.totalContractual }} etiqueta="Cronograma de cuotas a registrar" />
+                        )}
+                        {estadoSim === 'cargando' && <p role="status" className="px-5 pb-5 text-center text-sm text-ink-muted">Calculando cronograma…</p>}
+                        {estadoSim === 'error' && (
+                          <div role="alert" className="mx-5 mb-5 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
+                            <p>{errorSim?.message ?? 'No se pudo calcular el cronograma.'}</p>
+                            <button type="button" onClick={recalcular} className="mt-1 font-medium underline">Reintentar</button>
+                          </div>
+                        )}
+                      </Card>
+                    </div>
                   </>
                 )}
 
-                <div className="mt-6 flex flex-col-reverse gap-2 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-between">
-                  <Button variant="ghost" onClick={cancelar}>Cancelar</Button>
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                    {paso > 1 && <Button onClick={() => setPaso(paso - 1)}>Atrás</Button>}
-                    {paso < 3
-                      ? <Button variant="primary" onClick={siguiente} disabled={(paso === 1 && !valores.clienteId) || (paso === 2 && !simVigente)}>Continuar</Button>
-                      : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || guardando}><Send className="size-4" />Registrar préstamo</Button>}
-                  </div>
-                </div>
+                {/* 5 · Acciones */}
+                {acciones}
               </CardBody>
             </Card>
           </motion.div>
@@ -379,7 +412,7 @@ export default function RequestPage() {
         )}
         </div>
 
-      <ScheduleReviewModal open={verCronograma} onOpenChange={setVerCronograma} sim={simVigente ? sim : null} extras={extras} />
+      <ScheduleReviewModal open={verCronograma} onOpenChange={setVerCronograma} sim={simVigente ? sim : null} cliente={cliente} extras={extras} />
 
       <Modal open={confirmar} onOpenChange={(o) => { if (!guardando) setConfirmar(o); }} size="sm" title="Registrar préstamo"
         description={`Vas a registrar un préstamo de ${money(capitalNum)} a ${plazoNum} meses para ${cliente?.nombre ?? ''}. Se guardará junto con su cronograma de cuotas.`}

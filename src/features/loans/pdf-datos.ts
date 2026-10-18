@@ -1,10 +1,10 @@
 import type { DatosPdf } from '@/lib/pdf';
 import type { PrestamoDetalleApi, SimulacionApi } from '@/services/prestamos-api';
+import type { ClienteResumen } from './client-card';
 import { codigoPrestamo } from './loan-utils';
 
 interface ExtrasSimulacion {
-  clienteNombre?: string;
-  clienteDocumento?: string;
+  cliente?: ClienteResumen | null;
   asesor?: string;
   agencia?: string;
 }
@@ -12,8 +12,11 @@ interface ExtrasSimulacion {
 /** PDF de una simulación: «no registrada», sin código de préstamo. Usa exactamente lo que devolvió el servidor. */
 export const datosPdfSimulacion = (s: SimulacionApi, e: ExtrasSimulacion = {}): DatosPdf => ({
   tipo: 'simulacion',
-  clienteNombre: e.clienteNombre,
-  clienteDocumento: e.clienteDocumento,
+  moneda: s.moneda,
+  clienteNombre: e.cliente?.nombre,
+  clienteDocumento: e.cliente ? `${e.cliente.tipoDocumento} ${e.cliente.numeroDocumento}` : undefined,
+  clienteCodigo: e.cliente?.numero != null ? String(e.cliente.numero) : undefined,
+  clienteTelefono: e.cliente?.telefono ?? undefined,
   asesor: e.asesor,
   agencia: e.agencia,
   capital: s.capital,
@@ -30,9 +33,12 @@ export const datosPdfSimulacion = (s: SimulacionApi, e: ExtrasSimulacion = {}): 
 /** PDF del préstamo registrado, con los datos persistidos (los mismos del listado y del detalle). */
 export const datosPdfRegistrado = (p: PrestamoDetalleApi): DatosPdf => ({
   tipo: 'registrado',
+  moneda: p.moneda,
   codigo: codigoPrestamo(p.numero),
   clienteNombre: p.clienteNombre,
   clienteDocumento: `${p.clienteTipoDocumento} ${p.clienteNumeroDocumento}`,
+  clienteCodigo: p.clienteCodigo != null ? String(p.clienteCodigo) : undefined,
+  clienteTelefono: p.clienteTelefono ?? undefined,
   agencia: p.agenciaNombre,
   asesor: p.asesorNombre,
   capital: p.capital,

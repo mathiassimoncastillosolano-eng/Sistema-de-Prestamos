@@ -1,10 +1,11 @@
-import type { KeyboardEvent } from 'react';
+import { useEffect, useState, type KeyboardEvent } from 'react';
 import { StatusBadge } from '@/components/data-display/status-badge';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { fecha } from '@/lib/dates';
 import { money } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import type { FilaCronograma, TotalesCronograma } from './loan-utils';
+import { TAMANO_PAGINA_INICIAL, paginar, type FilaCronograma, type TotalesCronograma } from './loan-utils';
+import { SchedulePagination } from './schedule-pagination';
 
 interface Props {
   filas: FilaCronograma[];
@@ -16,6 +17,8 @@ interface Props {
   conEstado?: boolean;
   /** Etiqueta accesible del cronograma. */
   etiqueta?: string;
+  /** Pagina la tabla (10 por página, con selector 10/20/30). Los totales y el PDF siempre usan el cronograma completo. */
+  paginada?: boolean;
   className?: string;
 }
 
@@ -32,13 +35,24 @@ const teclaFila = (accion: () => void) => (e: KeyboardEvent) => {
  * Sirve para la simulación, la revisión previa al registro y el detalle del préstamo. Los datos llegan ya calculados por el
  * servidor. Las filas son clicables (sin icono de ojo) y se pueden activar con teclado. En móvil se presenta como tarjetas.
  */
-export function ScheduleTable({ filas, totales, onSelect, conEstado = false, etiqueta = 'Cronograma de cuotas', className }: Props) {
+export function ScheduleTable({ filas, totales, onSelect, conEstado = false, etiqueta = 'Cronograma de cuotas', paginada = true, className }: Props) {
   const escritorio = useMediaQuery('(min-width: 768px)');
+  const [pagina, setPagina] = useState(1);
+  const [tamano, setTamano] = useState(TAMANO_PAGINA_INICIAL);
+  // Un cronograma distinto (otro préstamo o nuevas condiciones) vuelve siempre a la primera página.
+  const firma = `${filas.length}|${filas[0]?.importeCuota}|${filas[filas.length - 1]?.saldo}|${totales.total}`;
+  useEffect(() => { setPagina(1); }, [firma]);
+  const pg = paginar(filas, paginada ? pagina : 1, paginada ? tamano : Math.max(filas.length, 1));
+  const visibles = pg.visibles;
+  const paginador = paginada
+    ? <SchedulePagination pg={pg} tamano={tamano} etiqueta={etiqueta} onPagina={setPagina} onTamano={(n) => { setTamano(n); setPagina(1); }} />
+    : null;
 
   if (!escritorio) {
     return (
-      <ol className={cn('divide-y divide-line', className)} aria-label={etiqueta}>
-        {filas.map((c) => {
+      <div className={className}>
+      <ol className="divide-y divide-line" aria-label={etiqueta}>
+        {visibles.map((c) => {
           const contenido = (
             <>
               <div className="flex items-center justify-between gap-3">
@@ -67,12 +81,15 @@ export function ScheduleTable({ filas, totales, onSelect, conEstado = false, eti
           <div className="flex justify-between"><span className="text-ink-muted">Importe contractual total</span><b>{money(totales.total)}</b></div>
         </li>
       </ol>
+      {paginador}
+      </div>
     );
   }
 
   const celda = 'whitespace-nowrap px-3 py-2.5 first:pl-4 last:pr-4';
   return (
-    <table className={cn('w-full border-collapse text-sm', className)} aria-label={etiqueta}>
+    <div className={className}>
+    <table className="w-full border-collapse text-sm" aria-label={etiqueta}>
       <thead className="bg-surface-2/70 text-left text-xs font-medium text-ink-muted">
         <tr>
           <th scope="col" className={celda}>N.º</th><th scope="col" className={celda}>Vence</th>
@@ -81,7 +98,7 @@ export function ScheduleTable({ filas, totales, onSelect, conEstado = false, eti
         </tr>
       </thead>
       <tbody>
-        {filas.map((c) => {
+        {visibles.map((c) => {
           const abrir = onSelect ? () => onSelect(c.numero) : undefined;
           return (
             <tr
@@ -113,5 +130,7 @@ export function ScheduleTable({ filas, totales, onSelect, conEstado = false, eti
         </tr>
       </tfoot>
     </table>
+    {paginador}
+    </div>
   );
 }

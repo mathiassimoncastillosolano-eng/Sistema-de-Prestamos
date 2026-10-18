@@ -40,6 +40,9 @@ public class PrestamoConsultaRepositorio {
             String clienteNombre,
             String clienteTipoDocumento,
             String clienteNumeroDocumento,
+            /** Código de cliente (clientes.numero) y celular, tal como están en la BD; el celular puede ser null. */
+            Long clienteCodigo,
+            String clienteTelefono,
             String agenciaNombre,
             String asesorNombre,
             UUID asesorId,
@@ -57,6 +60,7 @@ public class PrestamoConsultaRepositorio {
     public List<CabeceraPrestamo> cabeceras(Filtro filtro) {
         String sql = """
                 select p.id, p.numero, p.cliente_id, c.nombre as cliente_nombre, c.tipo_documento, c.numero_documento,
+                       c.numero as cliente_codigo, c.telefono as cliente_telefono,
                        a.nombre as agencia, %s as asesor, p.asesor_id, p.capital, p.plazo_meses, p.tea,
                        p.fecha_desembolso, p.estado, p.observaciones,
                        to_char(p.creado_en at time zone 'America/Lima', 'YYYY-MM-DD HH24:MI') as registrado
@@ -69,7 +73,8 @@ public class PrestamoConsultaRepositorio {
                 """.formatted(NOMBRE_ASESOR, filtro.condicion());
         return jdbc.query(sql, (rs, i) -> new CabeceraPrestamo(
                 uuid(rs, "id"), rs.getLong("numero"), uuid(rs, "cliente_id"), rs.getString("cliente_nombre"),
-                rs.getString("tipo_documento"), rs.getString("numero_documento"), rs.getString("agencia"),
+                rs.getString("tipo_documento"), rs.getString("numero_documento"),
+                rs.getObject("cliente_codigo", Long.class), rs.getString("cliente_telefono"), rs.getString("agencia"),
                 rs.getString("asesor"), uuid(rs, "asesor_id"), rs.getBigDecimal("capital"), rs.getInt("plazo_meses"),
                 rs.getBigDecimal("tea"), rs.getObject("fecha_desembolso", LocalDate.class), rs.getString("estado"),
                 rs.getString("observaciones"), rs.getString("registrado")), filtro.argumentos());

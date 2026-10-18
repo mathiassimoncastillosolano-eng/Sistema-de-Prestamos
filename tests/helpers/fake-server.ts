@@ -184,7 +184,7 @@ export function armarSimulacion(capital: number, plazoMeses: number) {
 const sim2 = armarSimulacion(1000, 2);
 export const DETALLE = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', numero: 1001, clienteId: '11111111-1111-4111-8111-111111111111',
-  clienteNombre: 'Cliente de prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '99999991',
+  clienteNombre: 'Cliente de prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '99999991', clienteCodigo: 1, clienteTelefono: '999999999',
   agenciaNombre: 'Sur Prueba', asesorNombre: 'Valeria Quintana', moneda: 'PEN', capital: 1000, plazoMeses: 2, tea: 0.3,
   fechaDesembolso: '2026-08-18', fechaPrimerVencimiento: '2026-09-18', fechaUltimoVencimiento: '2026-10-18',
   estado: 'En mora', observaciones: null, cuotaMensual: sim2.cuotaMensual, totalIntereses: sim2.totalIntereses, totalContractual: sim2.totalContractual,

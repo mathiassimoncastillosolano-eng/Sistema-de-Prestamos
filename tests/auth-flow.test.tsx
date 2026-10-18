@@ -102,18 +102,17 @@ describe('A · login correcto como asesor', () => {
     expect(JSON.stringify({ ...localStorage })).not.toContain(ASESORA.clave);
   });
 
-  it('la búsqueda global encuentra clientes de la base de datos y abre su ficha', async () => {
-    const servidor = montar();
-    servidor.agregarCliente({ id: '55555555-5555-4555-8555-555555555555', numero: 48, numeroDocumento: '60902621', nombre: 'Poemape Saldaña, Maria Teresa' });
+  it('la barra superior ya no ofrece búsqueda global ni el atajo Ctrl K', async () => {
+    montar();
     const usuario = await iniciarSesion(ASESORA);
     window.location.hash = '#/clientes/11111111-1111-4111-8111-111111111111';
     await screen.findByRole('heading', { name: 'Datos del cliente' });
 
+    expect(screen.queryByRole('button', { name: 'Buscar clientes' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Ctrl K')).not.toBeInTheDocument();
     await usuario.keyboard('{Control>}k{/Control}');
-    await usuario.type(await screen.findByRole('combobox', { name: 'Buscar clientes' }), 'poemape');
-    await usuario.click(await screen.findByRole('option', { name: /Poemape Saldaña/ }));
-
-    await waitFor(() => expect(window.location.hash).toBe('#/clientes/55555555-5555-4555-8555-555555555555'));
+    expect(screen.queryByRole('combobox', { name: 'Buscar clientes' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Menú de cuenta' })).toBeInTheDocument(); // el resto de controles sigue
   });
 
   it('muestra un mensaje si el cliente solicitado no existe', async () => {
@@ -139,7 +138,7 @@ describe('B · login correcto como gerencia', () => {
       expect(etiquetasMenu()).toEqual(['Dashboard']);
     }
     expect(await screen.findAllByText('Tu rol no tiene acceso a ese módulo.')).not.toHaveLength(0);
-    // Búsqueda global y avisos (recorren clientes y préstamos) no se ofrecen a gerencia
+    // Los avisos (recorren clientes y préstamos) no se ofrecen a gerencia
     expect(screen.queryByRole('button', { name: /Notificaciones/ })).not.toBeInTheDocument();
   });
 
