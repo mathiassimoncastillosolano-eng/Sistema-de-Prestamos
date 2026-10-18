@@ -37,6 +37,10 @@ public class Cliente {
     private String telefono;
 
     @Setter
+    @Column(name = "correo")
+    private String correo;
+
+    @Setter
     @Column(name = "dni_titular")
     private String dniTitular;
 
@@ -79,6 +83,7 @@ public class Cliente {
             String numeroDocumento,
             String nombre,
             String telefono,
+            String correo,
             String dniTitular,
             String domicilio,
             String estadoSunat,
@@ -86,12 +91,12 @@ public class Cliente {
             String representanteNombre,
             String representanteDni,
             UUID agenciaId,
-            UUID creadoPor
-    ) {
+            UUID creadoPor) {
         this.tipoDocumento = tipoDocumento;
         this.numeroDocumento = numeroDocumento;
         this.nombre = nombre;
         this.telefono = telefono;
+        this.correo = correo;
         this.dniTitular = dniTitular;
         this.domicilio = domicilio;
         this.estadoSunat = estadoSunat;

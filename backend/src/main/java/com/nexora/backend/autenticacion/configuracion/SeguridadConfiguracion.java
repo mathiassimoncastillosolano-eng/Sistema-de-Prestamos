@@ -1,3 +1,4 @@
+
 package com.nexora.backend.autenticacion.configuracion;
 
 import com.nexora.backend.autenticacion.servicios.AutenticacionServicio;
@@ -19,16 +20,23 @@ import org.springframework.security.web.context.HttpSessionSecurityContextReposi
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 /**
- * Seguridad de la API: sesion en cookie HttpOnly, CSRF por doble envio (cookie XSRF-TOKEN + cabecera X-XSRF-TOKEN),
- * todo requiere sesion salvo el inicio de sesion, y cualquier ruta fuera de /api se deniega.
+ * Seguridad de la API:
+ * - Sesión mediante cookie HttpOnly.
+ * - Protección CSRF por doble envío.
+ * - CORS limitado al frontend local.
+ * - Todas las rutas /api requieren sesión, salvo el login.
  */
 @Configuration
 @EnableWebSecurity
 public class SeguridadConfiguracion {
 
-    /** BCrypt: reconoce los prefijos $2a$, $2b$ e $2y$ (p. ej. el hash que genera crypt(clave, gen_salt('bf')) de pgcrypto). */
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
@@ -40,36 +48,99 @@ public class SeguridadConfiguracion {
     }
 
     @Bean
+    CorsConfigurationSource configuracionCORS() {
+        CorsConfiguration configuracion = new CorsConfiguration();
+
+        configuracion.setAllowedOrigins(List.of(
+                "http://localhost:5173",
+                "http://127.0.0.1:5173"
+        ));
+
+        configuracion.setAllowedMethods(List.of(
+                "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
+        ));
+
+        configuracion.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "X-XSRF-TOKEN"
+        ));
+
+        configuracion.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource origen =
+                new UrlBasedCorsConfigurationSource();
+
+        origen.registerCorsConfiguration("/api/**", configuracion);
+
+        return origen;
+    }
+
+    @Bean
     SecurityFilterChain cadenaDeSeguridad(
             HttpSecurity http,
             SecurityContextRepository contexto,
             AutenticacionServicio servicio,
             @Value("${server.servlet.session.cookie.secure:true}") boolean cookieSegura,
-            @Value("${server.servlet.session.cookie.name:NEXORA_SESION}") String nombreCookieSesion) throws Exception {
+            @Value("${server.servlet.session.cookie.name:NEXORA_SESION}") String nombreCookieSesion
+    ) throws Exception {
 
-        CookieCsrfTokenRepository csrf = CookieCsrfTokenRepository.withHttpOnlyFalse(); // el JS del frontend debe poder leerla
-        csrf.setCookieCustomizer(c -> c.path("/").sameSite("Lax").secure(cookieSegura));
+        CookieCsrfTokenRepository csrf =
+                CookieCsrfTokenRepository.withHttpOnlyFalse();
+
+        csrf.setCookieCustomizer(c ->
+                c.path("/")
+                        .sameSite("Lax")
+                        .secure(cookieSegura)
+        );
 
         http
-                .csrf(c -> c.csrfTokenRepository(csrf).csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
-                .securityContext(c -> c.securityContextRepository(contexto))
-                .sessionManagement(c -> c.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+                .cors(Customizer.withDefaults())
+                .csrf(c -> c
+                        .csrfTokenRepository(csrf)
+                        .csrfTokenRequestHandler(
+                                new CsrfTokenRequestAttributeHandler()
+                        )
+                )
+                .securityContext(c ->
+                        c.securityContextRepository(contexto)
+                )
+                .sessionManagement(c ->
+                        c.sessionCreationPolicy(
+                                SessionCreationPolicy.IF_REQUIRED
+                        )
+                )
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(c -> c
-                        .logoutUrl("/api/auth/logout") // solo POST, con CSRF
+                        .logoutUrl("/api/auth/logout")
                         .invalidateHttpSession(true)
                         .clearAuthentication(true)
                         .deleteCookies(nombreCookieSesion)
-                        .logoutSuccessHandler((req, res, auth) -> res.setStatus(HttpStatus.NO_CONTENT.value())))
+                        .logoutSuccessHandler((req, res, auth) ->
+                                res.setStatus(HttpStatus.NO_CONTENT.value())
+                        )
+                )
                 .authorizeHttpRequests(c -> c
                         .requestMatchers("/api/auth/login").permitAll()
                         .requestMatchers("/api/**").authenticated()
-                        .anyRequest().denyAll())
-                .exceptionHandling(c -> c.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+                        .anyRequest().denyAll()
+                )
+                .exceptionHandling(c ->
+                        c.authenticationEntryPoint(
+                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)
+                        )
+                )
                 .headers(Customizer.withDefaults())
-                .addFilterAfter(new CsrfCookieFiltro(), BasicAuthenticationFilter.class)
-                .addFilterAfter(new VerificadorSesionFiltro(servicio), CsrfCookieFiltro.class);
+                .addFilterAfter(
+                        new CsrfCookieFiltro(),
+                        BasicAuthenticationFilter.class
+                )
+                .addFilterAfter(
+                        new VerificadorSesionFiltro(servicio),
+                        CsrfCookieFiltro.class
+                );
 
         return http.build();
     }
