@@ -133,8 +133,10 @@ describe('B · login correcto como gerencia', () => {
     expect(await screen.findByText('Resumen por agencia', undefined, { timeout: 4000 })).toBeInTheDocument();
     expect(screen.getByText('Clientes morosos')).toBeInTheDocument();
     expect(screen.getByText('En proceso extrajudicial')).toBeInTheDocument();
+    // datos reales de GET /api/dashboard: el cliente moroso y las agencias de la base
+    expect(screen.getAllByText('Rosa Moroso Prueba').length).toBeGreaterThan(0);
     await u.click(screen.getByRole('combobox', { name: 'Alcance de los indicadores' }));
-    expect(await screen.findByRole('option', { name: 'Agencia Cusco' })).toBeInTheDocument();
+    expect(await screen.findByRole('option', { name: 'Agencia Norte Prueba' })).toBeInTheDocument();
   });
 
   it('entrar por la URL de un módulo prohibido nunca llega a montar ese módulo', async () => {

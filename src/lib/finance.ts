@@ -98,7 +98,8 @@ export function importarHistorico(p: Prestamo, reg: RegistroHistorico): Prestamo
   return { ...p, cronograma: cubrirConHistorico(p.cronograma, reg.monto), historico: [...p.historico, reg] };
 }
 
-export function resumen(p: Pick<Prestamo, 'cronograma' | 'capital' | 'etapa'>): ResumenPrestamo {
+/** `hoy` es la fecha de corte para decidir qué cuotas están vencidas (por defecto, la fecha simulada de los datos mock). */
+export function resumen(p: Pick<Prestamo, 'cronograma' | 'capital' | 'etapa'>, hoy: string = CFG.hoy): ResumenPrestamo {
   const total = r2(p.cronograma.reduce((a, c) => a + c.cuota, 0));
   if (p.etapa) {
     // Solicitud sin desembolsar: el cronograma es una proyección y no existe saldo ni mora.
@@ -108,7 +109,7 @@ export function resumen(p: Pick<Prestamo, 'cronograma' | 'capital' | 'etapa'>): 
   const pendiente = r2(total - cubierto);
   const abiertas = p.cronograma.filter(cuotaAbierta);
   const capitalPend = r2(abiertas.reduce((a, c) => a + c.capital, 0));
-  const vencidas = abiertas.filter((c) => c.fecha < CFG.hoy).length;
+  const vencidas = abiertas.filter((c) => c.fecha < hoy).length;
   const estado: EstadoPrestamo = pendiente <= 0.005 ? 'Cancelado' : vencidas ? 'En mora' : 'Vigente';
   return { total, cubierto, pendiente, interes: r2(total - p.capital), capitalPend, vencidas, proxima: abiertas[0] ?? null, estado };
 }

@@ -14,12 +14,14 @@ import { variacion } from './format';
 export type Alcance = 'mis' | 'empresa' | `agencia:${string}`;
 export interface OpcionAlcance { value: Alcance; label: string }
 
-const deAgencia = (nombre: string): OpcionAlcance => ({ value: `agencia:${nombre}`, label: `Agencia ${nombre}` });
+/** Los nombres de la base ya empiezan con "Agencia"; los de los datos de prueba no. */
+const etiquetaAgencia = (nombre: string) => (nombre.startsWith('Agencia') ? nombre : `Agencia ${nombre}`);
+const deAgencia = (nombre: string): OpcionAlcance => ({ value: `agencia:${nombre}`, label: etiquetaAgencia(nombre) });
 
 /** Alcances disponibles según el perfil real. El asesor ve su cartera y su agencia; la gerencia elige cualquier agencia. */
-export function alcancesPara(rol: Rol | null, agencia: string | null): OpcionAlcance[] {
+export function alcancesPara(rol: Rol | null, agencia: string | null, agencias: readonly string[] = AGENCIAS): OpcionAlcance[] {
   const empresa: OpcionAlcance = { value: 'empresa', label: 'Toda la empresa' };
-  if (rol === 'gerencia') return [empresa, ...AGENCIAS.map(deAgencia)];
+  if (rol === 'gerencia') return [empresa, ...agencias.map(deAgencia)];
   if (rol !== 'asesor') return [empresa];
   return [{ value: 'mis', label: 'Mi cartera' }, ...(agencia ? [deAgencia(agencia)] : []), empresa];
 }
@@ -100,29 +102,37 @@ export interface Dashboard {
 const suma = (xs: number[]) => r2(xs.reduce((a, b) => a + b, 0));
 const enRango = (f: string, desde: string, hasta: string) => f >= desde && f <= hasta;
 
+/** Parámetros del cálculo. `hoy` es la fecha de corte: la real cuando los datos vienen de la base. */
+export interface FiltrosDashboard {
+  alcance: Alcance;
+  meses: number;
+  yo: IdentidadOperativa;
+  estado?: FiltroEstado;
+  hoy?: string;
+}
+
 /** Agrupa las cuotas vencidas por cliente. La lista llega ordenada por fecha, así que la primera de cada cliente es la más antigua. */
-function agruparMorosos(vencidas: CuotaPendiente[]): ClienteMoroso[] {
+function agruparMorosos(vencidas: CuotaPendiente[], hoy: string): ClienteMoroso[] {
   const porCliente = new Map<string, ClienteMoroso>();
   for (const o of vencidas) {
     const id = o.prestamo.clienteId;
-    const m = porCliente.get(id) ?? { cliente: o.cliente, clienteId: id, diasAtraso: diasEntre(CFG.hoy, o.cuota.fecha), montoVencido: 0 };
+    const m = porCliente.get(id) ?? { cliente: o.cliente, clienteId: id, diasAtraso: diasEntre(hoy, o.cuota.fecha), montoVencido: 0 };
     m.montoVencido = r2(m.montoVencido + o.importe);
     porCliente.set(id, m);
   }
   return [...porCliente.values()].sort((a, b) => b.diasAtraso - a.diasAtraso);
 }
 
-export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: IdentidadOperativa, estado: FiltroEstado = 'todos'): Dashboard {
+export function calcularDashboard(db: Db, { alcance, meses, yo, estado = 'todos', hoy = CFG.hoy }: FiltrosDashboard): Dashboard {
   const enAlcance = filtroAlcance(alcance, yo);
   const conEstado = (r: ResumenPrestamo) => estado === 'todos' || r.estado === estado;
 
   /* Solo préstamos desembolsados: las solicitudes en evaluación, aprobadas o rechazadas no son cartera. */
-  const rs = db.prestamos.filter(enAlcance).filter(esDesembolsado).map((p) => ({ p, r: resumen(p) })).filter((x) => conEstado(x.r));
+  const rs = db.prestamos.filter(enAlcance).filter(esDesembolsado).map((p) => ({ p, r: resumen(p, hoy) })).filter((x) => conEstado(x.r));
   const ps = rs.map((x) => x.p);
   const vigentes = rs.filter((x) => x.r.estado !== 'Cancelado');
   const cliente = (id: string) => db.clientes.find((c) => c.id === id);
 
-  const hoy = CFG.hoy;
   const inicioMes = hoy.slice(0, 8) + '01';
   const inicioPrevio = addMonths(inicioMes, -1);
   const mismoDiaPrevio = addMonths(hoy, -1); // misma ventana de días, para comparar justo
@@ -139,7 +149,7 @@ export function calcularDashboard(db: Db, alcance: Alcance, meses: number, yo: I
   );
   const porFecha = (a: CuotaPendiente, b: CuotaPendiente) => a.cuota.fecha.localeCompare(b.cuota.fecha);
   const vencidas = abiertas.filter((o) => o.cuota.fecha < hoy).sort(porFecha);
-  const morosos = agruparMorosos(vencidas);
+  const morosos = agruparMorosos(vencidas, hoy);
   const futuras = abiertas.filter((o) => o.cuota.fecha >= hoy).sort(porFecha);
   const ventana = futuras.filter((o) => o.cuota.fecha <= addDays(hoy, CFG.diasProxVenc));
 
@@ -188,10 +198,10 @@ export interface FilaAgencia {
 }
 
 /** Una fila por agencia, reutilizando el mismo cálculo del dashboard con el alcance de cada agencia. */
-export function resumenPorAgencia(db: Db, yo: IdentidadOperativa, estado: FiltroEstado = 'todos'): FilaAgencia[] {
-  return AGENCIAS.map((agencia) => {
-    const d = calcularDashboard(db, `agencia:${agencia}`, 1, yo, estado);
-    return { agencia, prestamosActivos: d.prestamosActivos, capitalPendiente: d.capitalPendiente, morosos: d.morosos.length, extrajudiciales: d.extrajudiciales.length };
+export function resumenPorAgencia(db: Db, filtros: Omit<FiltrosDashboard, 'alcance' | 'meses'>, agencias: readonly string[] = AGENCIAS): FilaAgencia[] {
+  return agencias.map((agencia) => {
+    const d = calcularDashboard(db, { ...filtros, alcance: `agencia:${agencia}`, meses: 1 });
+    return { agencia: etiquetaAgencia(agencia), prestamosActivos: d.prestamosActivos, capitalPendiente: d.capitalPendiente, morosos: d.morosos.length, extrajudiciales: d.extrajudiciales.length };
   });
 }
 
@@ -205,7 +215,7 @@ export interface Notificacion {
 }
 
 export function calcularNotificaciones(db: Db, yo: IdentidadOperativa): Notificacion[] {
-  const d = calcularDashboard(db, 'mis', 3, yo);
+  const d = calcularDashboard(db, { alcance: 'mis', meses: 3, yo });
   const out: Notificacion[] = [];
   d.vencidas.slice(0, 3).forEach((o) =>
     out.push({

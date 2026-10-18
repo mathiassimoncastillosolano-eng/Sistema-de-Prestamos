@@ -14,7 +14,7 @@ export type EstadoCliente = 'Con cuotas vencidas' | 'Cerca del límite' | 'Al d�
 
 /** Estado derivado del cliente (no existe como campo: se calcula desde sus préstamos). */
 export function estadoCliente(db: Db, c: Cliente): EstadoCliente {
-  const ps = prestamosDe(db, c.id).filter(esDesembolsado).map(resumen);
+  const ps = prestamosDe(db, c.id).filter(esDesembolsado).map((p) => resumen(p));
   if (ps.some((r) => r.estado === 'En mora')) return 'Con cuotas vencidas';
   if (!ps.some((r) => r.estado !== 'Cancelado')) return 'Sin préstamos activos';
   if (deudaCliente(db, c.id) >= CFG.limite * CFG.alertaLimite) return 'Cerca del límite';

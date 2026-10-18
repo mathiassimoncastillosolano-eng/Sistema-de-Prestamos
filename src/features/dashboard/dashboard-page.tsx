@@ -15,19 +15,20 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Select } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth, useIdentidad, useUsuario } from '@/hooks/use-auth';
-import { useDb } from '@/hooks/use-db';
-import { useSimulatedLoading } from '@/hooks/use-simulated-loading';
+import { useCartera } from '@/hooks/use-cartera';
 import { FILTROS_ESTADO, PERIODOS, alcancesPara, calcularDashboard, resumenPorAgencia, type Alcance, type ClienteMoroso, type FiltroEstado } from '@/lib/analytics';
 import { CFG } from '@/lib/config';
-import { diasEntre, fecha, fechaLarga, mesCorto, mesLargo, mesNombre } from '@/lib/dates';
+import { diasEntre, fecha, fechaLarga, hoySistema, mesCorto, mesLargo, mesNombre } from '@/lib/dates';
 import { entero, money, moneyCompacto } from '@/lib/format';
 import { fadeUp, stagger } from '@/lib/motion';
 import { rutaDeActividad } from '@/lib/selectors';
 import { cn } from '@/lib/utils';
+import type { Db } from '@/types';
 import { ClientFormSheet } from '@/features/clients/client-form-sheet';
 
 const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const fechaHora = (t: string) => `${fecha(t.slice(0, 10))} · ${t.slice(11)}`;
+const codigo = (p: { id: string; codigo?: string }) => p.codigo ?? p.id;
 
 const COLOR_ESTADO: Record<string, string> = { Vigente: 'var(--success)', 'En mora': 'var(--danger)', Cancelado: 'var(--neutral)' };
 
@@ -114,25 +115,33 @@ function TablaAgencias({ filas }: { filas: ReturnType<typeof resumenPorAgencia> 
   );
 }
 
+const VACIA: Db = { v: 6, clientes: [], prestamos: [], actividad: [] };
+
 export default function DashboardPage() {
-  const db = useDb();
+  const { cartera, error, recargar } = useCartera();
   const usuario = useUsuario();
   const yo = useIdentidad();
   const { puede } = useAuth();
   const navigate = useNavigate();
-  const cargando = useSimulatedLoading(240);
-  const alcances = useMemo(() => alcancesPara(usuario.rol, usuario.agencia?.nombre ?? null), [usuario.rol, usuario.agencia?.nombre]);
+  const listaAgencias = cartera?.agencias;
+  const alcances = useMemo(() => alcancesPara(usuario.rol, usuario.agencia?.nombre ?? null, listaAgencias), [usuario.rol, usuario.agencia?.nombre, listaAgencias]);
   const [alcance, setAlcance] = useState<Alcance>(() => alcances[0]?.value ?? 'empresa');
   const [meses, setMeses] = useState<number>(6);
   const [estado, setEstado] = useState<FiltroEstado>('todos');
   const [registrar, setRegistrar] = useState(false);
-  const d = useMemo(() => calcularDashboard(db, alcance, meses, yo, estado), [db, alcance, meses, yo, estado]);
+  const db = cartera?.db ?? VACIA;
+  const hoy = cartera?.hoy ?? hoySistema();
+  const d = useMemo(() => calcularDashboard(db, { alcance, meses, yo, estado, hoy }), [db, alcance, meses, yo, estado, hoy]);
   const esGerencia = usuario.rol === 'gerencia';
-  const agencias = useMemo(() => (esGerencia ? resumenPorAgencia(db, yo, estado) : []), [esGerencia, db, yo, estado]);
+  const agencias = useMemo(() => (esGerencia ? resumenPorAgencia(db, { yo, estado, hoy }, listaAgencias) : []), [esGerencia, db, yo, estado, hoy, listaAgencias]);
   const alcanceLabel = alcances.find((a) => a.value === alcance)?.label ?? '';
   const mesPrev = mesNombre(d.mesPrevio);
 
-  if (cargando) {
+  if (error) {
+    return <EmptyState icon={CircleAlert} title="No se pudo cargar el dashboard" description={error} action={<Button onClick={recargar}>Reintentar</Button>} />;
+  }
+
+  if (!cartera) {
     return (
       <div className="space-y-5" role="status" aria-label="Cargando dashboard">
         <Skeleton className="h-10 w-72" /><Skeleton className="h-28" />
@@ -151,7 +160,7 @@ export default function DashboardPage() {
           title={`Hola, ${usuario.nombre.split(' ')[0]}`}
           description={
             <>
-              <span>{capitalizar(fechaLarga(CFG.hoy))}</span>. En <b className="font-medium text-ink">{alcanceLabel.toLowerCase()}</b> hay{' '}
+              <span>{capitalizar(fechaLarga(hoy))}</span>. En <b className="font-medium text-ink">{alcanceLabel.toLowerCase()}</b> hay{' '}
               <b className="font-medium text-ink">{d.vencidas.length}</b> cuota{d.vencidas.length === 1 ? '' : 's'} vencida{d.vencidas.length === 1 ? '' : 's'} y{' '}
               <b className="font-medium text-ink">{d.clientesCercaLimite.length}</b> cliente{d.clientesCercaLimite.length === 1 ? '' : 's'} cerca del límite de endeudamiento.
             </>
@@ -233,7 +242,7 @@ export default function DashboardPage() {
                   </AreaChart>
                 </ResponsiveContainer>
               </Figura>
-              <p className="mt-2 text-xs text-ink-muted">Cierre de cada mes; el último punto es el capital pendiente a hoy ({fecha(CFG.hoy)}).</p>
+              <p className="mt-2 text-xs text-ink-muted">Cierre de cada mes; el último punto es el capital pendiente a hoy ({fecha(hoy)}).</p>
             </CardBody>
           </Card>
         </motion.div>
@@ -313,7 +322,7 @@ export default function DashboardPage() {
                         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-danger-soft text-danger-ink"><CircleAlert className="size-4" aria-hidden /></span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-ink">{o.cliente?.nombre ?? o.prestamo.clienteId}</span>
-                          <span className="block truncate text-xs text-ink-muted">{o.prestamo.id} · cuota {o.cuota.n} · {diasEntre(CFG.hoy, o.cuota.fecha)} días de atraso</span>
+                          <span className="block truncate text-xs text-ink-muted">{codigo(o.prestamo)} · cuota {o.cuota.n} · {diasEntre(hoy, o.cuota.fecha)} días de atraso</span>
                         </span>
                         <span className="num text-sm font-semibold text-ink">{money(o.importe)}</span>
                       </ModuleLink>
@@ -339,7 +348,7 @@ export default function DashboardPage() {
                       <ModuleLink modulo="prestamos" to={`/prestamos/${o.prestamo.id}`} className="-mx-2 flex items-center gap-3 rounded-control px-2 py-2.5 transition-colors hover:bg-surface-2" planoClassName="-mx-2 flex items-center gap-3 px-2 py-2.5">
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-ink">{o.cliente?.nombre ?? o.prestamo.clienteId}</span>
-                          <span className="block truncate text-xs text-ink-muted">{fecha(o.cuota.fecha)} · {o.prestamo.id} · cuota {o.cuota.n}</span>
+                          <span className="block truncate text-xs text-ink-muted">{fecha(o.cuota.fecha)} · {codigo(o.prestamo)} · cuota {o.cuota.n}</span>
                         </span>
                         <span className="num text-sm font-semibold text-ink">{money(o.importe)}</span>
                       </ModuleLink>
@@ -392,7 +401,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {puede('clientes') && <ClientFormSheet open={registrar} onOpenChange={setRegistrar} />}
+      {puede('clientes') && <ClientFormSheet open={registrar} onOpenChange={(abierto) => { setRegistrar(abierto); if (!abierto) recargar(); }} />}
     </motion.div>
   );
 }

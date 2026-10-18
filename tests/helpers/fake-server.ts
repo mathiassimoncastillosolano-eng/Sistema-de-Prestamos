@@ -91,6 +91,9 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
       const encontrado = clientes.find((c) => c.id === ruta.slice('/api/clientes/'.length));
       return encontrado ? json(200, encontrado) : json(404);
     }
+    if (ruta === '/api/dashboard' && metodo === 'GET') {
+      return sesionDe ? json(200, CARTERA) : json(401);
+    }
     return json(404);
   });
 
@@ -119,4 +122,19 @@ export const GERENTE: CuentaFalsa = {
   correo: 'gerente@ejemplo.com', clave: 'clave-de-prueba',
   perfil: { id: 'p2', nombres: 'Mateo', apellidos: 'Rivas', correo: 'gerente@ejemplo.com', rol: 'gerencia', agenciaId: null, activo: true },
   agencia: null
+};
+
+/** Cartera de GET /api/dashboard: un cliente moroso en Sur Prueba (cuota vencida el 10-sep). */
+export const CARTERA = {
+  hoy: '2026-10-18',
+  agencias: ['Agencia Norte Prueba', 'Agencia Sur Prueba'],
+  clientes: [{ id: 'c1', nombre: 'Rosa Moroso Prueba', tipoDocumento: 'DNI', numeroDocumento: '99999992', telefono: null, agencia: 'Agencia Sur Prueba', asesor: 'Valeria Quintana', alta: '2026-08-01', registrado: '2026-08-01 09:00' }],
+  prestamos: [{
+    id: 'p-1', numero: 1001, clienteId: 'c1', agencia: 'Agencia Sur Prueba', asesor: 'Valeria Quintana',
+    capital: 1000, plazoMeses: 2, tea: 0.3, fechaDesembolso: '2026-08-10', registrado: '2026-08-10 10:00',
+    cuotas: [
+      { numero: 1, fechaVencimiento: '2026-09-10', capital: 495, interes: 22, importeCuota: 517, saldo: 505, pagada: false },
+      { numero: 2, fechaVencimiento: '2026-10-10', capital: 505, interes: 11, importeCuota: 516, saldo: 0, pagada: false }
+    ]
+  }]
 };
