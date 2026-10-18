@@ -85,7 +85,7 @@ export function RealLoanDetail({ id }: { id: string }) {
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             Préstamo N.º {prestamo.numero}
             <span className="rounded-full bg-success-soft px-2.5 py-0.5 text-[0.8125rem] font-medium text-success-ink">
-              {prestamo.estado === 'activo' ? 'Activo' : 'Cerrado'}
+                {prestamo.estado}
             </span>
           </span>
         }

@@ -39,7 +39,7 @@ export interface PrestamoApi {
   tea: number;
   fechaDesembolso: string;
   fechaPrimerVencimiento: string;
-  estado: 'activo' | 'cerrado';
+  estado: 'Vigente' | 'En mora' | 'Cancelado';
   cuotaMensual: number;
   totalIntereses: number;
   totalContractual: number;

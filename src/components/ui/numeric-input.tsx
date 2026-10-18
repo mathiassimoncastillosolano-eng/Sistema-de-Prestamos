@@ -40,6 +40,8 @@ interface NumericInputProps extends Omit<ComponentProps<'input'>, 'value' | 'onC
   grouping?: boolean;
   prefix?: ReactNode;
   suffix?: ReactNode;
+  /** Máximo de dígitos en la parte entera. Si se omite, no hay límite (comportamiento anterior). */
+  maxIntegerDigits?: number;
 }
 
 /**
@@ -47,7 +49,7 @@ interface NumericInputProps extends Omit<ComponentProps<'input'>, 'value' | 'onC
  * salir del campo y mientras se escribe se respeta lo tecleado. Entrega siempre un `number` al formulario.
  */
 export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(function NumericInput(
-  { value, onValueChange, decimals = 0, grouping = decimals > 0, onBlur, onFocus, ...props },
+  { value, onValueChange, decimals = 0, grouping = decimals > 0, maxIntegerDigits, onBlur, onFocus, ...props },
   ref
 ) {
   const [enfocado, setEnfocado] = useState(false);
@@ -69,7 +71,14 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
       value={texto}
       onFocus={(e) => { setEnfocado(true); onFocus?.(e); e.currentTarget.select(); }}
       onChange={(e) => {
-        const permitido = e.target.value.replace(decimals > 0 ? /[^\d.,]/g : /\D/g, '');
+        let permitido = e.target.value.replace(decimals > 0 ? /[^\d.,]/g : /\D/g, '');
+        if (maxIntegerDigits !== undefined) {
+          // Recorta los dígitos de la parte entera; los decimales se respetan.
+          const corte = permitido.search(/[.,]/);
+          const entera = corte >= 0 ? permitido.slice(0, corte) : permitido;
+          const resto = corte >= 0 ? permitido.slice(corte) : '';
+          permitido = entera.slice(0, maxIntegerDigits) + resto;
+        }
         setTexto(permitido);
         onValueChange(parseNumero(permitido, decimals));
       }}

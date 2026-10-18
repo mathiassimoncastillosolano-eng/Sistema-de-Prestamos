@@ -31,6 +31,9 @@ import { SimulationSummary } from './simulation-summary';
 
 /* Reglas de negocio de US-04/05. El servidor las vuelve a validar: aquí solo se avisa antes de enviar. */
 const CAPITAL_MINIMO = 1000;
+const MAX_CAPITAL_ENTRADA = 999999; // 6 cifras
+const MAX_PLAZO_ENTRADA = 999;      // 3 cifras
+const MAX_OBSERVACIONES = 250;
 const LIMITE = 10000;
 const PLAZO_MIN = 1;
 const PLAZO_MAX = 60;
@@ -38,16 +41,17 @@ const TEA = 0.3;
 
 const esquema = z.object({
   clienteId: z.string().min(1, 'Selecciona un cliente.'),
-  capital: z
+    capital: z
     .number({ error: 'Ingresa un monto válido.' })
     .min(CAPITAL_MINIMO, `El monto mínimo es ${money(CAPITAL_MINIMO)}.`)
+    .max(LIMITE, `El monto no puede superar ${money(LIMITE)} (límite por cliente).`)
     .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'El monto admite como máximo 2 decimales.'),
   plazo: z
     .number({ error: 'Ingresa el plazo en meses.' })
     .int('El plazo debe ser un número entero de meses.')
     .min(PLAZO_MIN, `El plazo mínimo es ${PLAZO_MIN} mes.`)
     .max(PLAZO_MAX, `El plazo máximo es ${PLAZO_MAX} meses.`),
-  observaciones: z.string().max(500, 'Máximo 500 caracteres.')
+    observaciones: z.string().max(MAX_OBSERVACIONES, `Máximo ${MAX_OBSERVACIONES} caracteres.`)
 });
 type SolicitudForm = z.infer<typeof esquema>;
 
@@ -133,6 +137,7 @@ export default function RequestPage() {
   };
 
   const enviar = async () => {
+    if (!esquema.safeParse(valores).success) { setConfirmar(false); setPaso(2); void trigger(); return; }
     if (guardando) return; // evita envíos duplicados
     setGuardando(true);
     setErrorServidor(null);
@@ -222,12 +227,12 @@ export default function RequestPage() {
                       <FormSection title="Importe y plazo">
                         <Controller name="capital" control={control} render={({ field }) => (
                           <Field label="Monto solicitado" error={errors.capital?.message} hint={`Mínimo ${money(CAPITAL_MINIMO)}. Límite acumulado por cliente: ${money(LIMITE)}`}>
-                            <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={field.onChange} onBlur={field.onBlur} decimals={2} prefix="S/" placeholder="0.00" />
+                            <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_CAPITAL_ENTRADA ? MAX_CAPITAL_ENTRADA : v)} onBlur={field.onBlur} decimals={2} maxIntegerDigits={6} prefix="S/" placeholder="0.00" />
                           </Field>
                         )} />
                         <Controller name="plazo" control={control} render={({ field }) => (
                           <Field label={`Plazo (${PLAZO_MIN}–${PLAZO_MAX} meses)`} error={errors.plazo?.message} hint="Cuotas mensuales iguales">
-                            <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={field.onChange} onBlur={field.onBlur} suffix="meses" />
+                            <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_PLAZO_ENTRADA ? MAX_PLAZO_ENTRADA : v)} onBlur={field.onBlur} maxIntegerDigits={3} suffix="meses" />
                           </Field>
                         )} />
                       </FormSection>
@@ -249,8 +254,9 @@ export default function RequestPage() {
                         </div>
                       </FormSection>
                       <Field label="Observaciones" optional error={errors.observaciones?.message}>
-                        <Textarea rows={3} maxLength={500} className="min-h-[5.5rem] max-h-56" placeholder="Información adicional" {...register('observaciones')} />
+                        <Textarea rows={3} maxLength={MAX_OBSERVACIONES} className="min-h-[5.5rem] max-h-56" placeholder="Información adicional" {...register('observaciones')} />
                       </Field>
+                      <p className="mt-1 text-right text-xs text-ink-muted">{valores.observaciones.length}/{MAX_OBSERVACIONES}</p>
                     </div>
                   </>
                 )}
