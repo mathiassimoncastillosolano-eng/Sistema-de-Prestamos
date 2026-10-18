@@ -14,7 +14,7 @@ public interface PrestamoRepositorio extends Repository<Prestamo, UUID> {
     Optional<Prestamo> findById(UUID id);
 
     /** Capital de los préstamos activos del cliente en TODAS las agencias (vacío si no tiene). */
-    @Query("select sum(p.capital) from Prestamo p where p.clienteId = :clienteId and p.estado = 'activo'")
+    @Query("select sum(p.capital) from Prestamo p where p.clienteId = :clienteId and p.estado in ('Vigente', 'En mora')")
     Optional<BigDecimal> sumarCapitalActivo(@Param("clienteId") UUID clienteId);
 
     /** El número lo genera la BD (identity); se lee después de insertar. */

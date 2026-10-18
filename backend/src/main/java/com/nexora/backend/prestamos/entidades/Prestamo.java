@@ -72,7 +72,7 @@ public class Prestamo {
         this.plazoMeses = plazoMeses;
         this.tea = tea;
         this.fechaDesembolso = fechaDesembolso;
-        this.estado = "activo";
+        this.estado = "Vigente";
         this.observaciones = observaciones;
     }
 

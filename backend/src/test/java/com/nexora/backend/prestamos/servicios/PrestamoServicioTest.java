@@ -86,7 +86,7 @@ class PrestamoServicioTest {
         PrestamoRespuesta r = registrar("1000", 12, null);
 
         assertEquals(12, r.cuotas().size());
-        assertEquals("activo", r.estado());
+        assertEquals("Vigente", r.estado());
         assertEquals("PEN", r.moneda());
         assertEquals(0, new BigDecimal("0.30").compareTo(r.tea()));
         assertEquals(LocalDate.of(2026, 10, 17), r.fechaDesembolso());
