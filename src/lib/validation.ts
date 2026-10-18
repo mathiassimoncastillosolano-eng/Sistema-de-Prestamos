@@ -1,9 +1,9 @@
-/* Esquemas Zod reutilizables. Las reglas financieras NO se reescriben aquí: se delega en lib/finance.ts. */
+
 import { z } from 'zod';
 import type { TipoCliente } from '@/types';
 import { validarSolicitud } from './finance';
 
-/* ---------- Clientes ---------- */
+
 export const TIPOS_CLIENTE: { value: TipoCliente; label: string }[] = [
   { value: 'DNI', label: 'Persona · DNI' },
   { value: 'RUC 10', label: 'Negocio · RUC 10' },
@@ -11,8 +11,10 @@ export const TIPOS_CLIENTE: { value: TipoCliente; label: string }[] = [
 ];
 
 export const clienteVacio = (tipo: TipoCliente = 'DNI') => ({
-  tipo, doc: '', nombre: '', telefono: '', dniTitular: '', negocio: '', repNombre: '', repDni: '', domicilio: ''
+  tipo, doc: '', nombre: '', telefono: '', correo: '', dniTitular: '', repNombre: '', repDni: '', domicilio: '', estadoSunat: '', condicionSunat: ''
 });
+
+export const CORREO_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.[A-Za-z]{2,}$/;
 
 export const esDocumentoValido = (tipo: TipoCliente, doc: string) =>
   tipo === 'DNI' ? /^\d{8}$/.test(doc) : new RegExp(`^${tipo === 'RUC 10' ? '10' : '20'}\\d{9}$`).test(doc);
@@ -22,33 +24,46 @@ const base = z.object({
   doc: z.string().trim(),
   nombre: z.string().trim(),
   telefono: z.string().trim(),
+  correo: z.string().trim(),
   dniTitular: z.string().trim(),
-  negocio: z.string().trim(),
   repNombre: z.string().trim(),
   repDni: z.string().trim(),
-  domicilio: z.string().trim()
+  domicilio: z.string().trim(),
+  estadoSunat: z.string().trim(),
+  condicionSunat: z.string().trim()
 });
 export type ClienteForm = z.infer<typeof base>;
 
-/** `docsExistentes` evita duplicados contra el estado actual. */
-export const clienteSchema = (docsExistentes: string[]) =>
-  base.superRefine((v, ctx) => {
-    const err = (path: keyof ClienteForm, message: string) => ctx.addIssue({ code: 'custom', path: [path], message });
-    const pref = v.tipo === 'RUC 10' ? '10' : '20';
-    if (!esDocumentoValido(v.tipo, v.doc)) err('doc', v.tipo === 'DNI' ? 'El DNI debe tener exactamente 8 dígitos.' : `El RUC ${pref} debe tener 11 dígitos y empezar con ${pref}.`);
-    else if (docsExistentes.includes(v.doc)) err('doc', 'Este documento ya está registrado. Búscalo en la lista para no crear un duplicado.');
-    if (v.nombre.length < 3) err('nombre', v.tipo === 'RUC 20' ? 'Indica la razón social.' : 'Indica el nombre completo.');
-    if (v.telefono && !/^9\d{8}$/.test(v.telefono)) err('telefono', 'El celular debe tener 9 dígitos y empezar con 9.');
-    if (v.tipo === 'RUC 10') {
-      if (!/^\d{8}$/.test(v.dniTitular)) err('dniTitular', 'Ingresa el DNI del titular (8 dígitos).');
-      if (!v.negocio) err('negocio', 'Describe la actividad del negocio.');
-    }
-    if (v.tipo === 'RUC 20') {
-      if (v.repNombre.length < 3) err('repNombre', 'Indica el nombre del representante legal.');
-      if (!/^\d{8}$/.test(v.repDni)) err('repDni', 'Ingresa el DNI del representante (8 dígitos).');
-      if (!v.domicilio) err('domicilio', 'Indica el domicilio fiscal.');
-    }
-  });
+export const clienteSchema = base.superRefine((v, ctx) => {
+  const err = (path: keyof ClienteForm, message: string) =>
+    ctx.addIssue({ code: 'custom', path: [path], message });
+
+  if (!esDocumentoValido(v.tipo, v.doc)) {
+    err(
+      'doc',
+      v.tipo === 'DNI'
+        ? 'El DNI debe tener exactamente 8 dígitos.'
+        : `El RUC ${v.tipo === 'RUC 10' ? '10' : '20'} debe tener 11 dígitos y empezar con ${v.tipo === 'RUC 10' ? '10' : '20'}.`
+    );
+  }
+
+  if (!v.nombre) {
+    err('nombre', 'Consulta el documento para obtener los datos del cliente.');
+  }
+
+  if (!v.telefono) {
+    err('telefono', 'El celular es obligatorio.');
+  } else if (!/^9\d{8}$/.test(v.telefono)) {
+    err('telefono', 'El celular debe tener 9 dígitos y empezar con 9.');
+  }
+
+  if (!v.correo) {
+    err('correo', 'El correo electrónico es obligatorio.');
+  } else if (v.correo.length > 120 || !CORREO_REGEX.test(v.correo)) {
+    err('correo', 'Ingresa un correo electrónico válido (por ejemplo, nombre@dominio.com).');
+  }
+});
+
 
 /* ---------- Solicitud de préstamo ---------- */
 export const solicitudSchema = (deudaDe: (clienteId: string) => number) =>

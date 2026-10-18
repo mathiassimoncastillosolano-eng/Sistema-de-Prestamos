@@ -23,12 +23,12 @@ const TONO_TIPO: Record<TipoCliente, 'teal' | 'navy' | 'neutral'> = {
 const columnas: ColumnDef<ClienteListado>[] = [
   {
     accessorKey: 'numero',
-    header: 'N.º',
+    header: 'Código de cliente',
     cell: ({ row }) => <span className="num">{row.original.numero}</span>
   },
   {
     accessorKey: 'nombre',
-    header: 'Cliente',
+    header: 'Cliente / razón social',
     cell: ({ row }) => (
       <div className="flex min-w-0 items-center gap-3">
         <Avatar nombre={row.original.nombre} tipo={row.original.tipoDocumento} />
@@ -51,6 +51,16 @@ const columnas: ColumnDef<ClienteListado>[] = [
     accessorKey: 'telefono',
     header: 'Teléfono',
     cell: ({ row }) => row.original.telefono || '—'
+  },
+  {
+    id: 'detalle',
+    header: 'Detalle',
+    enableSorting: false,
+    cell: ({ row }) => (
+      <Button asChild size="sm" variant="secondary">
+        <Link to={`/clientes/${row.original.id}`}>Ver detalle</Link>
+      </Button>
+    )
   }
 ];
 
@@ -59,9 +69,11 @@ function TarjetaCliente({ cliente }: { cliente: ClienteListado }) {
     <Link to={`/clientes/${cliente.id}`} className="flex items-center gap-3 p-4">
       <Avatar nombre={cliente.nombre} tipo={cliente.tipoDocumento} size="lg" />
       <div className="min-w-0">
+        <p className="num text-xs text-ink-muted">Código de cliente: {cliente.numero}</p>
         <p className="truncate font-medium text-ink">{cliente.nombre}</p>
         <p className="num text-xs text-ink-muted">{cliente.tipoDocumento} · {cliente.numeroDocumento}</p>
         <p className="num text-xs text-ink-muted">{cliente.telefono || 'Sin teléfono'}</p>
+        <p className="mt-1 text-xs font-medium text-teal-ink">Ver detalle</p>
       </div>
     </Link>
   );
