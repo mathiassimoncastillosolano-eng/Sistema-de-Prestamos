@@ -26,6 +26,8 @@ import { DUR, EASE } from '@/lib/motion';
 import { cn, normalizar } from '@/lib/utils';
 import { listarClientes, type ClienteListado } from '@/services/clientes-api';
 import { detalleLimite, prestamosApi, PrestamoApiError } from '@/services/prestamos-api';
+import { simular } from '@/lib/finance';
+import { SimulationSummary } from './simulation-summary';
 
 /* Reglas de negocio de US-04/05. El servidor las vuelve a validar: aquí solo se avisa antes de enviar. */
 const CAPITAL_MINIMO = 1000;
@@ -118,6 +120,7 @@ export default function RequestPage() {
   const capitalNum = Number.isFinite(valores.capital) ? valores.capital : 0;
   const plazoNum = Number.isFinite(valores.plazo) ? valores.plazo : 0;
   const condicionesValidas = esquema.safeParse(valores).success;
+  const sim = condicionesValidas ? simular({ monto: capitalNum, plazo: plazoNum, desembolso: desembolsoPrevisto }) : null;
 
   const elegir = (id: string) => {
     setErrorServidor(null);
@@ -158,6 +161,7 @@ export default function RequestPage() {
       <PageHeader title="Registrar préstamo" description="Elige al cliente, define el monto y el plazo, y registra el préstamo con su cronograma. El sistema valida el límite de endeudamiento por cliente." />
       <div className="mb-6"><Stepper pasos={PASOS} actual={paso} onIr={(n) => { if (n < paso) setPaso(n); }} /></div>
 
+      <div className={cn('grid gap-5', paso === 2 && 'xl:grid-cols-[minmax(0,1fr)_21.5rem] xl:items-start')}>
       <div className="min-w-0">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div key={paso} initial={{ opacity: 0, x: 14 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: DUR.base, ease: EASE }}>
@@ -312,8 +316,21 @@ export default function RequestPage() {
               </CardBody>
             </Card>
           </motion.div>
+        
         </AnimatePresence>
       </div>
+      {paso === 2 && (
+          <motion.div key="resumen" className="min-w-0 xl:sticky xl:top-24" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.base, ease: EASE }}>
+            <SimulationSummary
+              sim={sim}
+              monto={capitalNum}
+              plazo={plazoNum}
+              valido={condicionesValidas && !!sim}
+              motivo={errors.capital?.message ?? errors.plazo?.message}
+            />
+          </motion.div>
+        )}
+        </div>
 
       <Modal open={confirmar} onOpenChange={(o) => { if (!guardando) setConfirmar(o); }} size="sm" title="Registrar préstamo"
         description={`Vas a registrar un préstamo de ${money(capitalNum)} a ${plazoNum} meses para ${cliente?.nombre ?? ''}. Se guardará junto con su cronograma de cuotas.`}
