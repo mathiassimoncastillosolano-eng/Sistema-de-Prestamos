@@ -58,7 +58,8 @@ class AutenticacionServicioTest {
 
     @Test
     void claveIncorrectaYCorreoInexistenteDanElMismoError() {
-        when(repo.buscarPorCorreo("a@b.co")).thenReturn(List.of(perfil("asesor", true, agencia(true))));
+        Perfil p = perfil("asesor", true, agencia(true));
+        when(repo.buscarPorCorreo("a@b.co")).thenReturn(List.of(p));
         when(repo.buscarPorCorreo("x@b.co")).thenReturn(List.of());
         assertThatThrownBy(() -> servicio.verificarCredenciales("a@b.co", "mala")).satisfies(t -> assertThat(codigo(t)).isEqualTo("CREDENCIALES_INVALIDAS"));
         assertThatThrownBy(() -> servicio.verificarCredenciales("x@b.co", "mala")).satisfies(t -> assertThat(codigo(t)).isEqualTo("CREDENCIALES_INVALIDAS"));
@@ -66,20 +67,24 @@ class AutenticacionServicioTest {
 
     @Test
     void elEstadoDeLaCuentaSoloSeRevelaTrasAcertarLaClave() {
-        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(perfil("asesor", false, agencia(true))));
+        Perfil p = perfil("asesor", false, agencia(true));
+        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(p));
         assertThatThrownBy(() -> servicio.verificarCredenciales("a@b.co", "mala")).satisfies(t -> assertThat(codigo(t)).isEqualTo("CREDENCIALES_INVALIDAS"));
         assertThatThrownBy(() -> servicio.verificarCredenciales("a@b.co", "clave-de-prueba")).satisfies(t -> assertThat(codigo(t)).isEqualTo("CUENTA_DESACTIVADA"));
     }
 
     @Test
     void reglasDeAcceso() {
-        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(perfil("auditor", true, null)));
+        Perfil auditor = perfil("auditor", true, null);
+        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(auditor));
         assertThatThrownBy(() -> servicio.verificarCredenciales("a@b.co", "clave-de-prueba")).satisfies(t -> assertThat(codigo(t)).isEqualTo("ROL_NO_RECONOCIDO"));
 
-        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(perfil("asesor", true, null)));
+        Perfil sinAgencia = perfil("asesor", true, null);
+        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(sinAgencia));
         assertThatThrownBy(() -> servicio.verificarCredenciales("a@b.co", "clave-de-prueba")).satisfies(t -> assertThat(codigo(t)).isEqualTo("AGENCIA_NO_ASIGNADA"));
 
-        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(perfil("asesor", true, agencia(false))));
+        Perfil agenciaInactiva = perfil("asesor", true, agencia(false));
+        when(repo.buscarPorCorreo(anyString())).thenReturn(List.of(agenciaInactiva));
         assertThatThrownBy(() -> servicio.verificarCredenciales("a@b.co", "clave-de-prueba")).satisfies(t -> assertThat(codigo(t)).isEqualTo("AGENCIA_INACTIVA"));
 
         Perfil gerencia = perfil("gerencia", true, null); // agencia_id NULL es válido para gerencia
@@ -98,10 +103,12 @@ class AutenticacionServicioTest {
     @Test
     void laSesionSeRevocaSiCambiaElRolOSeDesactiva() {
         UUID id = UUID.randomUUID();
-        when(repo.buscarPorId(id)).thenReturn(java.util.Optional.of(perfil("asesor", true, agencia(true))));
+        Perfil activo = perfil("asesor", true, agencia(true));
+        when(repo.buscarPorId(id)).thenReturn(java.util.Optional.of(activo));
         assertThat(servicio.perfilVigente(id, "asesor")).isPresent();
         assertThat(servicio.perfilVigente(id, "gerencia")).isEmpty();
-        when(repo.buscarPorId(id)).thenReturn(java.util.Optional.of(perfil("asesor", false, agencia(true))));
+        Perfil inactivo = perfil("asesor", false, agencia(true));
+        when(repo.buscarPorId(id)).thenReturn(java.util.Optional.of(inactivo));
         assertThat(servicio.perfilVigente(id, "asesor")).isEmpty();
     }
 }

@@ -78,30 +78,43 @@ export default function ClientDetailPage() {
           </div>
         </div>
 
-        <dl className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
-          <Dato etiqueta="Número de cliente" valor={String(cliente.numero)} />
-          <Dato etiqueta="Nombre o razón social" valor={cliente.nombre} />
-          <Dato etiqueta="Tipo de documento" valor={cliente.tipoDocumento} />
-          <Dato etiqueta="Número de documento" valor={cliente.numeroDocumento} />
-          <Dato etiqueta="Teléfono" valor={cliente.telefono} />
-          <Dato etiqueta="Fecha de registro" valor={new Date(cliente.creadoEn).toLocaleDateString('es-PE')} />
-          {cliente.tipoDocumento === 'RUC 10' && (
-            <Dato etiqueta="DNI del titular" valor={cliente.dniTitular} />
-          )}
-          {cliente.tipoDocumento === 'RUC 20' && (
-            <>
-              <Dato etiqueta="Domicilio" valor={cliente.domicilio} />
-              <Dato etiqueta="Representante" valor={cliente.representanteNombre} />
-              <Dato etiqueta="DNI del representante" valor={cliente.representanteDni} />
-            </>
-          )}
-          {cliente.tipoDocumento !== 'DNI' && (
-            <>
+        <div className="p-5">
+          <h3 className="mb-4 text-sm font-semibold text-ink">Datos generales</h3>
+          <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Dato etiqueta="Código de cliente" valor={String(cliente.numero)} />
+            <Dato etiqueta={cliente.tipoDocumento === 'RUC 20' ? 'Razón social' : 'Nombre completo'} valor={cliente.nombre} />
+            <Dato etiqueta="Tipo de documento" valor={cliente.tipoDocumento} />
+            <Dato etiqueta="Número de documento" valor={cliente.numeroDocumento} />
+            <Dato etiqueta="Teléfono" valor={cliente.telefono} />
+            <Dato etiqueta="Correo electrónico" valor={cliente.correo} />
+            <Dato etiqueta="Fecha de registro" valor={new Date(cliente.creadoEn).toLocaleDateString('es-PE')} />
+            <Dato etiqueta="ID de agencia" valor={cliente.agenciaId} />
+          </dl>
+        </div>
+
+        {cliente.tipoDocumento === 'RUC 10' && (
+          <div className="border-t border-line p-5">
+            <h3 className="mb-4 text-sm font-semibold text-ink">Datos de RUC 10</h3>
+            <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <Dato etiqueta="DNI del titular" valor={cliente.dniTitular} />
               <Dato etiqueta="Estado SUNAT" valor={cliente.estadoSunat} />
               <Dato etiqueta="Condición SUNAT" valor={cliente.condicionSunat} />
-            </>
-          )}
-        </dl>
+            </dl>
+          </div>
+        )}
+
+        {cliente.tipoDocumento === 'RUC 20' && (
+          <div className="border-t border-line p-5">
+            <h3 className="mb-4 text-sm font-semibold text-ink">Datos de RUC 20</h3>
+            <dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <Dato etiqueta="Domicilio" valor={cliente.domicilio} />
+              <Dato etiqueta="Nombre del representante" valor={cliente.representanteNombre} />
+              <Dato etiqueta="DNI del representante" valor={cliente.representanteDni} />
+              <Dato etiqueta="Estado SUNAT" valor={cliente.estadoSunat} />
+              <Dato etiqueta="Condición SUNAT" valor={cliente.condicionSunat} />
+            </dl>
+          </div>
+        )}
       </Card>
     </>
   );

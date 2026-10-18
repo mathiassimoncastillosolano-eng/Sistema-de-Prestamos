@@ -23,6 +23,15 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
   let retenerMe: Promise<void> | null = null;
   let logoutFalla = false;
   const llamadas: { ruta: string; metodo: string; cuerpo?: unknown }[] = [];
+  const cliente = {
+    id: '11111111-1111-4111-8111-111111111111', numero: 1,
+    tipoDocumento: 'DNI', numeroDocumento: '99999991',
+    nombre: 'Cliente de prueba', telefono: '999999999', correo: 'cliente@example.com',
+    dniTitular: null, domicilio: null, estadoSunat: null, condicionSunat: null,
+    representanteNombre: null, representanteDni: null,
+    agenciaId: 'a1', creadoEn: '2026-10-17T10:00:00-05:00'
+  };
+  const clientes: Array<Record<string, unknown>> = [cliente];
 
   const handler = vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
     const ruta = String(entrada);
@@ -54,22 +63,33 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
       document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'; // CsrfLogoutHandler borra la cookie
       return json(204);
     }
-    const cliente = {
-      id: '11111111-1111-4111-8111-111111111111', numero: 1,
-      tipoDocumento: 'DNI', numeroDocumento: '99999991',
-      nombre: 'Cliente de prueba', telefono: '999999999',
-      dniTitular: null, domicilio: null, estadoSunat: null, condicionSunat: null,
-      representanteNombre: null, representanteDni: null,
-      agenciaId: 'a1', creadoEn: '2026-10-17T10:00:00-05:00'
-    };
-    if (ruta === '/api/clientes' && metodo === 'GET') {
-      return sesionDe ? json(200, [cliente]) : json(401);
+    if (ruta.startsWith('/api/clientes/consulta?') && metodo === 'GET') {
+      if (!sesionDe) return json(401);
+      const parametros = new URL(ruta, 'http://localhost').searchParams;
+      return json(200, {
+        tipoDocumento: parametros.get('tipo'), numeroDocumento: parametros.get('numero'),
+        nombre: 'Ana Salazar Quispe', dniTitular: null, domicilio: null,
+        estadoSunat: null, condicionSunat: null, representanteNombre: null,
+        representanteDni: null, habilitado: true, motivo: null
+      });
     }
-    if (ruta === `/api/clientes/${cliente.id}` && metodo === 'GET') {
-      return sesionDe ? json(200, cliente) : json(401);
+    if (ruta === '/api/clientes' && metodo === 'POST') {
+      if (!sesionDe) return json(401);
+      const nuevo = {
+        ...cliente, id: '22222222-2222-4222-8222-222222222222', numero: 2,
+        tipoDocumento: cuerpo.tipoDocumento, numeroDocumento: cuerpo.numeroDocumento,
+        nombre: 'Ana Salazar Quispe', telefono: cuerpo.telefono, correo: cuerpo.correo
+      };
+      clientes.push(nuevo);
+      return json(201, nuevo);
+    }
+    if (ruta === '/api/clientes' && metodo === 'GET') {
+      return sesionDe ? json(200, clientes) : json(401);
     }
     if (ruta.startsWith('/api/clientes/') && metodo === 'GET') {
-      return sesionDe ? json(404) : json(401);
+      if (!sesionDe) return json(401);
+      const encontrado = clientes.find((c) => c.id === ruta.slice('/api/clientes/'.length));
+      return encontrado ? json(200, encontrado) : json(404);
     }
     return json(404);
   });
@@ -78,6 +98,7 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     handler,
     llamadas,
     instalar: () => vi.stubGlobal('fetch', handler),
+    agregarCliente: (datos: Record<string, unknown>) => clientes.push({ ...cliente, ...datos }),
     /** Simula una sesión ya abierta (p. ej. el usuario recarga la página). */
     abrirSesion: (c: CuentaFalsa) => { sesionDe = c; },
     expirarSesion: () => { sesionDe = null; },
