@@ -4,9 +4,12 @@ package com.nexora.backend.clientes.servicios;
 import com.nexora.backend.clientes.dto.RegistroClienteDTO;
 import com.nexora.backend.clientes.entidades.Cliente;
 import com.nexora.backend.clientes.repositorios.ClienteRepositorio;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import java.util.UUID;
 
 @Service
 public class ClienteServicio {
@@ -15,6 +18,16 @@ public class ClienteServicio {
 
     public ClienteServicio(ClienteRepositorio clienteRepositorio) {
         this.clienteRepositorio = clienteRepositorio;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Cliente> listar() {
+        return clienteRepositorio.findAll(Sort.by("nombre").ascending());
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<Cliente> consultar(UUID id) {
+        return clienteRepositorio.findById(id);
     }
 
     @Transactional

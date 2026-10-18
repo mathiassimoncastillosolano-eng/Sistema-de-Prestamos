@@ -54,6 +54,23 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
       document.cookie = 'XSRF-TOKEN=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/'; // CsrfLogoutHandler borra la cookie
       return json(204);
     }
+    const cliente = {
+      id: '11111111-1111-4111-8111-111111111111', numero: 1,
+      tipoDocumento: 'DNI', numeroDocumento: '99999991',
+      nombre: 'Cliente de prueba', telefono: '999999999',
+      dniTitular: null, domicilio: null, estadoSunat: null, condicionSunat: null,
+      representanteNombre: null, representanteDni: null,
+      agenciaId: 'a1', creadoEn: '2026-10-17T10:00:00-05:00'
+    };
+    if (ruta === '/api/clientes' && metodo === 'GET') {
+      return sesionDe ? json(200, [cliente]) : json(401);
+    }
+    if (ruta === `/api/clientes/${cliente.id}` && metodo === 'GET') {
+      return sesionDe ? json(200, cliente) : json(401);
+    }
+    if (ruta.startsWith('/api/clientes/') && metodo === 'GET') {
+      return sesionDe ? json(404) : json(401);
+    }
     return json(404);
   });
 
