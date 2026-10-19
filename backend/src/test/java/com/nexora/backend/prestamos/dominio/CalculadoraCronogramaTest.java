@@ -65,20 +65,20 @@ class CalculadoraCronogramaTest {
 
     @Test
     void desembolso_en_diciembre_cae_en_enero() {
-        assertEquals(LocalDate.of(2027, 1, 15),
+        assertEquals(LocalDate.of(2027, 1, 14),
                 calc("1000", 6, LocalDate.of(2026, 12, 15)).cuotas().get(0).fechaVencimiento());
     }
 
     @Test
-    void dia_31_se_ajusta_al_ultimo_dia_sin_arrastrar_el_ajuste() {
+    void desembolso_dia_31_suma_30_dias_corridos() {
         List<Cronograma.Cuota> q = calc("1000", 3, LocalDate.of(2026, 1, 31)).cuotas();
-        assertEquals(LocalDate.of(2026, 2, 28), q.get(0).fechaVencimiento());
-        assertEquals(LocalDate.of(2026, 3, 31), q.get(1).fechaVencimiento());
+        assertEquals(LocalDate.of(2026, 3, 2), q.get(0).fechaVencimiento());
+        assertEquals(LocalDate.of(2026, 4, 1), q.get(1).fechaVencimiento());
     }
 
     @Test
-    void ano_bisiesto_29_de_enero() {
-        assertEquals(LocalDate.of(2028, 2, 29),
+    void treinta_dias_corridos_desde_29_de_enero_bisiesto() {
+        assertEquals(LocalDate.of(2028, 2, 28),
                 calc("1000", 2, LocalDate.of(2028, 1, 29)).cuotas().get(0).fechaVencimiento());
     }
 

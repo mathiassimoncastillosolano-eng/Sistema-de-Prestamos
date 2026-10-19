@@ -48,9 +48,9 @@ public final class CalculadoraCronograma {
             BigDecimal importe = capitalCuota.add(interes);
             saldo = saldo.subtract(capitalCuota);
 
-            // plusMonths ajusta al último día del mes si el día no existe.
+            // Cuotas cada 30 días corridos desde el desembolso (no encadenadas: evita errores acumulados).
             // Siempre se calcula desde la fecha original para no arrastrar el ajuste.
-            LocalDate vencimiento = fechaDesembolso.plusMonths(k);
+            LocalDate vencimiento = fechaDesembolso.plusDays(30L * k);
 
             cuotas.add(new Cronograma.Cuota(k, vencimiento, capitalCuota, interes, importe, saldo));
             totalIntereses = totalIntereses.add(interes);
