@@ -50,7 +50,5 @@ export const datosPdfRegistrado = (p: PrestamoDetalleApi): DatosPdf => ({
   totalIntereses: p.totalIntereses,
   totalContractual: p.totalContractual,
   estado: p.estado,
-  capitalPendiente: p.capitalPendiente,
-  totalPendiente: p.totalPendiente,
   cuotas: p.cuotas
 });

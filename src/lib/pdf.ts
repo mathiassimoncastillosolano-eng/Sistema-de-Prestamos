@@ -52,8 +52,6 @@ export interface DatosPdf {
   totalIntereses: number;
   totalContractual: number;
   estado?: string;
-  capitalPendiente?: number;
-  totalPendiente?: number;
   cuotas: CuotaPdf[];
 }
 
@@ -162,13 +160,7 @@ export async function crearDocumentoPdf(d: DatosPdf, generadoEn: Date = new Date
     doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO).text(seguro(k), cx, y + 3.8);
     doc.setFont('helvetica', 'bold').setFontSize(11).setTextColor(...TINTA).text(seguro(v), cx, y + 10.2);
   });
-  y += 15;
-  if (!simulacion) {
-    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...APAGADO);
-    doc.text(seguro(`Capital pendiente: ${money(d.capitalPendiente ?? 0)}  ·  Pendiente contractual: ${money(d.totalPendiente ?? 0)}. El sistema no registra pagos; PAGADA refleja el estado guardado de la cuota.`), MARGEN, y + 3.5, { maxWidth: util });
-    y += 5;
-  }
-  y += 5;
+  y += 20;
 
   /* ---- 6-7. Cronograma de amortización y totales ---- */
   y = seccion('Cronograma de amortización', y);
