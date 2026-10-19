@@ -5,7 +5,7 @@ import { Tip } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
 import { DUR, EASE } from '@/lib/motion';
 import { cn } from '@/lib/utils';
-import { BrandMark, BrandName } from './brand-mark';
+import { BrandLockup, BrandMark } from './brand-mark';
 import { gruposPara } from './nav';
 
 interface ContentProps {
@@ -21,8 +21,7 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
   return (
     <div className="pattern-grid flex h-full flex-col bg-side text-side-ink">
       <div className={cn('flex h-16 shrink-0 items-center gap-3 px-[1.125rem]', colapsado && 'justify-center px-0')}>
-        <BrandMark />
-        {!colapsado && <BrandName className="text-white" descriptor={false} accentClassName="text-side-accent" />}
+        {colapsado ? <BrandMark /> : <BrandLockup principalClassName="text-white" actividadClassName="text-side-accent" />}
       </div>
 
       <nav aria-label="Navegación principal" className="flex-1 overflow-y-auto px-3 pb-4 pt-2">

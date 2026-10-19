@@ -4,7 +4,7 @@ import { motion } from 'motion/react';
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { LoginLogo } from '@/components/layout/brand-mark';
+import { BrandLockup } from '@/components/layout/brand-mark';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
@@ -44,7 +44,7 @@ export default function LoginPage() {
   return (
     <main className="login-scope relative flex min-h-dvh flex-col items-center justify-center px-5 py-10 text-ink sm:px-6">
       <motion.div className="flex w-full max-w-[25rem] flex-col items-center" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: DUR.slow, ease: EASE }}>
-        <LoginLogo className="w-48 sm:w-60" />
+        <BrandLockup size="lg" variant="transparent" principalClassName="text-navy-ink" />
 
         <form onSubmit={handleSubmit(enviar)} noValidate aria-busy={isSubmitting} className="mt-8 w-full rounded-panel border border-line bg-surface p-6 shadow-[0_1px_2px_rgb(11_24_48/0.05),0_16px_40px_-18px_rgb(11_24_48/0.22)] sm:p-8">
           <h1 className="text-xl font-semibold tracking-tight text-ink">Iniciar sesión</h1>

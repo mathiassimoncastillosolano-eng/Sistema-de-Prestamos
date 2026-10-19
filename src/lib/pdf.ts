@@ -60,7 +60,7 @@ const formatoGeneracion = new Intl.DateTimeFormat('es-PE', { timeZone: 'America/
 export const marcaDeTiempoLima = (d: Date = new Date()) => formatoGeneracion.format(d).replace(/\./g, '');
 
 export const nombreArchivoPdf = (d: DatosPdf) =>
-  d.tipo === 'registrado' ? `PeruCred-${d.codigo ?? 'prestamo'}-cronograma.pdf` : 'PeruCred-simulacion-cronograma.pdf';
+  d.tipo === 'registrado' ? `${BRAND.archivo}-${d.codigo ?? 'prestamo'}-cronograma.pdf` : `${BRAND.archivo}-simulacion-cronograma.pdf`;
 
 const porcentaje = (t: number) => `${(t * 100).toFixed(2).replace(/\.00$/, '')} %`;
 

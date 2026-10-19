@@ -4,8 +4,13 @@
    ========================================================= */
 
 export const BRAND = {
-  nombre: 'PerúCred',
-  /** Descriptor institucional OFICIAL: es el que lleva impreso el logo. Mantenerlos idénticos. */
+  nombre: 'Préstamos Castillo',
+  /** Composición tipográfica de dos niveles: «Préstamos» describe la actividad y «Castillo» es el nombre principal. */
+  actividad: 'Préstamos',
+  principal: 'Castillo',
+  /** Prefijo ASCII para nombres de archivo descargables (PDF). */
+  archivo: 'Prestamos-Castillo',
+  /** Descriptor institucional (documentos PDF y metadatos). */
   descriptor: 'Tecnología para la Gestión Crediticia',
   lema: 'Gestión de préstamos con control total'
 } as const;

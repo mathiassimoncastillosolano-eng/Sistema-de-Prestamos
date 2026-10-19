@@ -1,6 +1,6 @@
 import { Loader2, ShieldAlert, WifiOff } from 'lucide-react';
 import { useState } from 'react';
-import { BrandMark, BrandName } from '@/components/layout/brand-mark';
+import { BrandLockup } from '@/components/layout/brand-mark';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/use-auth';
@@ -9,7 +9,7 @@ function Marco({ children }: { children: React.ReactNode }) {
   return (
     <main className="grid min-h-dvh place-items-center bg-canvas p-6">
       <div className="flex w-full max-w-sm flex-col items-center gap-5 text-center">
-        <div className="flex items-center gap-3 text-ink"><BrandMark /><BrandName /></div>
+        <BrandLockup size="md" />
         {children}
       </div>
     </main>

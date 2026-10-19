@@ -237,13 +237,13 @@ describe('Datos del PDF', () => {
     const simulacion = datosPdfSimulacion(armarSimulacion(1000, 2), { cliente: { nombre: 'X', tipoDocumento: 'DNI', numeroDocumento: '1' } });
     expect(simulacion.tipo).toBe('simulacion');
     expect(simulacion.codigo).toBeUndefined();
-    expect(nombreArchivoPdf(simulacion)).toBe('PeruCred-simulacion-cronograma.pdf');
+    expect(nombreArchivoPdf(simulacion)).toBe('Prestamos-Castillo-simulacion-cronograma.pdf');
 
     const registrado = datosPdfRegistrado(DETALLE as never);
     expect(registrado.tipo).toBe('registrado');
     expect(registrado.codigo).toBe('PR-1001');
     expect(registrado.totalContractual).toBe(DETALLE.totalContractual);
-    expect(nombreArchivoPdf(registrado)).toBe('PeruCred-PR-1001-cronograma.pdf');
+    expect(nombreArchivoPdf(registrado)).toBe('Prestamos-Castillo-PR-1001-cronograma.pdf');
   });
 });
 

@@ -4,7 +4,7 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* =========================================================
-   TOKENS DE DISEÑO — única fuente de verdad visual (identidad PerúCred).
+   TOKENS DE DISEÑO — única fuente de verdad visual (identidad Préstamos Castillo).
    Paleta de marca: Azul marino profundo #0B1830 · Azul corporativo #12395B · Turquesa #00BFAE · Turquesa suave #DDF7F3 · Turquesa claro #51D6C5.
    Referencia de interfaz clara: fondo #F4F7FB · superficies #FFFFFF · bordes #DCE5EF · texto #132B46 · texto secundario #60738D
    (el secundario se oscurece un punto, #5B6E88, para mantener contraste AA también sobre superficies tintadas).
