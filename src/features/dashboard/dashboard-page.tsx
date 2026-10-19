@@ -175,20 +175,20 @@ export default function DashboardPage() {
           }
         />
         <div role="group" aria-label="Filtros del dashboard" className="-mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-2.5">
-          <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-            <span className="shrink-0 text-[0.8125rem] font-medium text-ink-muted">Cartera</span>
+          <label className="flex min-w-0 basis-full items-center gap-2 sm:basis-auto">
+            <span className="w-14 shrink-0 text-[0.8125rem] font-medium text-ink-muted sm:w-auto">Cartera</span>
             <Select aria-label="Alcance de los indicadores" value={alcance} onChange={(e) => setAlcance(e.target.value as Alcance)} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
               {alcances.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
             </Select>
           </label>
-          <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-            <span className="shrink-0 text-[0.8125rem] font-medium text-ink-muted">Período</span>
+          <label className="flex min-w-0 basis-full items-center gap-2 sm:basis-auto">
+            <span className="w-14 shrink-0 text-[0.8125rem] font-medium text-ink-muted sm:w-auto">Período</span>
             <Select aria-label="Periodo de los gráficos" value={meses} onChange={(e) => setMeses(Number(e.target.value))} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
               {PERIODOS.map((p) => <option key={p} value={p}>Últimos {p} meses</option>)}
             </Select>
           </label>
-          <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
-            <span className="shrink-0 text-[0.8125rem] font-medium text-ink-muted">Estado</span>
+          <label className="flex min-w-0 basis-full items-center gap-2 sm:basis-auto">
+            <span className="w-14 shrink-0 text-[0.8125rem] font-medium text-ink-muted sm:w-auto">Estado</span>
             <Select aria-label="Estado de los préstamos" value={estado} onChange={(e) => setEstado(e.target.value as FiltroEstado)} className="min-w-0 flex-1 sm:w-44 sm:flex-none">
               {FILTROS_ESTADO.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
             </Select>
@@ -197,7 +197,7 @@ export default function DashboardPage() {
       </motion.div>
 
       {/* Banda de indicadores: líneas finas en lugar de tarjetas idénticas */}
-      <motion.div variants={stagger(0.04)} className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3 xl:grid-cols-[repeat(3,minmax(0,1.3fr))_repeat(3,minmax(0,1fr))]">
+      <motion.div variants={stagger(0.04)} className="grid grid-cols-2 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3 2xl:grid-cols-[repeat(3,minmax(0,1.3fr))_repeat(3,minmax(0,1fr))]">
         <Stat principal label="Total desembolsado" valor={<AnimatedNumber value={d.totalDesembolsado} format={money} />}
           pie={<span className="flex flex-wrap items-center gap-1.5"><span className="num">Este mes: {money(d.desembolsadoMes)}</span><Trend valor={d.variacionDesembolsos} /></span>} />
         <Stat principal label="Capital pendiente" valor={<AnimatedNumber value={d.capitalPendiente} format={money} />}
