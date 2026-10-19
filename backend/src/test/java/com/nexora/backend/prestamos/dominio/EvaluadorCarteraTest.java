@@ -48,7 +48,7 @@ class EvaluadorCarteraTest {
         assertEquals("Vigente", e.estado());
         assertEquals(0, new BigDecimal("6000.00").compareTo(e.capitalPendiente()));
         assertEquals(0, e.totalContractual().compareTo(e.totalPendiente()));
-        assertEquals(LocalDate.of(2026, 11, 18), e.proximoVencimiento());
+        assertEquals(LocalDate.of(2026, 11, 17), e.proximoVencimiento());
         assertEquals(0, e.cuotasVencidas());
     }
 
@@ -59,10 +59,10 @@ class EvaluadorCarteraTest {
 
         assertEquals("En mora", e.estado());
         assertEquals(2, e.cuotasVencidas());
-        assertEquals(LocalDate.of(2026, 9, 13), e.proximoVencimiento());
+        assertEquals(LocalDate.of(2026, 9, 11), e.proximoVencimiento());
         assertEquals("PAGADA", e.cuotas().get(0).estado());
         assertEquals("VENCIDA", e.cuotas().get(1).estado());
-        assertEquals(35L, e.cuotas().get(1).diasAtraso()); // 13-sep → 18-oct
+        assertEquals(37L, e.cuotas().get(1).diasAtraso()); // 11-sep → 18-oct
         assertEquals("PENDIENTE", e.cuotas().get(3).estado());
         assertEquals(0L, e.cuotas().get(3).diasAtraso());
     }

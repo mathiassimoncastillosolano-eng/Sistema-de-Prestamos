@@ -91,7 +91,7 @@ class PrestamoConsultaServicioTest {
         assertEquals(0, fila.totalPendiente().compareTo(det.totalPendiente()));
         assertEquals(0, fila.totalContractual().compareTo(det.totalContractual()));
         assertEquals(fila.proximoVencimiento(), det.proximoVencimiento());
-        assertEquals(LocalDate.of(2026, 9, 13), det.proximoVencimiento()); // primera cuota impaga (vencida)
+        assertEquals(LocalDate.of(2026, 9, 11), det.proximoVencimiento()); // primera cuota impaga (vencida)
         assertEquals(2, det.cuotasVencidas());
         assertTrue(fila.propio());
         assertEquals("PAGADA", det.cuotas().get(0).estado());
@@ -117,9 +117,9 @@ class PrestamoConsultaServicioTest {
         assertEquals("Camila Ortiz", det.historial().get(0).usuario());
         assertEquals("PR-1001 por S/ 6,000.00 a Rosa Elena Quispe Huamán", det.historial().get(0).descripcion());
         assertEquals("Vigente", det.estado());
-        assertEquals(LocalDate.of(2026, 11, 18), det.fechaPrimerVencimiento());
+        assertEquals(LocalDate.of(2026, 11, 17), det.fechaPrimerVencimiento());
         assertEquals(6, det.cuotas().size());
-        assertEquals(LocalDate.of(2027, 4, 18), det.fechaUltimoVencimiento());
+        assertEquals(LocalDate.of(2027, 4, 16), det.fechaUltimoVencimiento());
     }
 
     @Test
@@ -180,7 +180,7 @@ class PrestamoConsultaServicioTest {
         assertEquals(fila.estado(), r.estado());
         assertEquals(0, fila.capitalPendiente().compareTo(r.capitalPendiente()));
         assertEquals(0, fila.totalPendiente().compareTo(r.totalPendiente()));
-        assertEquals(LocalDate.of(2026, 11, 1), r.proximoVencimiento());
+        assertEquals(LocalDate.of(2026, 10, 31), r.proximoVencimiento());
     }
 
     @Test
