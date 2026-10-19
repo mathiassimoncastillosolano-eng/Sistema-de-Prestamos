@@ -42,9 +42,10 @@ describe('A · login correcto como asesor', () => {
 
     // El listado usa la API de clientes y la ficha consulta el mismo ID.
     window.location.hash = '#/clientes';
-    const enlace = await screen.findByRole('link', { name: /Ver detalle/ }, { timeout: 5000 });
-    expect(screen.getByText('cliente@example.com')).toBeInTheDocument();
-    await userEvent.setup().click(enlace);
+    // Ya no hay botón «Ver detalle»: un clic en cualquier parte de la fila abre la ficha.
+    const correo = await screen.findByText('cliente@example.com', undefined, { timeout: 5000 });
+    expect(screen.queryByRole('link', { name: /Ver detalle/ })).not.toBeInTheDocument();
+    await userEvent.setup().click(correo);
     expect(await screen.findByRole('heading', { name: 'Datos del cliente' })).toBeInTheDocument();
     expect(screen.getAllByText(/99999991/).length).toBeGreaterThan(0);
     expect(screen.getByText('cliente@example.com')).toBeInTheDocument();

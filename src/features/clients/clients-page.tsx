@@ -1,7 +1,7 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { Plus, Search, SearchX, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { DataTable } from '@/components/data-display/data-table';
 import { StatusBadge } from '@/components/data-display/status-badge';
 import { PageHeader } from '@/components/layout/page-header';
@@ -60,16 +60,6 @@ const columnas: ColumnDef<ClienteListado>[] = [
     accessorKey: 'estado',
     header: 'Estado',
     cell: ({ row }) => <StatusBadge estado={row.original.estado} />
-  },
-  {
-    id: 'detalle',
-    header: 'Detalle',
-    enableSorting: false,
-    cell: ({ row }) => (
-      <Button asChild size="sm" variant="secondary">
-        <Link to={`/clientes/${row.original.id}`}>Ver detalle</Link>
-      </Button>
-    )
   }
 ];
 
@@ -83,7 +73,6 @@ function TarjetaCliente({ cliente }: { cliente: ClienteListado }) {
         <p className="num text-xs text-ink-muted">{cliente.telefono || 'Sin teléfono'}</p>
         <p className="truncate text-xs text-ink-muted">{cliente.correo || 'Sin correo'}</p>
         <StatusBadge estado={cliente.estado} className="mt-1" />
-        <p className="mt-1 text-xs font-medium text-teal-ink">Ver detalle</p>
       </div>
     </Link>
   );
@@ -97,6 +86,7 @@ export default function ClientsPage() {
   const [q, setQ] = useState('');
   const [tipo, setTipo] = useState<'todos' | TipoCliente>('todos');
   const [registrar, setRegistrar] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let activo = true;
@@ -144,6 +134,7 @@ export default function ClientsPage() {
             cargando={cargando}
             textoBusqueda={(cliente) => `${cliente.nombre} ${cliente.numeroDocumento}`}
             ordenInicial={[{ id: 'nombre', desc: false }]}
+            alAbrir={(cliente) => navigate(`/clientes/${cliente.id}`)}
             tarjeta={(cliente) => <TarjetaCliente cliente={cliente} />}
             etiqueta="Listado de clientes"
             unidad="clientes"
