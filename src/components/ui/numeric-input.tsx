@@ -25,6 +25,17 @@ export function parseNumero(texto: string, decimales: number): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
+/** Deja como máximo `decimales` cifras después del separador decimal mientras se escribe. */
+function recortarDecimales(texto: string, decimales: number): string {
+  const ultimaComa = texto.lastIndexOf(',');
+  const ultimoPunto = texto.lastIndexOf('.');
+  const corte = Math.max(ultimaComa, ultimoPunto);
+  if (corte < 0) return texto;
+  // "1,234" (solo comas en grupos de tres) son miles, no decimales.
+  if (ultimoPunto < 0 && /^\d{1,3}(,\d{3})+$/.test(texto)) return texto;
+  return texto.slice(0, corte + 1 + decimales);
+}
+
 const formatear = (n: number, decimales: number, agrupar: boolean) =>
   Number.isFinite(n)
     ? new Intl.NumberFormat('en-US', { minimumFractionDigits: decimales, maximumFractionDigits: decimales, useGrouping: agrupar }).format(n)
@@ -73,12 +84,13 @@ export const NumericInput = forwardRef<HTMLInputElement, NumericInputProps>(func
       onChange={(e) => {
         let permitido = e.target.value.replace(decimals > 0 ? /[^\d.,]/g : /\D/g, '');
         if (maxIntegerDigits !== undefined) {
-          // Recorta los dígitos de la parte entera; los decimales se respetan.
+          // Recorta los dígitos de la parte entera.
           const corte = permitido.search(/[.,]/);
           const entera = corte >= 0 ? permitido.slice(0, corte) : permitido;
           const resto = corte >= 0 ? permitido.slice(corte) : '';
           permitido = entera.slice(0, maxIntegerDigits) + resto;
         }
+        if (decimals > 0) permitido = recortarDecimales(permitido, decimals);
         setTexto(permitido);
         onValueChange(parseNumero(permitido, decimals));
       }}

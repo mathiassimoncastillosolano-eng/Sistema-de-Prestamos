@@ -66,6 +66,16 @@ describe('Registrar préstamo · capacidad disponible', () => {
     expect(screen.queryByText(/supera la capacidad/)).not.toBeInTheDocument();
   });
 
+  it('el monto no deja escribir más de 2 decimales', async () => {
+    const { u } = montar('#/solicitud', (s) => s.fijarCapacidad(CLIENTE, 0));
+    await elegir(u, /Cliente de prueba/);
+
+    await escribirMonto(u, '5098.49885515');
+    expect(monto()).toHaveValue('5098.49');
+    await escribirMonto(u, '1500,756');
+    expect(monto()).toHaveValue('1500,75');
+  });
+
   it('al cambiar de cliente usa la capacidad del nuevo, nunca la del anterior', async () => {
     const { u } = montar('#/solicitud', (srv) => {
       srv.fijarCapacidad(CLIENTE, 2000);  // disponible 8,000
