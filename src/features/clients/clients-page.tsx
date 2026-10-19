@@ -24,11 +24,6 @@ const TONO_TIPO: Record<TipoCliente, 'teal' | 'navy' | 'neutral'> = {
 
 const columnas: ColumnDef<ClienteListado>[] = [
   {
-    accessorKey: 'numero',
-    header: 'Código de cliente',
-    cell: ({ row }) => <span className="num">{row.original.numero}</span>
-  },
-  {
     accessorKey: 'nombre',
     header: 'Cliente / razón social',
     cell: ({ row }) => (
@@ -83,7 +78,6 @@ function TarjetaCliente({ cliente }: { cliente: ClienteListado }) {
     <Link to={`/clientes/${cliente.id}`} className="flex items-center gap-3 p-4">
       <Avatar nombre={cliente.nombre} tipo={cliente.tipoDocumento} size="lg" />
       <div className="min-w-0">
-        <p className="num text-xs text-ink-muted">Código de cliente: {cliente.numero}</p>
         <p className="truncate font-medium text-ink">{cliente.nombre}</p>
         <p className="num text-xs text-ink-muted">{cliente.tipoDocumento} · {cliente.numeroDocumento}</p>
         <p className="num text-xs text-ink-muted">{cliente.telefono || 'Sin teléfono'}</p>
