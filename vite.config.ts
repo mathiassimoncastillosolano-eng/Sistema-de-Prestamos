@@ -30,6 +30,8 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    // Las pruebas de pantalla completa pasan solas, pero con todas en paralelo en una PC lenta superan los 5 s por defecto.
+    testTimeout: 15000,
     include: ['tests/**/*.test.{ts,tsx}'],
     css: false
   }

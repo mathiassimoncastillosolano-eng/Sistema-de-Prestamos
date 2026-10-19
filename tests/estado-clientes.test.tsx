@@ -30,13 +30,14 @@ async function enEscritorio(fn: () => Promise<void>) {
 }
 
 describe('Estado del cliente', () => {
-  it('la lista muestra la columna Estado antes de la acción de detalle', () => enEscritorio(async () => {
+  it('la lista muestra la columna Estado al final, sin columna de detalle', () => enEscritorio(async () => {
     montar('#/clientes');
     const tabla = await screen.findByRole('table', { name: 'Listado de clientes' });
     await within(tabla).findByText('Cliente Moroso Prueba');
 
     const cabeceras = within(tabla).getAllByRole('columnheader').map((h) => h.textContent?.trim());
-    expect(cabeceras.indexOf('Estado')).toBe(cabeceras.indexOf('Detalle') - 1);
+    expect(cabeceras.at(-1)).toBe('Estado');
+    expect(cabeceras).not.toContain('Detalle');
     expect(within(tabla).getByText('ACTIVO')).toBeInTheDocument();
     expect(within(tabla).getByText('MOROSO')).toBeInTheDocument();
     expect(within(tabla).getByText('EXTRAJUDICIAL')).toBeInTheDocument();
