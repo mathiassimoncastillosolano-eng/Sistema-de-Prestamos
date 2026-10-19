@@ -4,6 +4,7 @@ import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.cuotas.entidades.Cuota;
 import com.nexora.backend.cuotas.repositorios.CuotaRepositorio;
 import com.nexora.backend.prestamos.dominio.CalculadoraCronograma;
+import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.Cronograma;
 import com.nexora.backend.prestamos.dominio.ReglasPrestamo;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
@@ -40,13 +41,15 @@ public class PrestamoServicio {
     private final PrestamoRepositorio prestamos;
     private final CuotaRepositorio cuotas;
     private final ClienteResumenRepositorio clientes;
+    private final PrestamoConsultaServicio consultas;
     private final Clock reloj;
 
     public PrestamoServicio(PrestamoRepositorio prestamos, CuotaRepositorio cuotas,
-                            ClienteResumenRepositorio clientes, Clock reloj) {
+                            ClienteResumenRepositorio clientes, PrestamoConsultaServicio consultas, Clock reloj) {
         this.prestamos = prestamos;
         this.cuotas = cuotas;
         this.clientes = clientes;
+        this.consultas = consultas;
         this.reloj = reloj;
     }
 
@@ -69,7 +72,8 @@ public class PrestamoServicio {
         validarMoneda(solicitud.moneda());
         String observaciones = normalizarObservaciones(solicitud.observaciones());
 
-        // Bloquea al cliente hasta el final de la transacción (concurrencia del límite).
+        // Bloquea al cliente hasta el final de la transacción: si otro asesor registra para el mismo cliente,
+        // espera aquí y luego lee la deuda ya actualizada (concurrencia del límite).
         ClienteResumen cliente = clientes.buscarBloqueando(solicitud.clienteId())
                 .orElseThrow(() -> new PrestamoException(Codigo.CLIENTE_NO_ENCONTRADO,
                         "El cliente indicado no existe."));
@@ -191,21 +195,26 @@ public class PrestamoServicio {
         // sin restricciones adicionales por ahora
     }
 
-    /** US-05: acumulado del cliente en toda la empresa + nuevo capital no puede superar S/ 10,000. */
+    /**
+     * US-05: el monto no puede superar la capacidad disponible del cliente en toda la empresa. Se calcula aquí, con el
+     * cliente bloqueado, con la misma fórmula que muestran el perfil y el formulario; nunca se usa un valor del navegador.
+     */
     private void verificarLimite(UUID clienteId, BigDecimal nuevoCapital) {
-        BigDecimal acumulado = prestamos.sumarCapitalActivo(clienteId)
-                .orElse(BigDecimal.ZERO)
-                .setScale(2, RoundingMode.HALF_UP);
-        BigDecimal total = acumulado.add(nuevoCapital);
-        BigDecimal limite = ReglasPrestamo.LIMITE_ENDEUDAMIENTO;
-
-        if (total.compareTo(limite) > 0) {
-            BigDecimal excedente = total.subtract(limite);
-            throw new PrestamoException(Codigo.LIMITE_EXCEDIDO,
-                    "El cliente superaría el límite de " + soles(limite) + ". Acumulado actual: "
-                            + soles(acumulado) + "; excedente: " + soles(excedente) + ".",
-                    Map.of("acumulado", acumulado, "limite", limite, "excedente", excedente));
+        CapacidadEndeudamiento capacidad = consultas.capacidad(clienteId);
+        if (capacidad.permite(nuevoCapital)) {
+            return;
         }
+        BigDecimal acumulado = capacidad.capitalPendiente();
+        BigDecimal limite = capacidad.limite();
+        BigDecimal excedente = acumulado.add(nuevoCapital).subtract(limite);
+        String mensaje = capacidad.alcanzaElMinimo()
+                ? "El monto supera la capacidad disponible del cliente (" + soles(capacidad.disponible()) + "). "
+                        + "Capital pendiente: " + soles(acumulado) + "; excedente: " + soles(excedente) + "."
+                : "El cliente no tiene capacidad suficiente para un préstamo nuevo: dispone de "
+                        + soles(capacidad.disponible()) + " y el mínimo es " + soles(ReglasPrestamo.CAPITAL_MINIMO) + ".";
+        throw new PrestamoException(Codigo.LIMITE_EXCEDIDO, mensaje,
+                Map.of("acumulado", acumulado, "limite", limite, "excedente", excedente,
+                        "disponible", capacidad.disponible()));
     }
 
     private static String soles(BigDecimal importe) {

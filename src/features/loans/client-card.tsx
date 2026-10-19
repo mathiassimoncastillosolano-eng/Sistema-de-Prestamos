@@ -1,4 +1,4 @@
-import { Hash, Phone } from 'lucide-react';
+import { Phone } from 'lucide-react';
 import { Avatar } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import type { ClienteListado } from '@/services/clientes-api';
@@ -16,7 +16,8 @@ interface Props {
 }
 
 /**
- * Identificación del cliente: avatar con iniciales, nombre, tipo y número de documento y, si existen, código y celular.
+ * Identificación del cliente: avatar con iniciales, nombre, tipo y número de documento y, si existe, celular.
+ * El código de cliente no se muestra aquí (sí en Clientes y en el PDF).
  * Un único componente para condiciones, cronograma y confirmación. Recibe el cliente ya elegido, así que cambiarlo en el paso 1
  * lo refleja de inmediato en todas partes.
  */
@@ -30,7 +31,6 @@ export function ClienteCard({ cliente, etiqueta = 'Cliente seleccionado', varian
         <p className={cn('truncate font-semibold text-ink', grande ? 'text-base' : 'text-sm')} title={cliente.nombre}>{cliente.nombre}</p>
         <p className="num mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-muted">
           <span>{cliente.tipoDocumento} {cliente.numeroDocumento}</span>
-          {cliente.numero != null && <span className="inline-flex items-center gap-1"><Hash className="size-3" aria-hidden /><span className="sr-only">Código de cliente </span>{cliente.numero}</span>}
           {cliente.telefono && <span className="inline-flex items-center gap-1"><Phone className="size-3" aria-hidden /><span className="sr-only">Celular </span>{cliente.telefono}</span>}
         </p>
       </div>

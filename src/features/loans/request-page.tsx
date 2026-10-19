@@ -20,6 +20,7 @@ import { Modal } from '@/components/ui/modal';
 import { Stepper } from '@/components/ui/stepper';
 import { toast } from '@/components/ui/toast';
 import { useUsuario } from '@/hooks/use-auth';
+import { useCapacidad } from '@/hooks/use-capacidad';
 import { fecha } from '@/lib/dates';
 import { money } from '@/lib/format';
 import { DUR, EASE } from '@/lib/motion';
@@ -27,6 +28,7 @@ import { cn, normalizar } from '@/lib/utils';
 import { codigoPrestamo } from './loan-utils';
 import { listarClientes, type ClienteListado } from '@/services/clientes-api';
 import { detalleLimite, prestamosApi, PrestamoApiError, type CondicionesApi } from '@/services/prestamos-api';
+import { CapacidadCliente } from './capacidad-cliente';
 import { ClienteCard } from './client-card';
 import { BotonPdfSimulacion, ResumenFinanciero, ScheduleReviewModal } from './schedule-review';
 import { aFilas } from './loan-utils';
@@ -39,12 +41,13 @@ const MAX_CAPITAL_ENTRADA = 999999; // 6 cifras
 const MAX_PLAZO_ENTRADA = 999;      // 3 cifras
 const MAX_OBSERVACIONES = 250;
 
-const crearEsquema = (c: CondicionesApi | null) => z.object({
+/** El máximo es la capacidad disponible del cliente elegido; mientras no se conoce, solo rige el límite general. */
+const crearEsquema = (c: CondicionesApi | null, disponible: number | null) => z.object({
   clienteId: z.string().min(1, 'Selecciona un cliente.'),
   capital: z
     .number({ error: 'Ingresa un monto válido.' })
     .min(c?.capitalMinimo ?? 0.01, `El monto mínimo es ${money(c?.capitalMinimo ?? 0.01)}.`)
-    .max(c?.limiteEndeudamiento ?? MAX_CAPITAL_ENTRADA, `El monto no puede superar ${money(c?.limiteEndeudamiento ?? MAX_CAPITAL_ENTRADA)} (límite por cliente).`)
+    .max(disponible ?? c?.limiteEndeudamiento ?? MAX_CAPITAL_ENTRADA, mensajeMaximo(c, disponible))
     .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'El monto admite como máximo 2 decimales.'),
   plazo: z
     .number({ error: 'Ingresa el plazo en meses.' })
@@ -54,6 +57,12 @@ const crearEsquema = (c: CondicionesApi | null) => z.object({
   observaciones: z.string().max(MAX_OBSERVACIONES, `Máximo ${MAX_OBSERVACIONES} caracteres.`)
 });
 type SolicitudForm = z.infer<ReturnType<typeof crearEsquema>>;
+
+function mensajeMaximo(c: CondicionesApi | null, disponible: number | null) {
+  if (disponible === null) return `El monto no puede superar ${money(c?.limiteEndeudamiento ?? MAX_CAPITAL_ENTRADA)} (límite por cliente).`;
+  if (c && disponible < c.capitalMinimo) return 'El cliente no tiene capacidad suficiente para un préstamo nuevo.';
+  return `El monto supera la capacidad disponible del cliente (${money(disponible)}).`;
+}
 
 const PASOS = [
   { titulo: 'Cliente', descripcion: 'Quién solicita' },
@@ -88,8 +97,6 @@ export default function RequestPage() {
   const [cond, setCond] = useState<CondicionesApi | null>(null);
   const [errorCond, setErrorCond] = useState<string | null>(null);
   const [intentoCond, setIntentoCond] = useState(0);
-  const esquema = useMemo(() => crearEsquema(cond), [cond]);
-  const resolver = useMemo(() => zodResolver(esquema), [esquema]);
 
   const [clientes, setClientes] = useState<ClienteListado[]>([]);
   const [cargandoClientes, setCargandoClientes] = useState(true);
@@ -97,8 +104,11 @@ export default function RequestPage() {
   const [intento, setIntento] = useState(0);
   const preseleccionado = useRef(false);
 
+  // El esquema cambia con las condiciones y con la capacidad del cliente elegido: cada validación usa el último.
+  const esquemaActual = useRef(crearEsquema(null, null));
+
   const form = useForm<SolicitudForm>({
-    resolver,
+    resolver: (v, ctx, opciones) => zodResolver(esquemaActual.current)(v, ctx, opciones),
     defaultValues: { clienteId: '', capital: 0, plazo: 0, observaciones: '' },
     mode: 'all'
   });
@@ -136,6 +146,16 @@ export default function RequestPage() {
   }, [clientes, param, setValue]);
 
   const cliente = clientes.find((c) => c.id === valores.clienteId) ?? null;
+  const { capacidad, cargando: cargandoCapacidad, error: errorCapacidad, recargar: recargarCapacidad } = useCapacidad(cliente?.id);
+  const disponible = capacidad?.disponible ?? null;
+  const sinCapacidad = !!cond && disponible !== null && disponible < cond.capitalMinimo;
+  const esquema = useMemo(() => crearEsquema(cond, disponible), [cond, disponible]);
+  esquemaActual.current = esquema;
+
+  // Al cambiar de cliente (o al llegar su capacidad) el monto ya escrito se vuelve a validar con el nuevo máximo.
+  useEffect(() => {
+    if (form.getFieldState('capital').isDirty) void trigger('capital');
+  }, [esquema, form, trigger]);
 
   const lista = useMemo(() => {
     const nq = normalizar(q);
@@ -146,7 +166,8 @@ export default function RequestPage() {
 
   const capitalNum = Number.isFinite(valores.capital) ? valores.capital : 0;
   const plazoNum = Number.isFinite(valores.plazo) ? valores.plazo : 0;
-  const condicionesValidas = !!cond && esquema.safeParse(valores).success;
+  // Sin la capacidad del cliente actual no hay simulación ni registro: nunca se usa un valor viejo o inventado.
+  const condicionesValidas = !!cond && !!capacidad && esquema.safeParse(valores).success;
   const { sim, estado: estadoSim, error: errorSim, recalcular } = useSimulacion(capitalNum, plazoNum, condicionesValidas);
   const simVigente = estadoSim === 'lista' && !!sim && sim.capital === capitalNum && sim.plazoMeses === plazoNum;
   const desembolso = sim?.fechaDesembolso ?? cond?.fechaDesembolso ?? '';
@@ -166,7 +187,7 @@ export default function RequestPage() {
 
   const enviar = async () => {
     if (enviando.current) return; // evita envíos duplicados
-    if (!simVigente || !sim || !esquema.safeParse(valores).success) { setConfirmar(false); if (!condicionesValidas) { setPaso(2); void trigger(); } return; }
+    if (!simVigente || !sim || !capacidad || !esquema.safeParse(valores).success) { setConfirmar(false); if (!condicionesValidas) { setPaso(2); void trigger(); } return; }
     enviando.current = true;
     setGuardando(true);
     setErrorServidor(null);
@@ -189,6 +210,7 @@ export default function RequestPage() {
       const err = e instanceof PrestamoApiError ? e : new PrestamoApiError('DESCONOCIDO', 'No se pudo registrar el préstamo. Inténtalo nuevamente.');
       setErrorServidor(err);
       if (err.codigo === 'CONDICIONES_DESACTUALIZADAS') recalcular(); // vuelve a mostrar el cronograma vigente para revisarlo
+      if (err.codigo === 'LIMITE_EXCEDIDO') recargarCapacidad(); // la deuda cambió: se muestra la capacidad actual
     }
   };
 
@@ -263,7 +285,7 @@ export default function RequestPage() {
                     {errors.clienteId && <p role="alert" className="mt-3 text-sm font-medium text-danger-ink">{errors.clienteId.message}</p>}
                     {cliente && (
                       <p className="mt-4 rounded-control bg-success-soft p-3 text-sm text-success-ink">
-                        Cliente seleccionado: <b className="font-semibold">{cliente.nombre}</b>. {cond ? <>El límite de endeudamiento de {money(cond.limiteEndeudamiento)} se evalúa al registrar</> : 'El límite de endeudamiento se evalúa al registrar'}, sumando los préstamos activos del cliente en toda la empresa.
+                        Cliente seleccionado: <b className="font-semibold">{cliente.nombre}</b>. {capacidad ? <>Capacidad disponible: <b className="num font-semibold">{money(capacidad.disponible)}</b></> : 'Su capacidad de endeudamiento se consulta en el siguiente paso'}, considerando sus préstamos en toda la empresa.
                       </p>
                     )}
                   </>
@@ -278,12 +300,22 @@ export default function RequestPage() {
                       <EmptyState icon={TriangleAlert} title="No se pudieron cargar las condiciones" description={errorCond} className="py-8"
                         action={<Button variant="primary" onClick={() => setIntentoCond((n) => n + 1)}>Reintentar</Button>} />
                     )}
-                    {cliente && <ClienteCard cliente={cliente} className="mt-4" />}
+                    {cliente && (
+                      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                        <ClienteCard cliente={cliente} />
+                        <CapacidadCliente capacidad={capacidad} cargando={cargandoCapacidad} error={errorCapacidad} onReintentar={recargarCapacidad} />
+                      </div>
+                    )}
+                    {sinCapacidad && (
+                      <p role="alert" className="mt-3 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
+                        El cliente no tiene capacidad suficiente para un préstamo nuevo: dispone de {money(disponible ?? 0)} y el monto mínimo es {money(cond?.capitalMinimo ?? 0)}.
+                      </p>
+                    )}
                     {cond && (
                     <div className="mt-5 space-y-5">
                       <FormSection title="Importe y plazo">
                         <Controller name="capital" control={control} render={({ field }) => (
-                          <Field label="Monto solicitado" error={errors.capital?.message} hint={`Mínimo ${money(cond.capitalMinimo)}. Límite acumulado por cliente: ${money(cond.limiteEndeudamiento)}`}>
+                          <Field label="Monto solicitado" error={errors.capital?.message} hint={disponible === null ? `Mínimo ${money(cond.capitalMinimo)}. Consultando el máximo disponible…` : `Máximo disponible: ${money(disponible)} · Mínimo ${money(cond.capitalMinimo)}`}>
                             <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_CAPITAL_ENTRADA ? MAX_CAPITAL_ENTRADA : v)} onBlur={field.onBlur} decimals={2} maxIntegerDigits={6} prefix="S/" placeholder="0.00" />
                           </Field>
                         )} />
@@ -333,6 +365,7 @@ export default function RequestPage() {
                             <dt>Acumulado actual</dt><dd className="text-right font-semibold">{money(limite.acumulado)}</dd>
                             <dt>Límite</dt><dd className="text-right font-semibold">{money(limite.limite)}</dd>
                             <dt>Excedente</dt><dd className="text-right font-semibold">{money(limite.excedente)}</dd>
+                            {limite.disponible !== undefined && <><dt>Capacidad disponible</dt><dd className="text-right font-semibold">{money(limite.disponible)}</dd></>}
                           </dl>
                         ) : (
                           <p className="mt-1">{errorServidor.message}</p>

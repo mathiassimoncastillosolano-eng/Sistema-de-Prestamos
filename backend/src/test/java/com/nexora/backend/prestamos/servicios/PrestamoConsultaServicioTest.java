@@ -7,11 +7,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.nexora.backend.autenticacion.entidades.Agencia;
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.prestamos.dominio.CalculadoraCronograma;
+import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.Cronograma;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.CuotaGuardada;
 import com.nexora.backend.prestamos.dominio.ReglasPrestamo;
@@ -22,6 +24,7 @@ import com.nexora.backend.prestamos.excepciones.PrestamoException;
 import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio;
 import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio.CabeceraPrestamo;
 import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio.CuotaDePrestamo;
+import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio.Filtro;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -30,6 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class PrestamoConsultaServicioTest {
 
@@ -186,5 +190,74 @@ class PrestamoConsultaServicioTest {
         when(sin.getAgencia()).thenReturn(null);
         assertEquals(PrestamoException.Codigo.SIN_PERMISO,
                 assertThrows(PrestamoException.class, () -> servicio.listar(sin)).getCodigo());
+    }
+
+    // ------------------------------------------------------------ capacidad de endeudamiento
+
+    private CabeceraPrestamo enAgencia(UUID id, long numero, String agencia, BigDecimal capital, LocalDate d, String estado) {
+        return new CabeceraPrestamo(id, numero, UUID.randomUUID(), "Rosa Elena Quispe Huamán", "DNI", "12345678",
+                27L, "987654321", agencia, "Camila Ortiz", UUID.randomUUID(), capital, 6, ReglasPrestamo.TEA, d, estado,
+                null, "2026-07-13 15:38");
+    }
+
+    @Test
+    void capacidadSumaLosPrestamosDelClienteEnTodasLasAgencias() {
+        UUID clienteId = UUID.randomUUID();
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        UUID c = UUID.randomUUID();
+        LocalDate d = LocalDate.of(2026, 10, 1);
+        when(repo.cabeceras(any())).thenReturn(List.of(
+                enAgencia(a, 1001, "Agencia Piura", new BigDecimal("2000.00"), d, "Vigente"),
+                enAgencia(b, 1002, "Agencia Trujillo", new BigDecimal("3000.00"), d, "En mora"),
+                enAgencia(c, 1003, "Agencia Chiclayo", new BigDecimal("4000.00"), d, "Cancelado")));
+        List<CuotaDePrestamo> todas = new ArrayList<>(cuotas(a, new BigDecimal("2000.00"), d, 0));
+        todas.addAll(cuotas(b, new BigDecimal("3000.00"), d, 0));
+        todas.addAll(cuotas(c, new BigDecimal("4000.00"), d, 0));
+        when(repo.cuotas(any())).thenReturn(todas);
+
+        CapacidadEndeudamiento cap = servicio.capacidad(clienteId);
+
+        // Se consulta por cliente, nunca por agencia ni por asesor.
+        ArgumentCaptor<Filtro> filtro = ArgumentCaptor.forClass(Filtro.class);
+        verify(repo).cabeceras(filtro.capture());
+        assertEquals("p.cliente_id = ?", filtro.getValue().condicion());
+        assertEquals(clienteId, filtro.getValue().argumentos()[0]);
+
+        assertEquals(new BigDecimal("5000.00"), cap.capitalPendiente()); // el cancelado no suma
+        assertEquals(new BigDecimal("5000.00"), cap.disponible());
+    }
+
+    @Test
+    void capacidadCoincideConLoQueSumaElPerfil() {
+        UUID clienteId = UUID.randomUUID();
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        LocalDate d = LocalDate.of(2026, 7, 13);
+        when(repo.cabeceras(any())).thenReturn(List.of(
+                enAgencia(a, 1001, "Agencia Piura", new BigDecimal("6000.00"), d, "Vigente"),
+                enAgencia(b, 1002, "Agencia Trujillo", new BigDecimal("1500.00"), d, "Vigente")));
+        List<CuotaDePrestamo> todas = new ArrayList<>(cuotas(a, new BigDecimal("6000.00"), d, 2));
+        todas.addAll(cuotas(b, new BigDecimal("1500.00"), d, 1));
+        when(repo.cuotas(any())).thenReturn(todas);
+
+        List<PrestamoResumen> filas = servicio.listarPorCliente(clienteId);
+        CapacidadEndeudamiento cap = servicio.capacidad(clienteId);
+
+        BigDecimal capital = filas.stream().map(PrestamoResumen::capitalPendiente).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal importe = filas.stream().map(PrestamoResumen::totalPendiente).reduce(BigDecimal.ZERO, BigDecimal::add);
+        assertEquals(0, capital.compareTo(cap.capitalPendiente()));
+        assertEquals(0, importe.compareTo(cap.importePendiente()));
+        assertEquals(0, new BigDecimal("10000.00").subtract(capital).compareTo(cap.disponible()));
+    }
+
+    @Test
+    void prestamoActivoSinCuotasCuentaTodoSuCapital() {
+        UUID id = UUID.randomUUID();
+        when(repo.cabeceras(any())).thenReturn(List.of(
+                enAgencia(id, 1001, "Agencia Piura", new BigDecimal("4000.00"), LocalDate.of(2026, 10, 1), "Vigente")));
+        when(repo.cuotas(any())).thenReturn(List.of());
+
+        assertEquals(new BigDecimal("6000.00"), servicio.capacidad(UUID.randomUUID()).disponible());
     }
 }

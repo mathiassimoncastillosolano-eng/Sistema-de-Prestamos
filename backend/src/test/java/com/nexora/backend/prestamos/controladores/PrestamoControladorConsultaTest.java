@@ -7,9 +7,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
 import com.nexora.backend.prestamos.servicios.PrestamoConsultaServicio;
 import com.nexora.backend.prestamos.servicios.PrestamoServicio;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,6 +62,27 @@ class PrestamoControladorConsultaTest {
     @Test
     void listarConClienteQueNoEsUuidDevuelve400() throws Exception {
         mvc.perform(get("/api/prestamos").param("clienteId", "no-es-uuid"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+    }
+
+    @Test
+    void capacidadDevuelveLimitePendienteYDisponible() throws Exception {
+        UUID clienteId = UUID.randomUUID();
+        when(servicio.capacidad(clienteId)).thenReturn(new CapacidadEndeudamiento(new BigDecimal("10000.00"),
+                new BigDecimal("3738.29"), new BigDecimal("5658.04"), new BigDecimal("6261.71")));
+
+        mvc.perform(get("/api/prestamos/capacidad").param("clienteId", clienteId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.limite").value(10000.00))
+                .andExpect(jsonPath("$.capitalPendiente").value(3738.29))
+                .andExpect(jsonPath("$.importePendiente").value(5658.04))
+                .andExpect(jsonPath("$.disponible").value(6261.71));
+    }
+
+    @Test
+    void capacidadSinClienteValidoDevuelve400() throws Exception {
+        mvc.perform(get("/api/prestamos/capacidad").param("clienteId", "no-es-uuid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
     }

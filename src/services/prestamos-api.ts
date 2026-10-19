@@ -90,6 +90,20 @@ export interface CondicionesApi {
   fechaPrimerVencimiento: string;
 }
 
+/**
+ * GET /api/prestamos/capacidad?clienteId=…: capacidad de endeudamiento del cliente en toda la empresa.
+ * La calcula el servidor (la misma que muestra el perfil y la que valida el registro).
+ */
+export interface CapacidadApi {
+  limite: number;
+  /** Capital de las cuotas no pagadas de sus préstamos no cancelados: es lo que cuenta para el límite. */
+  capitalPendiente: number;
+  /** Capital + intereses de esas cuotas (informativo). */
+  importePendiente: number;
+  /** limite − capitalPendiente (nunca negativo). Máximo que puede solicitar ahora. */
+  disponible: number;
+}
+
 /** POST /api/prestamos/simulacion: cronograma que se guardaría hoy. No se persiste nada. */
 export interface SimulacionApi {
   moneda: string;
@@ -179,6 +193,7 @@ export interface DetalleLimite {
   acumulado: number;
   limite: number;
   excedente: number;
+  disponible?: number;
 }
 
 export class PrestamoApiError extends Error {
@@ -207,7 +222,7 @@ export function detalleLimite(e: unknown): DetalleLimite | null {
   if (!(e instanceof PrestamoApiError) || e.codigo !== 'LIMITE_EXCEDIDO') return null;
   const d = e.detalle as Partial<DetalleLimite> | null;
   if (!d || typeof d.acumulado !== 'number' || typeof d.limite !== 'number' || typeof d.excedente !== 'number') return null;
-  return { acumulado: d.acumulado, limite: d.limite, excedente: d.excedente };
+  return { acumulado: d.acumulado, limite: d.limite, excedente: d.excedente, disponible: typeof d.disponible === 'number' ? d.disponible : undefined };
 }
 
 function leerCookie(nombre: string): string | null {
@@ -292,6 +307,10 @@ export const prestamosApi = {
   /** Préstamos de un cliente en todas las agencias, del más reciente al más antiguo. */
   listarPorCliente(clienteId: string): Promise<PrestamoResumenApi[]> {
     return llamar<PrestamoResumenApi[]>(`?clienteId=${encodeURIComponent(clienteId)}`, { method: 'GET' });
+  },
+  /** Capacidad de endeudamiento del cliente (perfil y formulario de solicitud). */
+  capacidad(clienteId: string): Promise<CapacidadApi> {
+    return llamar<CapacidadApi>(`/capacidad?clienteId=${encodeURIComponent(clienteId)}`, { method: 'GET' });
   },
   /** US-06: consulta el préstamo con el cronograma guardado. */
   consultar(id: string): Promise<PrestamoDetalleApi> {

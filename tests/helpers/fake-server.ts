@@ -33,6 +33,9 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     agenciaId: 'a1', creadoEn: '2026-10-17T10:00:00-05:00'
   };
   const clientes: Array<Record<string, unknown>> = [cliente];
+  /** Capacidad por cliente (GET /api/prestamos/capacidad). Sin entrada: cliente sin deuda. */
+  const capacidades = new Map<string, typeof SIN_DEUDA | 'error'>();
+  let retenerCapacidad: Promise<void> | null = null;
 
   const handler = vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
     const ruta = String(entrada);
@@ -95,6 +98,12 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     if (ruta === '/api/dashboard' && metodo === 'GET') {
       return sesionDe ? json(200, CARTERA) : json(401);
     }
+    if (ruta.startsWith('/api/prestamos/capacidad?clienteId=') && metodo === 'GET') {
+      if (!sesionDe) return json(401);
+      if (retenerCapacidad) await retenerCapacidad;
+      const c = capacidades.get(new URL(ruta, 'http://localhost').searchParams.get('clienteId') ?? '') ?? SIN_DEUDA;
+      return c === 'error' ? json(500) : json(200, c);
+    }
     if (ruta.startsWith('/api/prestamos?clienteId=') && metodo === 'GET') {
       return sesionDe ? json(200, []) : json(401);
     }
@@ -126,6 +135,15 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     fallarLogout: (v: boolean) => { logoutFalla = v; },
     /** El próximo registro responde 409 CONDICIONES_DESACTUALIZADAS (como si hubiera cambiado el día). */
     desactualizarCondiciones: (v: boolean) => { desactualizado = v; },
+    /** Fija lo que debe un cliente; `'error'` hace fallar la consulta de su capacidad. */
+    fijarCapacidad: (clienteId: string, capitalPendiente: number | 'error', importePendiente = capitalPendiente) => {
+      capacidades.set(clienteId, capitalPendiente === 'error' ? 'error' : {
+        limite: 10000, capitalPendiente, importePendiente: Number(importePendiente),
+        disponible: Math.max(0, Math.round((10000 - capitalPendiente) * 100) / 100)
+      });
+    },
+    /** Deja la consulta de capacidad esperando hasta llamar a la función devuelta. */
+    retenerCapacidad: () => { let soltar!: () => void; retenerCapacidad = new Promise<void>((r) => { soltar = r; }); return () => { retenerCapacidad = null; soltar(); }; },
     retenerMe: () => { let soltar!: () => void; retenerMe = new Promise<void>((r) => { soltar = r; }); return () => { retenerMe = null; soltar(); }; }
   };
 }
@@ -158,6 +176,8 @@ export const CARTERA = {
     ]
   }]
 };
+
+const SIN_DEUDA = { limite: 10000, capitalPendiente: 0, importePendiente: 0, disponible: 10000 };
 
 /* ---------- Préstamos (contrato de /api/prestamos). Cifras sencillas y coherentes; NO reproducen la fórmula del backend. ---------- */
 export const CONDICIONES = {

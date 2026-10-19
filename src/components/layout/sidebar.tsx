@@ -1,9 +1,8 @@
 import { motion } from 'motion/react';
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
-import { Avatar } from '@/components/ui/avatar';
 import { Tip } from '@/components/ui/tooltip';
-import { useAuth, useUsuario } from '@/hooks/use-auth';
+import { useAuth } from '@/hooks/use-auth';
 import { DUR, EASE } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { BrandMark, BrandName } from './brand-mark';
@@ -17,7 +16,6 @@ interface ContentProps {
 
 /** Contenido de la barra lateral. Se reutiliza en escritorio (colapsable) y en el drawer móvil. */
 export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps) {
-  const usuario = useUsuario();
   const { puede } = useAuth();
   const grupos = gruposPara(puede);
   return (
@@ -57,8 +55,9 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
         ))}
       </nav>
 
-      <div className="shrink-0 space-y-2 border-t border-side-line p-3">
-        {onToggle && (
+      {/* El usuario ya aparece arriba a la derecha: abajo solo queda «Minimizar» (en el menú móvil no hay nada). */}
+      {onToggle && (
+        <div className="shrink-0 border-t border-side-line p-3">
           <Tip label={colapsado ? 'Expandir menú' : 'Minimizar menú'} side="right" disabled={!colapsado}>
             <button type="button" onClick={onToggle} aria-label={colapsado ? 'Expandir el menú' : 'Minimizar el menú'}
               className={cn('flex h-10 w-full items-center gap-3 rounded-control px-3 text-sm text-side-muted transition-colors hover:bg-side-hover hover:text-white', colapsado && 'justify-center px-0')}>
@@ -66,17 +65,8 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
               {!colapsado && 'Minimizar'}
             </button>
           </Tip>
-        )}
-        <div className={cn('flex items-center gap-3 rounded-control px-2 py-1.5', colapsado && 'justify-center px-0')}>
-          <Avatar nombre={usuario.nombre} size="md" className="bg-side-active text-side-ink" />
-          {!colapsado && (
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-white">{usuario.nombre}</p>
-              <p className="truncate text-xs text-side-muted">{usuario.rolEtiqueta}</p>
-            </div>
-          )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import { money } from '@/lib/format';
 import { contactoSchema, type ContactoForm } from '@/lib/validation';
 import { clientesApi, consultarCliente, type ClienteDetalle } from '@/services/clientes-api';
 import { prestamosApi, type PrestamoResumenApi } from '@/services/prestamos-api';
+import { useCapacidad } from '@/hooks/use-capacidad';
 import type { EstadoPrestamo, TipoCliente } from '@/types';
 
 const TONO_TIPO: Record<TipoCliente, 'teal' | 'navy' | 'neutral'> = { DNI: 'neutral', 'RUC 10': 'teal', 'RUC 20': 'navy' };
@@ -193,23 +194,27 @@ export default function ClientDetailPage() {
     return () => { activo = false; };
   }, [id, intentoPrestamos]);
 
+  // Capital pendiente, importe pendiente y capacidad disponible los calcula el servidor: es la misma cifra que usa
+  // la solicitud de préstamo y la que se valida al registrar.
+  const { capacidad, error: errorCapacidad } = useCapacidad(id);
+
   const resumen = useMemo(() => {
     const suma = (f: (p: PrestamoResumenApi) => number) => r2(prestamos.reduce((a, p) => a + f(p), 0));
-    const deuda = suma((p) => p.capitalPendiente);
-    const pendiente = suma((p) => p.totalPendiente);
     const totalContractual = suma((p) => p.totalContractual);
+    const pendiente = capacidad?.importePendiente ?? 0;
     const ultimoDesembolso = prestamos.reduce<string | null>((m, p) => (m === null || p.fechaDesembolso > m ? p.fechaDesembolso : m), null);
     return {
-      deuda,
+      deuda: capacidad?.capitalPendiente ?? 0,
       pendiente,
       totalContractual,
       usoCubierto: totalContractual > 0 ? ((totalContractual - pendiente) / totalContractual) * 100 : 0,
-      disponible: Math.max(0, r2(CFG.limite - deuda)),
+      disponible: capacidad?.disponible ?? 0,
+      limite: capacidad?.limite ?? CFG.limite,
       desembolsado: suma((p) => p.capital),
       ultimoDesembolso,
       conSaldo: prestamos.filter((p) => p.totalPendiente > 0.005).length
     };
-  }, [prestamos]);
+  }, [prestamos, capacidad]);
 
   if (cargando) {
     return <Card className="p-5" role="status">Cargando cliente...</Card>;
@@ -230,7 +235,7 @@ export default function ClientDetailPage() {
 
   const esEmpresa = cliente.tipoDocumento === 'RUC 20';
   const esNegocio = cliente.tipoDocumento === 'RUC 10';
-  const { deuda, pendiente, totalContractual, usoCubierto, disponible, desembolsado, ultimoDesembolso, conSaldo } = resumen;
+  const { deuda, pendiente, totalContractual, usoCubierto, disponible, limite, desembolsado, ultimoDesembolso, conSaldo } = resumen;
   const nuevaSolicitud = () => navigate(`/solicitud/${cliente.id}`);
   const subtitulo = [
     String(cliente.numero),
@@ -288,10 +293,11 @@ export default function ClientDetailPage() {
               <AnimatedNumber value={pendiente} format={money} duration={0.5} />
             </Indicador>
             <Indicador label="Capacidad disponible"
-              pie={<><LimitMeter deuda={deuda} showText={false} label="Uso del límite" /><p className="mt-1.5">{Math.round((deuda / CFG.limite) * 100)} % de {money(CFG.limite)} (límite por cliente, toda la empresa)</p></>}>
+              pie={<><LimitMeter deuda={deuda} showText={false} label="Uso del límite" /><p className="mt-1.5">{Math.round((deuda / limite) * 100)} % de {money(limite)} (límite por cliente, toda la empresa)</p></>}>
               <AnimatedNumber value={disponible} format={money} duration={0.5} />
             </Indicador>
           </div>
+          {errorCapacidad && <p role="alert" className="-mt-2 text-sm text-danger-ink">No se pudo consultar la capacidad de endeudamiento: {errorCapacidad}</p>}
 
           <Card>
             <CardHeader as="h2" title="Actividad crediticia" description="Resumen calculado desde los préstamos registrados del cliente" />

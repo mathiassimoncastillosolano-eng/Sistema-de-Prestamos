@@ -1,6 +1,7 @@
 package com.nexora.backend.prestamos.controladores;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
+import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoDetalle;
 import com.nexora.backend.prestamos.dto.PrestamoListado;
@@ -70,6 +71,12 @@ public class PrestamoControlador {
     @GetMapping(params = "clienteId")
     public List<PrestamoResumen> listarPorCliente(@RequestParam UUID clienteId) {
         return consultas.listarPorCliente(clienteId);
+    }
+
+    /** Capacidad de endeudamiento del cliente en toda la empresa (perfil y solicitud). No escribe nada. */
+    @GetMapping("/capacidad")
+    public CapacidadEndeudamiento capacidad(@RequestParam UUID clienteId) {
+        return consultas.capacidad(clienteId);
     }
 
     /** Detalle del préstamo + cronograma. Cualquier usuario autenticado (la matriz de permisos PQ-15 sigue pendiente). */

@@ -3,6 +3,7 @@ package com.nexora.backend.prestamos.servicios;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -11,6 +12,8 @@ import static org.mockito.Mockito.when;
 import com.nexora.backend.autenticacion.entidades.Agencia;
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.cuotas.repositorios.CuotaRepositorio;
+import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
+import com.nexora.backend.prestamos.dominio.EvaluadorCartera.Evaluacion;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
 import com.nexora.backend.prestamos.entidades.ClienteResumen;
@@ -24,17 +27,20 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.function.Executable;
+import org.mockito.InOrder;
 
 class PrestamoServicioTest {
 
     private final PrestamoRepositorio prestamos = mock(PrestamoRepositorio.class);
     private final CuotaRepositorio cuotas = mock(CuotaRepositorio.class);
     private final ClienteResumenRepositorio clientes = mock(ClienteResumenRepositorio.class);
+    private final PrestamoConsultaServicio consultas = mock(PrestamoConsultaServicio.class);
     // 22:00 del 17-oct en Lima = 03:00 UTC del 18-oct: prueba que se usa la fecha de Perú, no la de UTC.
     private final Clock reloj = Clock.fixed(Instant.parse("2026-10-18T03:00:00Z"), ZoneId.of("America/Lima"));
 
@@ -44,7 +50,7 @@ class PrestamoServicioTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new PrestamoServicio(prestamos, cuotas, clientes, reloj);
+        servicio = new PrestamoServicio(prestamos, cuotas, clientes, consultas, reloj);
 
         Agencia agencia = mock(Agencia.class);
         when(agencia.getId()).thenReturn(UUID.randomUUID());
@@ -62,8 +68,14 @@ class PrestamoServicioTest {
         acumulado("0");
     }
 
+    /** Capital pendiente del cliente en toda la empresa, tal como lo calcula la consulta de capacidad. */
     private void acumulado(String valor) {
-        when(prestamos.sumarCapitalActivo(clienteId)).thenReturn(Optional.of(new BigDecimal(valor)));
+        when(consultas.capacidad(clienteId)).thenReturn(capacidadCon(valor));
+    }
+
+    private static CapacidadEndeudamiento capacidadCon(String capitalPendiente) {
+        BigDecimal v = new BigDecimal(capitalPendiente);
+        return CapacidadEndeudamiento.de(List.of(new Evaluacion("Vigente", v, v, v, null, 0, List.of())));
     }
 
     private PrestamoRespuesta registrar(String capital, Integer plazo, String moneda) {
@@ -149,6 +161,63 @@ class PrestamoServicioTest {
         PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1001", 12, null));
         assertEquals(new BigDecimal("9000.00"), ex.getDetalle().get("acumulado"));
         assertEquals(new BigDecimal("1.00"), ex.getDetalle().get("excedente"));
+    }
+
+    // ------------------------------------------------------------ capacidad disponible
+
+    @Test
+    void con_capacidad_6261_71_se_permite_6261_71_y_se_rechaza_6261_72() {
+        acumulado("3738.29"); // disponible 6,261.71
+        assertDoesNotThrow(() -> registrar("6261.71", 12, null));
+        PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("6261.72", 12, null));
+        assertEquals(new BigDecimal("6261.71"), ex.getDetalle().get("disponible"));
+        assertEquals(new BigDecimal("0.01"), ex.getDetalle().get("excedente"));
+    }
+
+    @Test
+    void con_capacidad_8000_se_permiten_5000_y_8000_pero_no_8001() {
+        acumulado("2000");
+        assertDoesNotThrow(() -> registrar("5000", 12, null));
+        assertDoesNotThrow(() -> registrar("8000", 12, null));
+        rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("8001", 12, null));
+    }
+
+    @Test
+    void sin_deuda_se_permiten_los_10000() {
+        acumulado("0");
+        assertDoesNotThrow(() -> registrar("10000", 12, null));
+    }
+
+    @Test
+    void con_capacidad_0_no_se_registra_ni_el_minimo() {
+        acumulado("10000");
+        PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1000", 12, null));
+        assertTrue(ex.getMessage().contains("no tiene capacidad suficiente"));
+    }
+
+    @Test
+    void con_capacidad_menor_al_minimo_no_se_registra() {
+        acumulado("9100"); // disponible 900 < 1,000
+        PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1000", 12, null));
+        assertTrue(ex.getMessage().contains("no tiene capacidad suficiente"));
+    }
+
+    @Test
+    void la_capacidad_se_lee_despues_de_bloquear_al_cliente() {
+        registrar("1000", 12, null);
+        InOrder orden = inOrder(clientes, consultas, prestamos);
+        orden.verify(clientes).buscarBloqueando(clienteId);
+        orden.verify(consultas).capacidad(clienteId);
+        orden.verify(prestamos).save(any(Prestamo.class));
+    }
+
+    @Test
+    void si_la_deuda_cambia_entre_la_consulta_y_el_registro_manda_la_deuda_actual() {
+        // El formulario vio 8,000 disponibles; antes de registrar, otro asesor dejó al cliente con 5,000.
+        when(consultas.capacidad(clienteId)).thenReturn(capacidadCon("2000"), capacidadCon("5000"));
+        assertEquals(new BigDecimal("8000.00"), consultas.capacidad(clienteId).disponible()); // lo que mostró la pantalla
+        PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("8000", 12, null));
+        assertEquals(new BigDecimal("5000.00"), ex.getDetalle().get("disponible"));
     }
 
     // ------------------------------------------------------------ condiciones y simulación
