@@ -10,7 +10,8 @@ public record ClienteListadoDTO(
         String numeroDocumento,
         String nombre,
         String telefono,
-        String correo
+        String correo,
+        String estado
 ) {
     public static ClienteListadoDTO desde(Cliente cliente) {
         return new ClienteListadoDTO(
@@ -20,7 +21,8 @@ public record ClienteListadoDTO(
                 cliente.getNumeroDocumento(),
                 cliente.getNombre(),
                 cliente.getTelefono(),
-                cliente.getCorreo()
+                cliente.getCorreo(),
+                cliente.getEstado()
         );
     }
 }

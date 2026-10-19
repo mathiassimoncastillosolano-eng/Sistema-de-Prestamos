@@ -1,8 +1,9 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { Plus, Search, SearchX, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { DataTable } from '@/components/data-display/data-table';
+import { StatusBadge } from '@/components/data-display/status-badge';
 import { PageHeader } from '@/components/layout/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +23,6 @@ const TONO_TIPO: Record<TipoCliente, 'teal' | 'navy' | 'neutral'> = {
 };
 
 const columnas: ColumnDef<ClienteListado>[] = [
-  {
-    accessorKey: 'numero',
-    header: 'Código de cliente',
-    cell: ({ row }) => <span className="num">{row.original.numero}</span>
-  },
   {
     accessorKey: 'nombre',
     header: 'Cliente / razón social',
@@ -61,14 +57,9 @@ const columnas: ColumnDef<ClienteListado>[] = [
       : '—'
   },
   {
-    id: 'detalle',
-    header: 'Detalle',
-    enableSorting: false,
-    cell: ({ row }) => (
-      <Button asChild size="sm" variant="secondary">
-        <Link to={`/clientes/${row.original.id}`}>Ver detalle</Link>
-      </Button>
-    )
+    accessorKey: 'estado',
+    header: 'Estado',
+    cell: ({ row }) => <StatusBadge estado={row.original.estado} />
   }
 ];
 
@@ -77,12 +68,11 @@ function TarjetaCliente({ cliente }: { cliente: ClienteListado }) {
     <Link to={`/clientes/${cliente.id}`} className="flex items-center gap-3 p-4">
       <Avatar nombre={cliente.nombre} tipo={cliente.tipoDocumento} size="lg" />
       <div className="min-w-0">
-        <p className="num text-xs text-ink-muted">Código de cliente: {cliente.numero}</p>
         <p className="truncate font-medium text-ink">{cliente.nombre}</p>
         <p className="num text-xs text-ink-muted">{cliente.tipoDocumento} · {cliente.numeroDocumento}</p>
         <p className="num text-xs text-ink-muted">{cliente.telefono || 'Sin teléfono'}</p>
         <p className="truncate text-xs text-ink-muted">{cliente.correo || 'Sin correo'}</p>
-        <p className="mt-1 text-xs font-medium text-teal-ink">Ver detalle</p>
+        <StatusBadge estado={cliente.estado} className="mt-1" />
       </div>
     </Link>
   );
@@ -96,6 +86,7 @@ export default function ClientsPage() {
   const [q, setQ] = useState('');
   const [tipo, setTipo] = useState<'todos' | TipoCliente>('todos');
   const [registrar, setRegistrar] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     let activo = true;
@@ -143,6 +134,7 @@ export default function ClientsPage() {
             cargando={cargando}
             textoBusqueda={(cliente) => `${cliente.nombre} ${cliente.numeroDocumento}`}
             ordenInicial={[{ id: 'nombre', desc: false }]}
+            alAbrir={(cliente) => navigate(`/clientes/${cliente.id}`)}
             tarjeta={(cliente) => <TarjetaCliente cliente={cliente} />}
             etiqueta="Listado de clientes"
             unidad="clientes"

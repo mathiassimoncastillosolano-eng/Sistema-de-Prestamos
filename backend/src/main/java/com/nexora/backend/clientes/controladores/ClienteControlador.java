@@ -9,6 +9,7 @@ import com.nexora.backend.clientes.dto.RegistroClienteDTO;
 import com.nexora.backend.clientes.entidades.Cliente;
 import com.nexora.backend.clientes.excepciones.ClienteException;
 import com.nexora.backend.clientes.servicios.ClienteServicio;
+import com.nexora.backend.prestamos.servicios.EstadoClienteServicio;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.ArrayList;
@@ -25,9 +26,11 @@ public class ClienteControlador {
 
     private static final String ATRIBUTO_PERFIL = "nexora.perfil";
     private final ClienteServicio clienteServicio;
+    private final EstadoClienteServicio estadoCliente;
 
-    public ClienteControlador(ClienteServicio clienteServicio) {
+    public ClienteControlador(ClienteServicio clienteServicio, EstadoClienteServicio estadoCliente) {
         this.clienteServicio = clienteServicio;
+        this.estadoCliente = estadoCliente;
     }
 
     @PostMapping
@@ -51,8 +54,10 @@ public class ClienteControlador {
         return clienteServicio.consultar(tipo, numero, perfil.getId());
     }
 
+    /** El estado de cada cliente se recalcula con sus cuotas antes de listar: refleja hasta los cambios hechos en la BD. */
     @GetMapping
     public List<ClienteListadoDTO> listar() {
+        estadoCliente.actualizarTodos();
         List<ClienteListadoDTO> respuesta = new ArrayList<>();
         for (Cliente cliente : clienteServicio.listar()) {
             respuesta.add(ClienteListadoDTO.desde(cliente));
@@ -62,6 +67,7 @@ public class ClienteControlador {
 
     @GetMapping("/{id}")
     public ResponseEntity<ClienteRespuestaDTO> consultarCliente(@PathVariable UUID id) {
+        estadoCliente.actualizar(id);
         Optional<ClienteRespuestaDTO> cliente = clienteServicio.consultar(id);
         if (cliente.isEmpty()) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(cliente.get());

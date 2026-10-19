@@ -4,6 +4,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import App from '@/app/App';
+import { rutaInicio } from '@/lib/permissions';
 import { ASESORA, GERENTE, AGENCIA_PRUEBA, crearServidor, type CuentaFalsa } from './helpers/fake-server';
 
 const menu = () => within(screen.getByRole('navigation', { name: 'Navegación principal' }));
@@ -29,7 +30,9 @@ describe('A · login correcto como asesor', () => {
     montar();
     await iniciarSesion(ASESORA);
 
-    await waitFor(() => expect(etiquetasMenu()).toEqual(['Dashboard', 'Clientes', 'Nueva solicitud', 'Préstamos']));
+    await waitFor(() => expect(etiquetasMenu()).toEqual(['Clientes', 'Nueva solicitud', 'Préstamos']));
+    // El asesor no tiene dashboard: entra directo a Clientes.
+    await waitFor(() => expect(window.location.hash).toBe('#/clientes'));
     expect(screen.getAllByText('Valeria Quintana').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Agencia Sur Prueba/ })).toBeInTheDocument();
     expect(screen.getAllByText('Asesor de préstamos').length).toBeGreaterThan(0);
@@ -39,9 +42,10 @@ describe('A · login correcto como asesor', () => {
 
     // El listado usa la API de clientes y la ficha consulta el mismo ID.
     window.location.hash = '#/clientes';
-    const enlace = await screen.findByRole('link', { name: /Ver detalle/ }, { timeout: 5000 });
-    expect(screen.getByText('cliente@example.com')).toBeInTheDocument();
-    await userEvent.setup().click(enlace);
+    // Ya no hay botón «Ver detalle»: un clic en cualquier parte de la fila abre la ficha.
+    const correo = await screen.findByText('cliente@example.com', undefined, { timeout: 5000 });
+    expect(screen.queryByRole('link', { name: /Ver detalle/ })).not.toBeInTheDocument();
+    await userEvent.setup().click(correo);
     expect(await screen.findByRole('heading', { name: 'Datos del cliente' })).toBeInTheDocument();
     expect(screen.getAllByText(/99999991/).length).toBeGreaterThan(0);
     expect(screen.getByText('cliente@example.com')).toBeInTheDocument();
@@ -138,8 +142,6 @@ describe('B · login correcto como gerencia', () => {
       expect(etiquetasMenu()).toEqual(['Dashboard']);
     }
     expect(await screen.findAllByText('Tu rol no tiene acceso a ese módulo.')).not.toHaveLength(0);
-    // Los avisos (recorren clientes y préstamos) no se ofrecen a gerencia
-    expect(screen.queryByRole('button', { name: /Notificaciones/ })).not.toBeInTheDocument();
   });
 
   it('el dashboard de gerencia muestra el resumen por agencia y los morosos', async () => {
@@ -154,14 +156,13 @@ describe('B · login correcto como gerencia', () => {
     expect(await screen.findByRole('option', { name: 'Agencia Norte Prueba' })).toBeInTheDocument();
   });
 
-  it('el asesor solo puede ver su cartera y su agencia, no toda la empresa', async () => {
-    montar();
-    const u = await iniciarSesion(ASESORA);
-    await u.click(await screen.findByRole('combobox', { name: 'Alcance de los indicadores' }, { timeout: 4000 }));
-    expect(await screen.findByRole('option', { name: 'Mi cartera' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Agencia Sur Prueba' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Toda la empresa' })).not.toBeInTheDocument();
-    expect(screen.queryByText('Resumen por agencia')).not.toBeInTheDocument();
+  it('el asesor ya no tiene dashboard: si entra a «/» va a Clientes', async () => {
+    window.location.hash = '#/';
+    const srv = crearServidor([ASESORA]); srv.instalar(); srv.abrirSesion(ASESORA);
+    render(<App />);
+    await waitFor(() => expect(window.location.hash).toBe('#/clientes'));
+    expect(screen.queryByRole('combobox', { name: 'Alcance de los indicadores' })).not.toBeInTheDocument();
+    expect(srv.llamadas.some((l) => l.ruta.startsWith('/api/dashboard'))).toBe(false);
   });
 
   it('entrar por la URL de un módulo prohibido nunca llega a montar ese módulo', async () => {
@@ -305,6 +306,7 @@ describe('F · cierre de sesión', () => {
 
 describe('G · tarjeta de ubicación de la agencia', () => {
   async function entrarComoAsesora(cuenta: CuentaFalsa = ASESORA) {
+    window.location.hash = `#${rutaInicio(cuenta.perfil.rol)}`; // se entra directo, sin redirección de por medio
     const srv = crearServidor([cuenta]); srv.instalar(); srv.abrirSesion(cuenta);
     render(<App />);
     return screen.findByRole('button', { name: /Ver ubicación/ });

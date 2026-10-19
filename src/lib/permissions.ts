@@ -1,8 +1,6 @@
 /* =========================================================
    PERMISOS — única fuente de verdad de la autorización por rol en la interfaz.
-   OJO: es control de NAVEGACIÓN y PRESENTACIÓN. Los módulos de negocio siguen siendo datos ficticios
-   en el navegador; no hay un servidor que proteja esos datos. Si algún día se conectan a endpoints
-   reales, el servidor debe autorizar cada petición por su cuenta.
+   OJO: es control de NAVEGACIÓN y PRESENTACIÓN. El servidor autoriza cada petición por su cuenta.
    ========================================================= */
 import type { Rol } from '@/types/auth';
 
@@ -10,7 +8,7 @@ export type Modulo = 'dashboard' | 'clientes' | 'solicitud' | 'prestamos';
 
 /** Qué roles pueden usar cada módulo. Un rol que no aparezca aquí no tiene acceso a nada. */
 const ACCESO: Record<Modulo, readonly Rol[]> = {
-  dashboard: ['asesor', 'gerencia'],
+  dashboard: ['gerencia'],
   clientes: ['asesor'],
   solicitud: ['asesor'],
   prestamos: ['asesor']
@@ -49,5 +47,7 @@ export function puedeAccederARuta(rol: unknown, pathname: string): boolean {
   return modulo === null ? esRolValido(rol) : puedeAccederAModulo(rol, modulo);
 }
 
-/** Ruta a la que se redirige cuando se intenta entrar a un módulo no permitido. */
-export const RUTA_INICIO = '/';
+/** Pantalla de entrada de cada rol: la gerencia ve el dashboard; el asesor empieza en Clientes. */
+export function rutaInicio(rol: unknown): string {
+  return puedeAccederAModulo(rol, 'dashboard') ? '/' : '/clientes';
+}

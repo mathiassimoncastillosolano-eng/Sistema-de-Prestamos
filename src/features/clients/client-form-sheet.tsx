@@ -14,15 +14,12 @@ import { Sheet } from '@/components/ui/sheet';
 import { toast } from '@/components/ui/toast';
 import { useIdentidad } from '@/hooks/use-auth';
 import { TIPOS_CLIENTE, clienteSchema, clienteVacio, esDocumentoValido, type ClienteForm } from '@/lib/validation';
-import { registrarCliente } from '@/services/actions';
 import { ClientesApiError, clientesApi, type ClienteRegistrado, type ConsultaDocumento } from '@/services/clientes-api';
-import type { Cliente, TipoCliente } from '@/types';
+import type { TipoCliente } from '@/types';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Si se indica, no se navega al expediente: se devuelve el cliente creado (p. ej. desde la solicitud). */
-  onCreated?: (c: Cliente) => void;
 }
 
 const Seccion = ({ titulo, children }: { titulo: string; children: React.ReactNode }) => {
@@ -46,7 +43,7 @@ const MENSAJE_OK: Record<TipoCliente, string> = {
   'RUC 20': 'Datos obtenidos de SUNAT.'
 };
 
-export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
+export function ClientFormSheet({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const [consulta, setConsulta] = useState<Estado>({ tipo: 'idle' });
   const yo = useIdentidad();
@@ -134,16 +131,6 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
     setConfirmar(v);
   };
 
-  /** La solicitud de préstamo aún usa el almacén local; solo allí necesita una copia temporal. */
-  const reflejarEnLocal = (c: ClienteRegistrado) =>
-    registrarCliente(yo, {
-      nombre: c.nombre, tipo: c.tipoDocumento, doc: c.numeroDocumento, telefono: c.telefono ?? '',
-      ...(c.tipoDocumento === 'RUC 10' ? { dniTitular: c.dniTitular ?? '' } : {}),
-      ...(c.tipoDocumento === 'RUC 20'
-        ? { domicilio: c.domicilio ?? '', representante: { nombre: c.representanteNombre ?? '', dni: c.representanteDni ?? '' } }
-        : {})
-    });
-
   const guardar = async (v: ClienteForm) => {
     setGuardando(true);
     let creado: ClienteRegistrado;
@@ -164,13 +151,7 @@ export function ClientFormSheet({ open, onOpenChange, onCreated }: Props) {
     setConfirmar(null);
     cerrar(false);
 
-    if (onCreated) {
-      const r = reflejarEnLocal(creado);
-      if (r.ok) onCreated(r.cliente);
-      else navigate(`/clientes/${creado.id}`);
-    } else {
-      navigate(`/clientes/${creado.id}`);
-    }
+    navigate(`/clientes/${creado.id}`);
   };
 
   const dniLen = tipo === 'DNI' ? 8 : 11;

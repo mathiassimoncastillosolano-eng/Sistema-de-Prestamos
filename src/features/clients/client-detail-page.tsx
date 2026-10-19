@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CalendarDays, Eye, FilePlus2, Hash, Landmark, Mail, MapPin, Pencil, Phone, SearchX, UserRound, UsersRound } from 'lucide-react';
+import { CalendarDays, Eye, FilePlus2, Hash, IdCard, Landmark, Mail, MapPin, Pencil, Phone, SearchX, UserRound, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -10,8 +10,6 @@ import { DataTable } from '@/components/data-display/data-table';
 import { LimitMeter } from '@/components/data-display/limit-meter';
 import { StatusBadge } from '@/components/data-display/status-badge';
 import { PageHeader } from '@/components/layout/page-header';
-import { Avatar } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -24,13 +22,13 @@ import { CFG } from '@/lib/config';
 import { fecha, toISO } from '@/lib/dates';
 import { r2 } from '@/lib/finance';
 import { money } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { contactoSchema, type ContactoForm } from '@/lib/validation';
-import { clientesApi, consultarCliente, type ClienteDetalle } from '@/services/clientes-api';
+import { clientesApi, consultarCliente, puedeSolicitarPrestamo, type ClienteDetalle } from '@/services/clientes-api';
 import { prestamosApi, type PrestamoResumenApi } from '@/services/prestamos-api';
 import { useCapacidad } from '@/hooks/use-capacidad';
-import type { EstadoPrestamo, TipoCliente } from '@/types';
+import type { EstadoPrestamo } from '@/types';
 
-const TONO_TIPO: Record<TipoCliente, 'teal' | 'navy' | 'neutral'> = { DNI: 'neutral', 'RUC 10': 'teal', 'RUC 20': 'navy' };
 const ORDEN_ESTADO: readonly EstadoPrestamo[] = ['Vigente', 'En mora', 'Cancelado'];
 const codigoPrestamo = (p: PrestamoResumenApi) => `PR-${p.numero}`;
 const noAplica = <span className="text-ink-subtle" aria-label="No aplica">—</span>;
@@ -79,23 +77,27 @@ function TarjetaPrestamo({ p }: { p: PrestamoResumenApi }) {
   );
 }
 
-/** Dato de la ficha: etiqueta pequeña + valor. Si no hay valor se muestra «No registrado» de forma discreta. */
+/** Dato de la ficha: icono a la izquierda, etiqueta pequeña y valor. Sin valor se muestra «No registrado» en gris. */
 function Dato({ icon: Icon, label, value, className }: { icon: LucideIcon; label: string; value?: ReactNode; className?: string }) {
   const vacio = value === undefined || value === null || value === '';
   return (
-    <div className={className}>
-      <dt className="flex items-center gap-1.5 text-xs text-ink-muted"><Icon className="size-3.5" aria-hidden />{label}</dt>
-      <dd className={vacio ? 'mt-0.5 text-sm text-ink-muted' : 'num mt-0.5 break-words text-sm font-medium text-ink'}>{vacio ? 'No registrado' : value}</dd>
+    <div className={cn('flex min-w-0 items-start gap-3', className)}>
+      <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface-2 text-ink-muted"><Icon className="size-4" /></span>
+      <div className="min-w-0">
+        <dt className="text-xs text-ink-muted">{label}</dt>
+        <dd className={vacio ? 'mt-0.5 text-sm text-ink-subtle' : 'num mt-0.5 break-words text-[0.9375rem] font-medium text-ink'}>{vacio ? 'No registrado' : value}</dd>
+      </div>
     </div>
   );
 }
 
+/** Indicador financiero: etiqueta e importe arriba; barra y explicación abajo. */
 function Indicador({ label, children, pie }: { label: string; children: ReactNode; pie?: ReactNode }) {
   return (
     <div className="flex flex-col bg-surface p-5">
       <p className="text-[0.8125rem] text-ink-muted">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-ink">{children}</p>
-      <div className="mt-auto pt-2 text-xs text-ink-muted">{pie}</div>
+      <p className="num mt-1 text-2xl font-semibold tracking-tight text-ink">{children}</p>
+      <div className="mt-auto pt-4 text-xs leading-relaxed text-ink-muted">{pie}</div>
     </div>
   );
 }
@@ -236,53 +238,47 @@ export default function ClientDetailPage() {
   const esEmpresa = cliente.tipoDocumento === 'RUC 20';
   const esNegocio = cliente.tipoDocumento === 'RUC 10';
   const { deuda, pendiente, totalContractual, usoCubierto, disponible, limite, desembolsado, ultimoDesembolso, conSaldo } = resumen;
-  const nuevaSolicitud = () => navigate(`/solicitud/${cliente.id}`);
-  const subtitulo = [
-    String(cliente.numero),
-    `${cliente.tipoDocumento} ${cliente.numeroDocumento}`,
-    cliente.nombreAgencia,
-    cliente.nombreAsesor && `Asesor ${cliente.nombreAsesor}`
-  ].filter(Boolean).join(' · ');
+  // MOROSO y EXTRAJUDICIAL no pueden pedir préstamos nuevos; el servidor también lo rechaza al registrar.
+  const puedeSolicitar = puedeSolicitarPrestamo(cliente.estado);
+  const nuevaSolicitud = () => { if (puedeSolicitar) navigate(`/solicitud/${cliente.id}`); };
 
   return (
     <>
       <PageHeader back={{ to: '/clientes', label: 'Clientes' }}
-        title={<span className="flex flex-wrap items-center gap-x-3 gap-y-1">{cliente.nombre}<Badge tone={TONO_TIPO[cliente.tipoDocumento]}>{cliente.tipoDocumento}</Badge></span>}
-        description={<span className="num">{subtitulo}</span>}
-        actions={<Button variant="primary" onClick={nuevaSolicitud}><FilePlus2 className="size-4" />Nueva solicitud</Button>} />
+        title={<span className="flex flex-wrap items-center gap-x-3 gap-y-1">{cliente.nombre}<StatusBadge estado={cliente.estado} /></span>}
+        actions={<Button variant="primary" onClick={nuevaSolicitud} disabled={!puedeSolicitar}><FilePlus2 className="size-4" />Nueva solicitud</Button>} />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-        {/* Ficha de identificación */}
-        <Card className="lg:col-span-1" aria-labelledby="datos-cliente">
+      {!puedeSolicitar && (
+        <p role="alert" className="mb-5 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
+          <b className="font-semibold">Cliente {cliente.estado}.</b> Tiene cuotas vencidas sin pagar, por lo que no puede solicitar nuevos préstamos.
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[24rem_minmax(0,1fr)]">
+        {/* Ficha de identificación: el nombre ya es el título de la página, aquí solo van los datos. */}
+        <Card aria-labelledby="datos-cliente">
           <h2 id="datos-cliente" className="sr-only">Datos del cliente</h2>
-          <div className="flex items-center gap-4 border-b border-line p-5">
-            <Avatar nombre={cliente.nombre} tipo={cliente.tipoDocumento} size="xl" />
-            <div className="min-w-0">
-              <p className="text-xs text-ink-muted">{esEmpresa ? 'Razón social' : esNegocio ? 'Titular' : 'Nombre completo'}</p>
-              <p className="break-words text-base font-semibold leading-snug text-ink">{cliente.nombre}</p>
-            </div>
-          </div>
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-4 p-5">
-            <Dato icon={Hash} label="Documento" value={`${cliente.tipoDocumento} ${cliente.numeroDocumento}`} />
+          <dl className="grid grid-cols-1 gap-x-5 gap-y-5 p-5 sm:grid-cols-2">
+            <Dato icon={IdCard} label="Documento" value={`${cliente.tipoDocumento} ${cliente.numeroDocumento}`} />
             <Dato icon={Hash} label="Código de cliente" value={String(cliente.numero)} />
             <Dato icon={Phone} label="Celular" value={cliente.telefono} />
             <Dato icon={CalendarDays} label="Fecha de registro" value={cliente.creadoEn ? fecha(toISO(new Date(cliente.creadoEn))) : null} />
             <Dato icon={Landmark} label="Agencia" value={cliente.nombreAgencia} />
             <Dato icon={UserRound} label="Asesor asignado" value={cliente.nombreAsesor} />
-            <Dato icon={Mail} label="Correo electrónico" value={cliente.correo} className="col-span-2" />
-            {esEmpresa && <Dato icon={MapPin} label="Domicilio fiscal" value={cliente.domicilio} className="col-span-2" />}
-            {esEmpresa && <Dato icon={UsersRound} label="Representante legal" value={cliente.representanteNombre && `${cliente.representanteNombre}${cliente.representanteDni ? ` · DNI ${cliente.representanteDni}` : ''}`} className="col-span-2" />}
+            <Dato icon={Mail} label="Correo electrónico" value={cliente.correo} className="sm:col-span-2" />
+            {esEmpresa && <Dato icon={MapPin} label="Domicilio fiscal" value={cliente.domicilio} className="sm:col-span-2" />}
+            {esEmpresa && <Dato icon={UsersRound} label="Representante legal" value={cliente.representanteNombre && `${cliente.representanteNombre}${cliente.representanteDni ? ` · DNI ${cliente.representanteDni}` : ''}`} className="sm:col-span-2" />}
             {esNegocio && <Dato icon={Hash} label="DNI del titular" value={cliente.dniTitular} />}
-            {(esEmpresa || esNegocio) && <Dato icon={Hash} label="Estado SUNAT" value={[cliente.estadoSunat, cliente.condicionSunat].filter(Boolean).join(' · ')} className={esNegocio ? undefined : 'col-span-2'} />}
+            {(esEmpresa || esNegocio) && <Dato icon={Hash} label="Estado SUNAT" value={[cliente.estadoSunat, cliente.condicionSunat].filter(Boolean).join(' · ')} className={esNegocio ? undefined : 'sm:col-span-2'} />}
           </dl>
           <div className="border-t border-line px-5 py-4">
-            <Button size="sm" onClick={() => setEditando(true)}><Pencil className="size-4" />Editar celular y correo</Button>
+            <Button size="sm" className="w-full sm:w-auto" onClick={() => setEditando(true)}><Pencil className="size-4" />Editar celular y correo</Button>
           </div>
         </Card>
 
         {/* Resumen financiero y actividad crediticia */}
-        <div className="flex flex-col gap-5 lg:col-span-2">
-          <div className="grid flex-1 grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-5">
+          <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3">
             <Indicador label="Capital pendiente" pie="Base del límite de endeudamiento">
               <AnimatedNumber value={deuda} format={money} duration={0.5} />
             </Indicador>
@@ -324,11 +320,11 @@ export default function ClientDetailPage() {
               cargando={cargandoPrestamos}
               alAbrir={(p) => navigate(`/prestamos/${p.id}`)} tarjeta={(p) => <TarjetaPrestamo p={p} />}
               etiqueta="Préstamos del cliente" unidad="préstamos"
-              vacio={<EmptyState icon={Landmark} title="Sin préstamos" description="Este cliente aún no tiene préstamos asociados." action={<Button variant="primary" onClick={nuevaSolicitud}><FilePlus2 className="size-4" />Crear solicitud</Button>} />} />
+              vacio={<EmptyState icon={Landmark} title="Sin préstamos" description="Este cliente aún no tiene préstamos asociados." action={<Button variant="primary" onClick={nuevaSolicitud} disabled={!puedeSolicitar}><FilePlus2 className="size-4" />Crear solicitud</Button>} />} />
           )}
         </div>
       </Card>
-            <EditarContacto cliente={cliente} open={editando} onOpenChange={setEditando} onGuardado={setCliente} />
+      <EditarContacto cliente={cliente} open={editando} onOpenChange={setEditando} onGuardado={setCliente} />
     </>
   );
 }

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CFG } from '@/lib/config';
 import { addMonths, hoySistema } from '@/lib/dates';
 import { capitalPendienteCliente, cuotaParcial, estadoCuota, generarCronograma, r2, resumen, simular, tasaMensual, validarSolicitud } from '@/lib/finance';
-import { construirSemilla } from '@/mocks/seed';
+import { construirSemilla } from './helpers/semilla';
 import type { Cuota, Prestamo } from '@/types';
 
 const cuota = (over: Partial<Cuota>): Cuota => ({ n: 1, fecha: '2026-11-13', capital: 80, interes: 20, cuota: 100, cubierto: 0, saldo: 900, ...over });

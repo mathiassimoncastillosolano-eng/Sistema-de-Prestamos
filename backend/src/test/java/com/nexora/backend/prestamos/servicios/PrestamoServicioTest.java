@@ -13,6 +13,7 @@ import com.nexora.backend.autenticacion.entidades.Agencia;
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.cuotas.repositorios.CuotaRepositorio;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
+import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.Evaluacion;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
@@ -41,6 +42,7 @@ class PrestamoServicioTest {
     private final CuotaRepositorio cuotas = mock(CuotaRepositorio.class);
     private final ClienteResumenRepositorio clientes = mock(ClienteResumenRepositorio.class);
     private final PrestamoConsultaServicio consultas = mock(PrestamoConsultaServicio.class);
+    private final EstadoClienteServicio estados = mock(EstadoClienteServicio.class);
     // 22:00 del 17-oct en Lima = 03:00 UTC del 18-oct: prueba que se usa la fecha de Perú, no la de UTC.
     private final Clock reloj = Clock.fixed(Instant.parse("2026-10-18T03:00:00Z"), ZoneId.of("America/Lima"));
 
@@ -50,7 +52,7 @@ class PrestamoServicioTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new PrestamoServicio(prestamos, cuotas, clientes, consultas, reloj);
+        servicio = new PrestamoServicio(prestamos, cuotas, clientes, consultas, estados, reloj);
 
         Agencia agencia = mock(Agencia.class);
         when(agencia.getId()).thenReturn(UUID.randomUUID());
@@ -65,6 +67,7 @@ class PrestamoServicioTest {
 
         when(prestamos.save(any(Prestamo.class))).thenAnswer(i -> i.getArgument(0));
         when(prestamos.obtenerNumero(any())).thenReturn(1001L);
+        when(estados.actualizar(clienteId)).thenReturn(EstadoCliente.ACTIVO);
         acumulado("0");
     }
 
@@ -200,6 +203,30 @@ class PrestamoServicioTest {
         acumulado("9100"); // disponible 900 < 1,000
         PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1000", 12, null));
         assertTrue(ex.getMessage().contains("no tiene capacidad suficiente"));
+    }
+
+    @Test
+    void cliente_moroso_no_puede_registrar_un_prestamo() {
+        when(estados.actualizar(clienteId)).thenReturn(EstadoCliente.MOROSO);
+        PrestamoException ex = rechaza(Codigo.CLIENTE_NO_APTO, () -> registrar("1000", 12, null));
+        assertEquals(EstadoCliente.MOROSO, ex.getDetalle().get("estado"));
+        verify(consultas, never()).capacidad(any());
+    }
+
+    @Test
+    void cliente_extrajudicial_no_puede_registrar_un_prestamo() {
+        when(estados.actualizar(clienteId)).thenReturn(EstadoCliente.EXTRAJUDICIAL);
+        PrestamoException ex = rechaza(Codigo.CLIENTE_NO_APTO, () -> registrar("1000", 12, null));
+        assertEquals(EstadoCliente.EXTRAJUDICIAL, ex.getDetalle().get("estado"));
+    }
+
+    @Test
+    void el_estado_se_recalcula_despues_de_bloquear_al_cliente_y_antes_de_guardar() {
+        registrar("1000", 12, null);
+        InOrder orden = inOrder(clientes, estados, prestamos);
+        orden.verify(clientes).buscarBloqueando(clienteId);
+        orden.verify(estados).actualizar(clienteId);
+        orden.verify(prestamos).save(any(Prestamo.class));
     }
 
     @Test

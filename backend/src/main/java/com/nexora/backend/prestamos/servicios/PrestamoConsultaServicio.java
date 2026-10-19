@@ -2,6 +2,7 @@ package com.nexora.backend.prestamos.servicios;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
+import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.CuotaEvaluada;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.CuotaGuardada;
@@ -117,6 +118,32 @@ public class PrestamoConsultaServicio {
         List<PrestamoEvaluado> prestamos = evaluarPrestamosDe(clienteId);
         prestamos.forEach(PrestamoConsultaServicio::avisarSiHayDatosRaros);
         return CapacidadEndeudamiento.de(prestamos.stream().map(PrestamoConsultaServicio::paraElLimite).toList());
+    }
+
+    /** Estado del cliente (ACTIVO, MOROSO o EXTRAJUDICIAL) con sus préstamos de TODAS las agencias. No escribe nada. */
+    @Transactional(readOnly = true)
+    public String estadoCliente(UUID clienteId) {
+        LocalDate hoy = LocalDate.now(reloj);
+        return EstadoCliente.de(evaluarPrestamosDe(clienteId).stream().map(PrestamoEvaluado::evaluacion).toList(), hoy);
+    }
+
+    /**
+     * Estado de cada cliente que tiene préstamos, en dos consultas para toda la cartera. Un cliente que no aparece
+     * no tiene préstamos y está ACTIVO. No escribe nada.
+     */
+    @Transactional(readOnly = true)
+    public Map<UUID, String> estadosDeClientes() {
+        Filtro filtro = Filtro.todos();
+        LocalDate hoy = LocalDate.now(reloj);
+        Map<UUID, List<CuotaGuardada>> cuotas = cuotasPorPrestamo(repositorio.cuotas(filtro));
+        Map<UUID, List<Evaluacion>> porCliente = new HashMap<>();
+        for (CabeceraPrestamo c : repositorio.cabeceras(filtro)) {
+            porCliente.computeIfAbsent(c.clienteId(), k -> new ArrayList<>())
+                    .add(EvaluadorCartera.evaluar(c.estado(), cuotas.getOrDefault(c.id(), List.of()), hoy));
+        }
+        Map<UUID, String> estados = new HashMap<>();
+        porCliente.forEach((clienteId, prestamos) -> estados.put(clienteId, EstadoCliente.de(prestamos, hoy)));
+        return estados;
     }
 
     /**
