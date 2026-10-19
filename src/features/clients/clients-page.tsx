@@ -3,6 +3,7 @@ import { Plus, Search, SearchX, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DataTable } from '@/components/data-display/data-table';
+import { StatusBadge } from '@/components/data-display/status-badge';
 import { PageHeader } from '@/components/layout/page-header';
 import { Avatar } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -61,6 +62,11 @@ const columnas: ColumnDef<ClienteListado>[] = [
       : '—'
   },
   {
+    accessorKey: 'estado',
+    header: 'Estado',
+    cell: ({ row }) => <StatusBadge estado={row.original.estado} />
+  },
+  {
     id: 'detalle',
     header: 'Detalle',
     enableSorting: false,
@@ -82,6 +88,7 @@ function TarjetaCliente({ cliente }: { cliente: ClienteListado }) {
         <p className="num text-xs text-ink-muted">{cliente.tipoDocumento} · {cliente.numeroDocumento}</p>
         <p className="num text-xs text-ink-muted">{cliente.telefono || 'Sin teléfono'}</p>
         <p className="truncate text-xs text-ink-muted">{cliente.correo || 'Sin correo'}</p>
+        <StatusBadge estado={cliente.estado} className="mt-1" />
         <p className="mt-1 text-xs font-medium text-teal-ink">Ver detalle</p>
       </div>
     </Link>

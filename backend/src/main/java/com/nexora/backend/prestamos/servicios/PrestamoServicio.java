@@ -6,6 +6,7 @@ import com.nexora.backend.cuotas.repositorios.CuotaRepositorio;
 import com.nexora.backend.prestamos.dominio.CalculadoraCronograma;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.Cronograma;
+import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.ReglasPrestamo;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
@@ -42,14 +43,17 @@ public class PrestamoServicio {
     private final CuotaRepositorio cuotas;
     private final ClienteResumenRepositorio clientes;
     private final PrestamoConsultaServicio consultas;
+    private final EstadoClienteServicio estados;
     private final Clock reloj;
 
     public PrestamoServicio(PrestamoRepositorio prestamos, CuotaRepositorio cuotas,
-                            ClienteResumenRepositorio clientes, PrestamoConsultaServicio consultas, Clock reloj) {
+                            ClienteResumenRepositorio clientes, PrestamoConsultaServicio consultas,
+                            EstadoClienteServicio estados, Clock reloj) {
         this.prestamos = prestamos;
         this.cuotas = cuotas;
         this.clientes = clientes;
         this.consultas = consultas;
+        this.estados = estados;
         this.reloj = reloj;
     }
 
@@ -187,12 +191,19 @@ public class PrestamoServicio {
     }
 
     /**
-     * PENDIENTE de definir con el equipo (PQ-09): hoy ya no existe estado_validacion en clientes.
-     * Por ahora basta con que el cliente exista. Si se decide exigir estado/condición SUNAT
-     * favorable para RUC, este es el único lugar a cambiar.
+     * Solo un cliente ACTIVO recibe préstamos nuevos: MOROSO y EXTRAJUDICIAL se rechazan aunque la petición llegue
+     * directo a la API. El estado se recalcula aquí con las cuotas guardadas (nunca se confía en el valor guardado ni en
+     * el navegador) y queda guardado. Si es ACTIVO sigue siéndolo tras el registro: las cuotas nuevas vencen a futuro.
+     * La regla SUNAT para RUC (PQ-09) sigue pendiente de definir con el equipo.
      */
-    private static void validarClienteApto(ClienteResumen cliente) {
-        // sin restricciones adicionales por ahora
+    private void validarClienteApto(ClienteResumen cliente) {
+        String estado = estados.actualizar(cliente.getId());
+        if (!EstadoCliente.permiteNuevoPrestamo(estado)) {
+            throw new PrestamoException(Codigo.CLIENTE_NO_APTO,
+                    "El cliente está en estado " + estado + ": tiene cuotas vencidas sin pagar y no puede solicitar "
+                            + "nuevos préstamos.",
+                    Map.of("estado", estado));
+        }
     }
 
     /**

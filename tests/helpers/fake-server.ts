@@ -30,7 +30,7 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     nombre: 'Cliente de prueba', telefono: '999999999', correo: 'cliente@example.com',
     dniTitular: null, domicilio: null, estadoSunat: null, condicionSunat: null,
     representanteNombre: null, representanteDni: null,
-    agenciaId: 'a1', creadoEn: '2026-10-17T10:00:00-05:00'
+    agenciaId: 'a1', creadoEn: '2026-10-17T10:00:00-05:00', estado: 'ACTIVO'
   };
   const clientes: Array<Record<string, unknown>> = [cliente];
   /** Capacidad por cliente (GET /api/prestamos/capacidad). Sin entrada: cliente sin deuda. */
@@ -113,6 +113,11 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
       if (ruta === '/api/prestamos/simulacion' && metodo === 'POST') return json(200, armarSimulacion(cuerpo.capital, cuerpo.plazoMeses));
       if (ruta === '/api/prestamos' && metodo === 'GET') return json(200, LISTADO);
       if (ruta === '/api/prestamos' && metodo === 'POST') {
+        // Como el backend real: un cliente MOROSO o EXTRAJUDICIAL no recibe préstamos nuevos.
+        const solicitante = clientes.find((c) => c.id === cuerpo.clienteId);
+        if (solicitante && solicitante.estado !== 'ACTIVO') {
+          return json(422, { codigo: 'CLIENTE_NO_APTO', mensaje: `El cliente está en estado ${String(solicitante.estado)}.`, detalle: { estado: solicitante.estado } });
+        }
         if (desactualizado || cuerpo.totalContractualEsperado !== armarSimulacion(cuerpo.capital, cuerpo.plazoMeses).totalContractual) {
           return json(409, { codigo: 'CONDICIONES_DESACTUALIZADAS', mensaje: 'Las condiciones cambiaron desde la revisión.' });
         }

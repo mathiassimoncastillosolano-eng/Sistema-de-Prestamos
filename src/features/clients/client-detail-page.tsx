@@ -25,7 +25,7 @@ import { fecha, toISO } from '@/lib/dates';
 import { r2 } from '@/lib/finance';
 import { money } from '@/lib/format';
 import { contactoSchema, type ContactoForm } from '@/lib/validation';
-import { clientesApi, consultarCliente, type ClienteDetalle } from '@/services/clientes-api';
+import { clientesApi, consultarCliente, puedeSolicitarPrestamo, type ClienteDetalle } from '@/services/clientes-api';
 import { prestamosApi, type PrestamoResumenApi } from '@/services/prestamos-api';
 import { useCapacidad } from '@/hooks/use-capacidad';
 import type { EstadoPrestamo, TipoCliente } from '@/types';
@@ -236,7 +236,9 @@ export default function ClientDetailPage() {
   const esEmpresa = cliente.tipoDocumento === 'RUC 20';
   const esNegocio = cliente.tipoDocumento === 'RUC 10';
   const { deuda, pendiente, totalContractual, usoCubierto, disponible, limite, desembolsado, ultimoDesembolso, conSaldo } = resumen;
-  const nuevaSolicitud = () => navigate(`/solicitud/${cliente.id}`);
+  // MOROSO y EXTRAJUDICIAL no pueden pedir préstamos nuevos; el servidor también lo rechaza al registrar.
+  const puedeSolicitar = puedeSolicitarPrestamo(cliente.estado);
+  const nuevaSolicitud = () => { if (puedeSolicitar) navigate(`/solicitud/${cliente.id}`); };
   const subtitulo = [
     String(cliente.numero),
     `${cliente.tipoDocumento} ${cliente.numeroDocumento}`,
@@ -247,9 +249,15 @@ export default function ClientDetailPage() {
   return (
     <>
       <PageHeader back={{ to: '/clientes', label: 'Clientes' }}
-        title={<span className="flex flex-wrap items-center gap-x-3 gap-y-1">{cliente.nombre}<Badge tone={TONO_TIPO[cliente.tipoDocumento]}>{cliente.tipoDocumento}</Badge></span>}
+        title={<span className="flex flex-wrap items-center gap-x-3 gap-y-1">{cliente.nombre}<Badge tone={TONO_TIPO[cliente.tipoDocumento]}>{cliente.tipoDocumento}</Badge><StatusBadge estado={cliente.estado} /></span>}
         description={<span className="num">{subtitulo}</span>}
-        actions={<Button variant="primary" onClick={nuevaSolicitud}><FilePlus2 className="size-4" />Nueva solicitud</Button>} />
+        actions={<Button variant="primary" onClick={nuevaSolicitud} disabled={!puedeSolicitar}><FilePlus2 className="size-4" />Nueva solicitud</Button>} />
+
+      {!puedeSolicitar && (
+        <p role="alert" className="mb-5 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
+          <b className="font-semibold">Cliente {cliente.estado}.</b> Tiene cuotas vencidas sin pagar, por lo que no puede solicitar nuevos préstamos.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         {/* Ficha de identificación */}
@@ -324,7 +332,7 @@ export default function ClientDetailPage() {
               cargando={cargandoPrestamos}
               alAbrir={(p) => navigate(`/prestamos/${p.id}`)} tarjeta={(p) => <TarjetaPrestamo p={p} />}
               etiqueta="Préstamos del cliente" unidad="préstamos"
-              vacio={<EmptyState icon={Landmark} title="Sin préstamos" description="Este cliente aún no tiene préstamos asociados." action={<Button variant="primary" onClick={nuevaSolicitud}><FilePlus2 className="size-4" />Crear solicitud</Button>} />} />
+              vacio={<EmptyState icon={Landmark} title="Sin préstamos" description="Este cliente aún no tiene préstamos asociados." action={<Button variant="primary" onClick={nuevaSolicitud} disabled={!puedeSolicitar}><FilePlus2 className="size-4" />Crear solicitud</Button>} />} />
           )}
         </div>
       </Card>

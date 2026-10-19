@@ -22,7 +22,8 @@ public record ClienteRespuestaDTO(
         UUID agenciaId,
         String nombreAgencia,
         String nombreAsesor,
-        OffsetDateTime creadoEn
+        OffsetDateTime creadoEn,
+        String estado
 ) {
     public static ClienteRespuestaDTO desde(Cliente cliente) {
         return desde(cliente, null);
@@ -50,7 +51,8 @@ public record ClienteRespuestaDTO(
                 cliente.getAgenciaId(),
                 nombreAgencia,
                 nombreAsesor,
-                cliente.getCreadoEn()
+                cliente.getCreadoEn(),
+                cliente.getEstado()
         );
     }
 }

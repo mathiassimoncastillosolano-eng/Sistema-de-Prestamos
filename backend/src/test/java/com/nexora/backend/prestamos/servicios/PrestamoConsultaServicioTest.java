@@ -260,4 +260,56 @@ class PrestamoConsultaServicioTest {
 
         assertEquals(new BigDecimal("6000.00"), servicio.capacidad(UUID.randomUUID()).disponible());
     }
+
+    // ------------------------------------------------------------ estado del cliente
+
+    private CabeceraPrestamo deCliente(UUID id, long numero, UUID clienteId, LocalDate desembolso, String estado) {
+        return new CabeceraPrestamo(id, numero, clienteId, "Cliente", "DNI", "12345678", 27L, null, "Lima Centro",
+                "Camila Ortiz", asesorId, new BigDecimal("1000.00"), 6, ReglasPrestamo.TEA, desembolso, estado, null,
+                "2026-01-01 10:00");
+    }
+
+    @Test
+    void estadoClienteConsideraTodosSusPrestamos() {
+        UUID clienteId = UUID.randomUUID();
+        UUID alDia = UUID.randomUUID();
+        UUID atrasado = UUID.randomUUID();
+        LocalDate reciente = LocalDate.of(2026, 10, 1);   // primera cuota: 1-nov (futura)
+        LocalDate antiguo = LocalDate.of(2026, 7, 13);    // cuotas de ago, sep y oct vencidas
+        when(repo.cabeceras(any())).thenReturn(List.of(
+                deCliente(alDia, 1001, clienteId, reciente, "Vigente"),
+                deCliente(atrasado, 1002, clienteId, antiguo, "Vigente")));
+        List<CuotaDePrestamo> todas = new ArrayList<>(cuotas(alDia, new BigDecimal("1000.00"), reciente, 0));
+        todas.addAll(cuotas(atrasado, new BigDecimal("1000.00"), antiguo, 0));
+        when(repo.cuotas(any())).thenReturn(todas);
+
+        assertEquals("MOROSO", servicio.estadoCliente(clienteId));
+    }
+
+    @Test
+    void estadosDeClientesAgrupaPorCliente() {
+        UUID moroso = UUID.randomUUID();
+        UUID extrajudicial = UUID.randomUUID();
+        UUID activo = UUID.randomUUID();
+        UUID p1 = UUID.randomUUID();
+        UUID p2 = UUID.randomUUID();
+        UUID p3 = UUID.randomUUID();
+        when(repo.cabeceras(any())).thenReturn(List.of(
+                deCliente(p1, 1001, moroso, LocalDate.of(2026, 7, 13), "Vigente"),
+                deCliente(p2, 1002, extrajudicial, LocalDate.of(2025, 9, 1), "En mora"), // 1.ª cuota: 1-oct-2025
+                deCliente(p3, 1003, activo, LocalDate.of(2026, 10, 1), "Vigente")));
+        List<CuotaDePrestamo> todas = new ArrayList<>(cuotas(p1, new BigDecimal("1000.00"), LocalDate.of(2026, 7, 13), 0));
+        todas.addAll(cuotas(p2, new BigDecimal("1000.00"), LocalDate.of(2025, 9, 1), 0));
+        todas.addAll(cuotas(p3, new BigDecimal("1000.00"), LocalDate.of(2026, 10, 1), 0));
+        when(repo.cuotas(any())).thenReturn(todas);
+
+        var estados = servicio.estadosDeClientes();
+
+        assertEquals("MOROSO", estados.get(moroso));
+        assertEquals("EXTRAJUDICIAL", estados.get(extrajudicial));
+        assertEquals("ACTIVO", estados.get(activo));
+        ArgumentCaptor<Filtro> filtro = ArgumentCaptor.forClass(Filtro.class);
+        verify(repo).cabeceras(filtro.capture());
+        assertEquals("true", filtro.getValue().condicion());
+    }
 }

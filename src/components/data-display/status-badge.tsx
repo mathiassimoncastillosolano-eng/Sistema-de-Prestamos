@@ -1,10 +1,11 @@
 import { Badge } from '@/components/ui/badge';
 import type { EstadoCliente } from '@/lib/selectors';
+import type { EstadoClienteApi } from '@/services/clientes-api';
 import type { EstadoCuotaApi } from '@/services/prestamos-api';
 import type { EstadoCuota, EstadoPrestamo } from '@/types';
 
-type Estado = EstadoPrestamo | EstadoCliente | EstadoCuota | EstadoCuotaApi;
-type Tono = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'teal';
+type Estado = EstadoPrestamo | EstadoCliente | EstadoCuota | EstadoCuotaApi | EstadoClienteApi;
+type Tono = 'success' | 'warning' | 'danger' | 'info' | 'neutral' | 'teal' | 'black';
 
 /**
  * Significado de color único para toda la app: verde = al día / vigente / pagada, ámbar = atención, rojo = mora o vencida,
@@ -18,7 +19,9 @@ const TONOS: Record<Estado, Tono> = {
   // Cuotas
   Pendiente: 'neutral', 'Próxima a vencer': 'warning', Vencida: 'danger', Pagada: 'success',
   // Cuotas según la base de datos (únicos estados permitidos en el módulo de cuotas)
-  PENDIENTE: 'neutral', PAGADA: 'success', VENCIDA: 'danger'
+  PENDIENTE: 'neutral', PAGADA: 'success', VENCIDA: 'danger',
+  // Estado del cliente según la base de datos (clientes.estado)
+  ACTIVO: 'success', MOROSO: 'danger', EXTRAJUDICIAL: 'black'
 };
 
 export const tonoDeEstado = (e: Estado): Tono => TONOS[e];
