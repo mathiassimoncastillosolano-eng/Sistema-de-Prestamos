@@ -75,7 +75,7 @@ export function ScheduleReviewModal({ open, onOpenChange, sim, cliente, extras }
           <AvisoSimulacion />
           <ResumenFinanciero sim={sim} completo />
           <p className="num text-xs text-ink-muted">
-            Desembolso {fecha(sim.fechaDesembolso)} · {sim.plazoMeses} cuotas mensuales · TEA {(sim.tea * 100).toFixed(0)} %
+            Desembolso {fecha(sim.fechaDesembolso)} · {sim.plazoMeses} cuotas cada 30 días · TEA {(sim.tea * 100).toFixed(0)} %
           </p>
           <div className="overflow-hidden rounded-control border border-line">
             <ScheduleTable

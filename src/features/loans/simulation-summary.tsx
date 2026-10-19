@@ -36,7 +36,7 @@ export function SimulationSummary({ sim, estado, tea, errorMensaje, ayuda, onVer
           <p className="mt-4 text-xs text-side-muted">Cuota mensual estimada</p>
           <p className={cn('num mt-1 text-[2rem] font-semibold leading-9', mostrar ? 'text-white' : 'text-side-muted')}>{valor(sim?.cuotaMensual)}</p>
           <p className="mt-1 text-xs text-side-muted">
-            {estado === 'cargando' ? 'Calculando…' : mostrar ? `${sim.plazoMeses} cuotas mensuales iguales` : 'Sin estimación'}
+            {estado === 'cargando' ? 'Calculando…' : mostrar ? `${sim.plazoMeses} cuotas iguales cada 30 días` : 'Sin estimación'}
           </p>
         </div>
       </div>

@@ -331,7 +331,7 @@ export default function RequestPage() {
                           </Field>
                         )} />
                         <Controller name="plazo" control={control} render={({ field }) => (
-                          <Field label={`Plazo (${cond.plazoMinimoMeses}–${cond.plazoMaximoMeses} meses)`} error={errors.plazo?.message} hint="Cuotas mensuales iguales">
+                          <Field label={`Plazo (${cond.plazoMinimoMeses}–${cond.plazoMaximoMeses} meses)`} error={errors.plazo?.message} hint="Cuotas iguales cada 30 días">
                             <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_PLAZO_ENTRADA ? MAX_PLAZO_ENTRADA : v)} onBlur={field.onBlur} maxIntegerDigits={3} suffix="meses" placeholder="0" />
                           </Field>
                         )} />
@@ -402,7 +402,7 @@ export default function RequestPage() {
                           </dl>
                           <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-line pt-4 sm:grid-cols-2 lg:grid-cols-3">
                             <Dato k="Moneda" v={cond?.moneda === 'PEN' ? 'Soles (PEN)' : (cond?.moneda ?? '—')} />
-                            <Dato k="Frecuencia de cuotas" v="Mensual" />
+                            <Dato k="Frecuencia de cuotas" v="Cada 30 días" />
                             <Dato k="Asesor responsable" v={usuario.nombre} />
                             <Dato k="Fecha de desembolso" v={desembolso ? fecha(desembolso) : '—'} />
                             <Dato k="Primera fecha de vencimiento" v={primerVencimiento ? fecha(primerVencimiento) : '—'} />

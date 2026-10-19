@@ -139,7 +139,7 @@ export async function crearDocumentoPdf(d: DatosPdf, generadoEn: Date = new Date
     ['Moneda', moneda],
     ['Tasa efectiva anual (TEA)', porcentaje(d.tea)],
     ['Plazo', `${d.plazoMeses} cuotas`],
-    ['Frecuencia de pago', 'Mensual'],
+    ['Frecuencia de pago', 'Cada 30 días'],
     [simulacion ? 'Fecha de desembolso (propuesta)' : 'Fecha de desembolso', fecha(d.fechaDesembolso)],
     ['Primera cuota', fecha(d.fechaPrimerVencimiento)],
     ['Última cuota', ultima ? fecha(ultima.fechaVencimiento) : '-']
