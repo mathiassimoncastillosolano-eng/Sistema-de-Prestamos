@@ -189,7 +189,7 @@ export const CARTERA = {
   clientes: [{ id: 'c1', nombre: 'Rosa Moroso Prueba', tipoDocumento: 'DNI', numeroDocumento: '99999992', telefono: null, agencia: 'Agencia Sur Prueba', asesor: 'Valeria Quintana', alta: '2026-08-01', registrado: '2026-08-01 09:00' }],
   prestamos: [{
     id: 'p-1', numero: 1001, clienteId: 'c1', agencia: 'Agencia Sur Prueba', asesor: 'Valeria Quintana',
-    capital: 1000, plazoMeses: 2, tea: 0.3, fechaDesembolso: '2026-08-10', registrado: '2026-08-10 10:00',
+    capital: 1000, plazoMeses: 2, tea: 0.3, fechaDesembolso: '2026-08-12', registrado: '2026-08-12 10:00',
     cuotas: [
       { numero: 1, fechaVencimiento: '2026-09-10', capital: 495, interes: 22, importeCuota: 517, saldo: 505, pagada: false },
       { numero: 2, fechaVencimiento: '2026-10-10', capital: 505, interes: 11, importeCuota: 516, saldo: 0, pagada: false }
@@ -199,41 +199,50 @@ export const CARTERA = {
 
 const SIN_DEUDA = { limite: 10000, capitalPendiente: 0, importePendiente: 0, disponible: 10000 };
 
-/* ---------- Préstamos (contrato de /api/prestamos). Cifras sencillas y coherentes; NO reproducen la fórmula del backend. ---------- */
+/* ---------- Préstamos (contrato de /api/prestamos). Importes sencillos; NO reproducen la fórmula del backend. ---------- */
+
+/** Misma regla de fechas que el backend: el desembolso es el día 1; la cuota k vence en desembolso + 30·k − 1 días. */
+export function vencimiento(desembolso: string, k: number) {
+  const d = new Date(`${desembolso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 30 * k - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+const HOY_PRUEBA = '2026-10-18';
+
 export const CONDICIONES = {
   moneda: 'PEN', tea: 0.3, capitalMinimo: 1000, limiteEndeudamiento: 10000, plazoMinimoMeses: 1, plazoMaximoMeses: 60,
-  zonaHoraria: 'America/Lima', fechaDesembolso: '2026-10-18', fechaPrimerVencimiento: '2026-11-18'
+  zonaHoraria: 'America/Lima', fechaDesembolso: HOY_PRUEBA, fechaPrimerVencimiento: vencimiento(HOY_PRUEBA, 1)
 };
 
 /** Cronograma de cuotas iguales: capital e interés repartidos a partes iguales (suficiente para probar la interfaz). */
-export function armarSimulacion(capital: number, plazoMeses: number) {
+export function armarSimulacion(capital: number, plazoMeses: number, desembolso: string = HOY_PRUEBA) {
   const interesTotal = Math.round(capital * 0.1 * 100) / 100;
   const cuotas = Array.from({ length: plazoMeses }, (_, i) => {
     const k = i + 1;
     const cap = Math.round((capital / plazoMeses) * 100) / 100;
     const int = Math.round((interesTotal / plazoMeses) * 100) / 100;
-    const mes = ((9 + k) % 12) + 1;
-    return { numero: k, fechaVencimiento: `2026-${String(mes).padStart(2, '0')}-18`, capital: cap, interes: int, importeCuota: Math.round((cap + int) * 100) / 100, saldo: Math.round((capital - cap * k) * 100) / 100 };
+    return { numero: k, fechaVencimiento: vencimiento(desembolso, k), capital: cap, interes: int, importeCuota: Math.round((cap + int) * 100) / 100, saldo: Math.round((capital - cap * k) * 100) / 100 };
   });
   return {
-    moneda: 'PEN', capital, plazoMeses, tea: 0.3, fechaDesembolso: '2026-10-18', fechaPrimerVencimiento: '2026-11-18',
+    moneda: 'PEN', capital, plazoMeses, tea: 0.3, fechaDesembolso: desembolso, fechaPrimerVencimiento: vencimiento(desembolso, 1),
     cuotaMensual: cuotas[0]?.importeCuota ?? 0, totalIntereses: interesTotal, totalContractual: Math.round((capital + interesTotal) * 100) / 100, cuotas
   };
 }
 
-const sim2 = armarSimulacion(1000, 2);
+const sim2 = armarSimulacion(1000, 2, '2026-08-20'); // cuotas: 18-sep (vencida) y 18-oct (hoy)
 export const DETALLE = {
   id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', numero: 1001, clienteId: '11111111-1111-4111-8111-111111111111',
   clienteNombre: 'Cliente de prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '99999991', clienteCodigo: 1, clienteTelefono: '999999999',
   agenciaNombre: 'Sur Prueba', asesorNombre: 'Valeria Quintana', moneda: 'PEN', capital: 1000, plazoMeses: 2, tea: 0.3,
-  fechaDesembolso: '2026-08-18', fechaPrimerVencimiento: '2026-09-18', fechaUltimoVencimiento: '2026-10-18',
+  fechaDesembolso: '2026-08-20', fechaPrimerVencimiento: '2026-09-18', fechaUltimoVencimiento: '2026-10-18',
   estado: 'En mora', observaciones: null, cuotaMensual: sim2.cuotaMensual, totalIntereses: sim2.totalIntereses, totalContractual: sim2.totalContractual,
   capitalPendiente: 1000, totalPendiente: sim2.totalContractual, proximoVencimiento: '2026-10-18', cuotasVencidas: 1,
   cuotas: sim2.cuotas.map((c, i) => ({ ...c, estado: i === 0 ? 'VENCIDA' : 'PENDIENTE', importePendiente: c.importeCuota, diasAtraso: i === 0 ? 30 : 0 })),
-  historial: [{ fechaHora: '2026-08-18 10:15', tipo: 'Alta de préstamo', descripcion: 'Préstamo registrado con su cronograma', usuario: 'Valeria Quintana' }]
+  historial: [{ fechaHora: '2026-08-20 10:15', tipo: 'Alta de préstamo', descripcion: 'Préstamo registrado con su cronograma', usuario: 'Valeria Quintana' }]
 };
 
 export const LISTADO = [
-  { id: DETALLE.id, numero: 1001, clienteId: DETALLE.clienteId, clienteNombre: 'Cliente de prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '99999991', agenciaNombre: 'Sur Prueba', asesorNombre: 'Valeria Quintana', propio: true, capital: 1000, plazoMeses: 2, fechaDesembolso: '2026-08-18', estado: 'En mora', totalContractual: sim2.totalContractual, capitalPendiente: 1000, totalPendiente: sim2.totalContractual, proximoVencimiento: '2026-10-18', cuotasVencidas: 1 },
-  { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', numero: 1002, clienteId: 'c2', clienteNombre: 'Otra Persona Prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '88888882', agenciaNombre: 'Sur Prueba', asesorNombre: 'Colega Prueba', propio: false, capital: 2000, plazoMeses: 4, fechaDesembolso: '2026-10-01', estado: 'Vigente', totalContractual: 2200, capitalPendiente: 2000, totalPendiente: 2200, proximoVencimiento: '2026-11-01', cuotasVencidas: 0 }
+  { id: DETALLE.id, numero: 1001, clienteId: DETALLE.clienteId, clienteNombre: 'Cliente de prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '99999991', agenciaNombre: 'Sur Prueba', asesorNombre: 'Valeria Quintana', propio: true, capital: 1000, plazoMeses: 2, fechaDesembolso: '2026-08-20', estado: 'En mora', totalContractual: sim2.totalContractual, capitalPendiente: 1000, totalPendiente: sim2.totalContractual, proximoVencimiento: '2026-10-18', cuotasVencidas: 1 },
+  { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', numero: 1002, clienteId: 'c2', clienteNombre: 'Otra Persona Prueba', clienteTipoDocumento: 'DNI', clienteNumeroDocumento: '88888882', agenciaNombre: 'Sur Prueba', asesorNombre: 'Colega Prueba', propio: false, capital: 2000, plazoMeses: 4, fechaDesembolso: '2026-10-01', estado: 'Vigente', totalContractual: 2200, capitalPendiente: 2000, totalPendiente: 2200, proximoVencimiento: '2026-10-30', cuotasVencidas: 0 }
 ];

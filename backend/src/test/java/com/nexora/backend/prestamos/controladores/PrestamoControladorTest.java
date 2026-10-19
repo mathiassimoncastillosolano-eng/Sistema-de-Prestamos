@@ -91,12 +91,12 @@ class PrestamoControladorTest {
     void condicionesDevuelveFechasYReglasDelServidor() throws Exception {
         LocalDate hoy = LocalDate.of(2026, 10, 18);
         when(servicio.condiciones()).thenReturn(new CondicionesRespuesta("PEN", new BigDecimal("0.300000"),
-                new BigDecimal("1000.00"), new BigDecimal("10000.00"), 1, 60, "America/Lima", hoy, hoy.plusDays(30)));
+                new BigDecimal("1000.00"), new BigDecimal("10000.00"), 1, 60, "America/Lima", hoy, hoy.plusDays(29)));
 
         mvc.perform(get("/api/prestamos/condiciones"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fechaDesembolso").value("2026-10-18"))
-                .andExpect(jsonPath("$.fechaPrimerVencimiento").value("2026-11-17"))
+                .andExpect(jsonPath("$.fechaPrimerVencimiento").value("2026-11-16"))
                 .andExpect(jsonPath("$.plazoMaximoMeses").value(60));
     }
 
@@ -104,7 +104,7 @@ class PrestamoControladorTest {
     void simulacionDevuelveElCronogramaSinRegistrar() throws Exception {
         LocalDate hoy = LocalDate.of(2026, 10, 18);
         when(servicio.simular(any())).thenReturn(new SimulacionRespuesta("PEN", new BigDecimal("1000.00"), 12,
-                new BigDecimal("0.300000"), hoy, hoy.plusDays(30), new BigDecimal("95.79"), new BigDecimal("149.43"),
+                new BigDecimal("0.300000"), hoy, hoy.plusDays(29), new BigDecimal("95.79"), new BigDecimal("149.43"),
                 new BigDecimal("1149.43"), List.of()));
 
         mvc.perform(post("/api/prestamos/simulacion").contentType(MediaType.APPLICATION_JSON)

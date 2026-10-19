@@ -48,9 +48,7 @@ public final class CalculadoraCronograma {
             BigDecimal importe = capitalCuota.add(interes);
             saldo = saldo.subtract(capitalCuota);
 
-            // Cuotas cada 30 días corridos desde el desembolso (no encadenadas: evita errores acumulados).
-            // Siempre se calcula desde la fecha original para no arrastrar el ajuste.
-            LocalDate vencimiento = fechaDesembolso.plusDays(30L * k);
+            LocalDate vencimiento = vencimiento(fechaDesembolso, k);
 
             cuotas.add(new Cronograma.Cuota(k, vencimiento, capitalCuota, interes, importe, saldo));
             totalIntereses = totalIntereses.add(interes);
@@ -61,6 +59,14 @@ public final class CalculadoraCronograma {
                 cuotaFija,
                 totalIntereses,
                 capital.add(totalIntereses));
+    }
+
+    /**
+     * El día del desembolso cuenta como día 1; la cuota k vence a los 30·k días contando ese día
+     * (desembolso + 30·k − 1). Siempre desde la fecha original, sin encadenar.
+     */
+    public static LocalDate vencimiento(LocalDate fechaDesembolso, int k) {
+        return fechaDesembolso.plusDays(30L * k - 1);
     }
 
     /** TEM = (1 + TEA)^(1/12) - 1. StrictMath garantiza el mismo resultado en cualquier JVM. */

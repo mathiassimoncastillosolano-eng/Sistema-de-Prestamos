@@ -48,7 +48,7 @@ class EvaluadorCarteraTest {
         assertEquals("Vigente", e.estado());
         assertEquals(0, new BigDecimal("6000.00").compareTo(e.capitalPendiente()));
         assertEquals(0, e.totalContractual().compareTo(e.totalPendiente()));
-        assertEquals(LocalDate.of(2026, 11, 17), e.proximoVencimiento());
+        assertEquals(LocalDate.of(2026, 11, 16), e.proximoVencimiento());
         assertEquals(0, e.cuotasVencidas());
     }
 
@@ -59,10 +59,10 @@ class EvaluadorCarteraTest {
 
         assertEquals("En mora", e.estado());
         assertEquals(2, e.cuotasVencidas());
-        assertEquals(LocalDate.of(2026, 9, 11), e.proximoVencimiento());
+        assertEquals(LocalDate.of(2026, 9, 10), e.proximoVencimiento());
         assertEquals("PAGADA", e.cuotas().get(0).estado());
         assertEquals("VENCIDA", e.cuotas().get(1).estado());
-        assertEquals(37L, e.cuotas().get(1).diasAtraso()); // 11-sep → 18-oct
+        assertEquals(38L, e.cuotas().get(1).diasAtraso()); // 10-sep → 18-oct
         assertEquals("PENDIENTE", e.cuotas().get(3).estado());
         assertEquals(0L, e.cuotas().get(3).diasAtraso());
     }
@@ -99,8 +99,8 @@ class EvaluadorCarteraTest {
 
     @Test
     void cuotaQueVenceHoyNoPoneEnMora() {
-        // desembolso 18-sep → la cuota 1 vence 18-oct (hoy)
-        Evaluacion e = EvaluadorCartera.evaluar("Vigente", cuotas(LocalDate.of(2026, 9, 18), 6), HOY);
+        // desembolso 19-sep (día 1) → la cuota 1 vence 18-oct (hoy)
+        Evaluacion e = EvaluadorCartera.evaluar("Vigente", cuotas(LocalDate.of(2026, 9, 19), 6), HOY);
         assertEquals("Vigente", e.estado());
         assertEquals(HOY, e.proximoVencimiento());
     }

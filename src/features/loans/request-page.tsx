@@ -360,7 +360,7 @@ export default function RequestPage() {
                         <div className="sm:col-span-2">
                           <InfoPanel aria-label="Fechas del préstamo">
                             <InfoFact icon={CalendarDays} label="Fecha de desembolso" value={fecha(desembolso)} helper="Fecha actual · Lima, Perú" />
-                            <InfoFact icon={CalendarClock} label="Primera cuota" value={fecha(primerVencimiento)} helper="Vencimiento de la cuota 1" />
+                            <InfoFact icon={CalendarClock} label="Primera cuota" value={fecha(primerVencimiento)} helper="El desembolso cuenta como día 1" />
                           </InfoPanel>
                         </div>
                       </FormSection>

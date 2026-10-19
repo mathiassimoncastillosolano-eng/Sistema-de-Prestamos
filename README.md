@@ -76,7 +76,7 @@ Mínimo S/ 1,000 · límite S/ 10,000 de capital pendiente por cliente en toda l
 ### Fórmula única y fechas
 
 - `CalculadoraCronograma` (backend) es la **única** fórmula: sistema francés con cuotas iguales, **TEM = (1 + TEA)^(1/12) − 1**, interés = saldo × TEM, redondeo a 2 decimales y última cuota que cierra el saldo en 0.00. La simulación, el registro, el detalle y el PDF muestran exactamente lo que ella produce; el navegador no calcula cuotas.
-- **Fecha de desembolso** = fecha actual de Lima (`America/Lima`), calculada por el servidor y no editable. **Primera cuota** = un mes calendario después; la cuota *k* vence en `desembolso + k meses` calculado siempre desde la fecha original (el 31 de enero → 28/29 de febrero → 31 de marzo).
+- **Fecha de desembolso** = fecha actual de Lima (`America/Lima`), calculada por el servidor y no editable. El **día del desembolso cuenta como día 1**: la cuota *k* vence en `desembolso + 30·k − 1` días, calculado siempre desde la fecha original (sin encadenar), con 30 días entre cuotas. **Primera cuota** = desembolso + 29 días. Ejemplo: desembolso 19-oct-2026 → 17-nov-2026, 17-dic-2026, 16-ene-2027. Los préstamos registrados antes de este cambio conservan las fechas con que se guardaron.
 - Al registrar, el cliente envía la fecha y el total que revisó; si el servidor calcula otra cosa (por ejemplo, cambió el día), responde **409 `CONDICIONES_DESACTUALIZADAS`** y no guarda nada.
 - El registro es **atómico** (préstamo + cuotas en una transacción) y el botón bloquea el doble envío.
 
