@@ -69,7 +69,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <p className="bp-muted hidden text-xs lg:block">{BRAND.nombre} · {BRAND.descriptor} · Los datos de clientes y préstamos son ficticios (demostración)</p>
+        <p className="bp-muted hidden text-xs lg:block">{BRAND.nombre} · {BRAND.descriptor}</p>
       </section>
 
       <section className="relative flex items-center justify-center bg-canvas p-5 sm:p-10">

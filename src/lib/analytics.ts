@@ -205,27 +205,3 @@ export function resumenPorAgencia(db: Db, filtros: Omit<FiltrosDashboard, 'alcan
     return { agencia: etiquetaAgencia(agencia), prestamosActivos: d.prestamosActivos, capitalPendiente: d.capitalPendiente, morosos: d.morosos.length, extrajudiciales: d.extrajudiciales.length };
   });
 }
-
-/* ---------- Notificaciones: derivadas de los datos de la cartera propia ---------- */
-export interface Notificacion {
-  id: string;
-  tono: 'danger' | 'warning' | 'info';
-  titulo: string;
-  detalle: string;
-  ruta: string;
-}
-
-export function calcularNotificaciones(db: Db, yo: IdentidadOperativa): Notificacion[] {
-  const d = calcularDashboard(db, { alcance: 'mis', meses: 3, yo });
-  const out: Notificacion[] = [];
-  d.vencidas.slice(0, 3).forEach((o) =>
-    out.push({
-      id: `v-${o.prestamo.id}-${o.cuota.n}`, tono: 'danger', titulo: `Cuota ${o.cuota.n} vencida · ${o.prestamo.id}`,
-      detalle: `${o.cliente?.nombre ?? o.prestamo.clienteId} · vencía el ${o.cuota.fecha}`, ruta: `/prestamos/${o.prestamo.id}`
-    })
-  );
-  if (d.vencidas.length > 3) out.push({ id: 'v-mas', tono: 'danger', titulo: `${d.vencidas.length - 3} cuotas vencidas más`, detalle: 'Revisa la lista de préstamos con cuotas vencidas.', ruta: '/prestamos' });
-  if (d.proximasVentana.cantidad) out.push({ id: 'prox', tono: 'warning', titulo: `${d.proximasVentana.cantidad} cuota${d.proximasVentana.cantidad === 1 ? '' : 's'} vence${d.proximasVentana.cantidad === 1 ? '' : 'n'} en ${CFG.diasProxVenc} días`, detalle: 'Anticipa el contacto con los clientes.', ruta: '/prestamos' });
-  d.clientesCercaLimite.slice(0, 2).forEach((x) => out.push({ id: `l-${x.cliente.id}`, tono: 'info', titulo: `${x.cliente.nombre} cerca del límite`, detalle: 'Supera el 80 % del límite de endeudamiento.', ruta: `/clientes/${x.cliente.id}` }));
-  return out;
-}

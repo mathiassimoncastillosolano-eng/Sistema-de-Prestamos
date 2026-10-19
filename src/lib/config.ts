@@ -45,7 +45,6 @@ export const AGENCIAS = ['Lima Centro', 'Arequipa', 'Cusco'] as const;
 
 /** Claves técnicas de localStorage: NO se renombran con la marca (se perderían los datos y el tema guardados de cada usuario). */
 export const STORAGE_KEYS = {
-  db: 'nexora-db-v5',
   tema: 'nx-tema',
   side: 'nx-side'
 } as const;

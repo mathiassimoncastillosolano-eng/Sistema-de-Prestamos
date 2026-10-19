@@ -1,7 +1,7 @@
 import { motion } from 'motion/react';
-import { ArrowUpRight, CalendarClock, CircleAlert, FilePlus2, Gavel, Plus, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, CalendarClock, CircleAlert, Gavel, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AnimatedNumber } from '@/components/data-display/animated-number';
 import { ChartTooltip } from '@/components/data-display/chart-tooltip';
@@ -24,7 +24,6 @@ import { fadeUp, stagger } from '@/lib/motion';
 import { rutaDeActividad } from '@/lib/selectors';
 import { cn } from '@/lib/utils';
 import type { Db } from '@/types';
-import { ClientFormSheet } from '@/features/clients/client-form-sheet';
 
 const capitalizar = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const fechaHora = (t: string) => `${fecha(t.slice(0, 10))} · ${t.slice(11)}`;
@@ -122,13 +121,11 @@ export default function DashboardPage() {
   const usuario = useUsuario();
   const yo = useIdentidad();
   const { puede } = useAuth();
-  const navigate = useNavigate();
   const listaAgencias = cartera?.agencias;
   const alcances = useMemo(() => alcancesPara(usuario.rol, usuario.agencia?.nombre ?? null, listaAgencias), [usuario.rol, usuario.agencia?.nombre, listaAgencias]);
   const [alcance, setAlcance] = useState<Alcance>(() => alcances[0]?.value ?? 'empresa');
   const [meses, setMeses] = useState<number>(6);
   const [estado, setEstado] = useState<FiltroEstado>('todos');
-  const [registrar, setRegistrar] = useState(false);
   const db = cartera?.db ?? VACIA;
   const hoy = cartera?.hoy ?? hoySistema();
   const d = useMemo(() => calcularDashboard(db, { alcance, meses, yo, estado, hoy }), [db, alcance, meses, yo, estado, hoy]);
@@ -164,14 +161,6 @@ export default function DashboardPage() {
               <b className="font-medium text-ink">{d.vencidas.length}</b> cuota{d.vencidas.length === 1 ? '' : 's'} vencida{d.vencidas.length === 1 ? '' : 's'} y{' '}
               <b className="font-medium text-ink">{d.clientesCercaLimite.length}</b> cliente{d.clientesCercaLimite.length === 1 ? '' : 's'} cerca del límite de endeudamiento.
             </>
-          }
-          actions={
-            (puede('solicitud') || puede('clientes')) ? (
-              <>
-                {puede('solicitud') && <Button variant="primary" onClick={() => navigate('/solicitud')}><FilePlus2 className="size-4" />Nueva solicitud</Button>}
-                {puede('clientes') && <Button onClick={() => setRegistrar(true)}><Plus className="size-4" />Registrar cliente</Button>}
-              </>
-            ) : undefined
           }
         />
         <div role="group" aria-label="Filtros del dashboard" className="-mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-2.5">
@@ -401,7 +390,6 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      {puede('clientes') && <ClientFormSheet open={registrar} onOpenChange={(abierto) => { setRegistrar(abierto); if (!abierto) recargar(); }} />}
     </motion.div>
   );
 }
