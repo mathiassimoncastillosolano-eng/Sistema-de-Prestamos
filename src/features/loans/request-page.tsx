@@ -21,15 +21,17 @@ import { Stepper } from '@/components/ui/stepper';
 import { toast } from '@/components/ui/toast';
 import { useUsuario } from '@/hooks/use-auth';
 import { useCapacidad } from '@/hooks/use-capacidad';
+import { useLimiteDiario } from '@/hooks/use-limite-diario';
 import { fecha } from '@/lib/dates';
 import { money } from '@/lib/format';
 import { DUR, EASE } from '@/lib/motion';
 import { cn, normalizar } from '@/lib/utils';
-import { codigoPrestamo } from './loan-utils';
+import { codigoPrestamo, puedeIniciarSolicitud } from './loan-utils';
 import { StatusBadge } from '@/components/data-display/status-badge';
 import { listarClientes, puedeSolicitarPrestamo, type ClienteListado } from '@/services/clientes-api';
-import { detalleLimite, prestamosApi, PrestamoApiError, type CondicionesApi } from '@/services/prestamos-api';
+import { detalleLimite, detalleLimiteDiario, prestamosApi, PrestamoApiError, type CondicionesApi } from '@/services/prestamos-api';
 import { CapacidadCliente } from './capacidad-cliente';
+import { LimiteDiario } from './limite-diario';
 import { ClienteCard } from './client-card';
 import { BotonPdfSimulacion, ResumenFinanciero, ScheduleReviewModal } from './schedule-review';
 import { aFilas } from './loan-utils';
@@ -42,14 +44,19 @@ const MAX_CAPITAL_ENTRADA = 999999; // 6 cifras
 const MAX_PLAZO_ENTRADA = 999;      // 3 cifras
 const MAX_OBSERVACIONES = 250;
 
-/** El máximo es la capacidad disponible del cliente elegido; mientras no se conoce, solo rige el límite general. */
-const crearEsquema = (c: CondicionesApi | null, disponible: number | null) => z.object({
+/**
+ * El máximo es la capacidad disponible del cliente elegido; mientras no se conoce, solo rige el límite general.
+ * Aparte, el monto tampoco puede pasar de lo que le queda al asesor en el día (se valida después: si fallan las dos,
+ * se muestra primero el aviso del cliente).
+ */
+const crearEsquema = (c: CondicionesApi | null, disponible: number | null, disponibleHoy: number | null) => z.object({
   clienteId: z.string().min(1, 'Selecciona un cliente.'),
   capital: z
     .number({ error: 'Ingresa un monto válido.' })
     .min(c?.capitalMinimo ?? 0.01, `El monto mínimo es ${money(c?.capitalMinimo ?? 0.01)}.`)
     .max(disponible ?? c?.limiteEndeudamiento ?? MAX_CAPITAL_ENTRADA, mensajeMaximo(c, disponible))
-    .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'El monto admite como máximo 2 decimales.'),
+    .refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-6, 'El monto admite como máximo 2 decimales.')
+    .refine((v) => disponibleHoy === null || v <= disponibleHoy, `El monto supera lo que te queda de tu límite diario (${money(disponibleHoy ?? 0)}).`),
   plazo: z
     .number({ error: 'Ingresa el plazo en meses.' })
     .int('El plazo debe ser un número entero de meses.')
@@ -106,7 +113,7 @@ export default function RequestPage() {
   const preseleccionado = useRef(false);
 
   // El esquema cambia con las condiciones y con la capacidad del cliente elegido: cada validación usa el último.
-  const esquemaActual = useRef(crearEsquema(null, null));
+  const esquemaActual = useRef(crearEsquema(null, null, null));
 
   const form = useForm<SolicitudForm>({
     resolver: (v, ctx, opciones) => zodResolver(esquemaActual.current)(v, ctx, opciones),
@@ -153,7 +160,15 @@ export default function RequestPage() {
   const { capacidad, cargando: cargandoCapacidad, error: errorCapacidad, recargar: recargarCapacidad } = useCapacidad(cliente?.id);
   const disponible = capacidad?.disponible ?? null;
   const sinCapacidad = !!cond && disponible !== null && disponible < cond.capitalMinimo;
-  const esquema = useMemo(() => crearEsquema(cond, disponible), [cond, disponible]);
+
+  // Límite diario del asesor: se vuelve a pedir en cada paso para ver lo que otro registro suyo haya cambiado.
+  const { limite: limiteDia, error: errorLimiteDia, recargar: recargarLimiteDia } = useLimiteDiario(paso);
+  const disponibleHoy = limiteDia?.disponible ?? null;
+  const asesorSinCupo = !!limiteDia && !puedeIniciarSolicitud(limiteDia);
+  // Lo máximo que se puede pedir: lo que permita el cliente y lo que le quede al asesor hoy, lo menor.
+  const maximo = disponible === null ? null : disponibleHoy === null ? disponible : Math.min(disponible, disponibleHoy);
+
+  const esquema = useMemo(() => crearEsquema(cond, disponible, disponibleHoy), [cond, disponible, disponibleHoy]);
   esquemaActual.current = esquema;
 
   // Al cambiar de cliente (o al llegar su capacidad) el monto ya escrito se vuelve a validar con el nuevo máximo.
@@ -185,6 +200,7 @@ export default function RequestPage() {
   };
 
   const siguiente = async () => {
+    if (asesorSinCupo) return;
     if (paso === 1) { if (!clienteBloqueado && await trigger('clienteId')) setPaso(2); return; }
     if (paso === 2) { if (await trigger(['capital', 'plazo', 'observaciones'])) { setErrorServidor(null); setPaso(3); } }
   };
@@ -192,6 +208,7 @@ export default function RequestPage() {
   const enviar = async () => {
     if (enviando.current) return; // evita envíos duplicados
     if (clienteBloqueado) { setConfirmar(false); setPaso(1); return; }
+    if (asesorSinCupo) { setConfirmar(false); return; }
     if (!simVigente || !sim || !capacidad || !esquema.safeParse(valores).success) { setConfirmar(false); if (!condicionesValidas) { setPaso(2); void trigger(); } return; }
     enviando.current = true;
     setGuardando(true);
@@ -216,11 +233,13 @@ export default function RequestPage() {
       setErrorServidor(err);
       if (err.codigo === 'CONDICIONES_DESACTUALIZADAS') recalcular(); // vuelve a mostrar el cronograma vigente para revisarlo
       if (err.codigo === 'LIMITE_EXCEDIDO') recargarCapacidad(); // la deuda cambió: se muestra la capacidad actual
+      if (err.codigo === 'LIMITE_DIARIO_EXCEDIDO') recargarLimiteDia(); // otro registro del asesor usó su cupo
     }
   };
 
   const cancelar = () => (isDirty || paso > 1 ? setDescartar(true) : navigate('/prestamos'));
   const limite = detalleLimite(errorServidor);
+  const limiteDiario = detalleLimiteDiario(errorServidor);
 
   /** Acciones del flujo. En la confirmación quedan fijas al borde inferior para no perderlas con un cronograma largo. */
   const acciones = (
@@ -232,15 +251,16 @@ export default function RequestPage() {
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         {paso > 1 && <Button onClick={() => setPaso(paso - 1)}>Atrás</Button>}
         {paso < 3
-          ? <Button variant="primary" onClick={siguiente} disabled={(paso === 1 && (!valores.clienteId || clienteBloqueado)) || (paso === 2 && (!simVigente || clienteBloqueado))}>Continuar</Button>
-          : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || clienteBloqueado || guardando}><Send className="size-4" />Registrar préstamo</Button>}
+          ? <Button variant="primary" onClick={siguiente} disabled={asesorSinCupo || (paso === 1 && (!valores.clienteId || clienteBloqueado)) || (paso === 2 && (!simVigente || clienteBloqueado))}>Continuar</Button>
+          : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || clienteBloqueado || asesorSinCupo || guardando}><Send className="size-4" />Registrar préstamo</Button>}
       </div>
     </div>
   );
 
   return (
     <>
-      <PageHeader title="Registrar préstamo" description="Elige al cliente, define el monto y el plazo, y registra el préstamo con su cronograma. El sistema valida el límite de endeudamiento por cliente." />
+      <PageHeader title="Registrar préstamo" description="Elige al cliente, define el monto y el plazo, y registra el préstamo con su cronograma. El sistema valida el límite de endeudamiento por cliente y tu límite diario de colocación." />
+      <LimiteDiario limite={limiteDia} error={errorLimiteDia} onReintentar={recargarLimiteDia} />
       <div className="mb-6"><Stepper pasos={PASOS} actual={paso} onIr={(n) => { if (n < paso) setPaso(n); }} /></div>
 
       <div className={cn('grid gap-5', paso === 2 && 'xl:grid-cols-[minmax(0,1fr)_21.5rem] xl:items-start')}>
@@ -326,7 +346,7 @@ export default function RequestPage() {
                     <div className="mt-5 space-y-5">
                       <FormSection title="Importe y plazo">
                         <Controller name="capital" control={control} render={({ field }) => (
-                          <Field label="Monto solicitado" error={errors.capital?.message} hint={disponible === null ? `Mínimo ${money(cond.capitalMinimo)}. Consultando el máximo disponible…` : `Máximo disponible: ${money(disponible)} · Mínimo ${money(cond.capitalMinimo)}`}>
+                          <Field label="Monto solicitado" error={errors.capital?.message} hint={maximo === null ? `Mínimo ${money(cond.capitalMinimo)}. Consultando el máximo disponible…` : `Máximo disponible: ${money(maximo)}${maximo !== disponible ? ' (tu límite del día)' : ''} · Mínimo ${money(cond.capitalMinimo)}`}>
                             <NumericInput name={field.name} ref={field.ref} value={field.value} onValueChange={(v) => field.onChange(typeof v === 'number' && v > MAX_CAPITAL_ENTRADA ? MAX_CAPITAL_ENTRADA : v)} onBlur={field.onBlur} decimals={2} maxIntegerDigits={6} prefix="S/" placeholder="0.00" />
                           </Field>
                         )} />
@@ -370,7 +390,7 @@ export default function RequestPage() {
 
                     {errorServidor && (
                       <div role="alert" className="mt-4 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
-                        <p className="font-medium">{errorServidor.codigo === 'LIMITE_EXCEDIDO' ? 'Se supera el límite de endeudamiento' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Las condiciones cambiaron' : errorServidor.codigo === 'CLIENTE_NO_APTO' ? 'El cliente no puede solicitar nuevos préstamos' : 'No se pudo registrar el préstamo'}</p>
+                        <p className="font-medium">{errorServidor.codigo === 'LIMITE_EXCEDIDO' ? 'Se supera el límite de endeudamiento' : errorServidor.codigo === 'LIMITE_DIARIO_EXCEDIDO' ? 'Se supera tu límite diario de colocación' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Las condiciones cambiaron' : errorServidor.codigo === 'CLIENTE_NO_APTO' ? 'El cliente no puede solicitar nuevos préstamos' : 'No se pudo registrar el préstamo'}</p>
                         {limite ? (
                           <dl className="num mt-2 grid max-w-xs grid-cols-[1fr_auto] gap-x-4 gap-y-1">
                             <dt>Acumulado actual</dt><dd className="text-right font-semibold">{money(limite.acumulado)}</dd>
@@ -378,11 +398,18 @@ export default function RequestPage() {
                             <dt>Excedente</dt><dd className="text-right font-semibold">{money(limite.excedente)}</dd>
                             {limite.disponible !== undefined && <><dt>Capacidad disponible</dt><dd className="text-right font-semibold">{money(limite.disponible)}</dd></>}
                           </dl>
+                        ) : limiteDiario ? (
+                          <dl className="num mt-2 grid max-w-xs grid-cols-[1fr_auto] gap-x-4 gap-y-1">
+                            <dt>Límite diario</dt><dd className="text-right font-semibold">{money(limiteDiario.limite)}</dd>
+                            <dt>Colocado hoy</dt><dd className="text-right font-semibold">{money(limiteDiario.colocadoHoy)}</dd>
+                            <dt>Disponible hoy</dt><dd className="text-right font-semibold">{money(limiteDiario.disponible)}</dd>
+                            <dt>Monto solicitado</dt><dd className="text-right font-semibold">{money(limiteDiario.solicitado)}</dd>
+                          </dl>
                         ) : (
                           <p className="mt-1">{errorServidor.message}</p>
                         )}
                         <p className="mt-2 text-[0.8125rem]">
-                          {limite ? 'Reduce el monto en el paso anterior para continuar.' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Revisa el cronograma actualizado y confirma de nuevo.' : 'Revisa los datos o inténtalo nuevamente.'}
+                          {limiteDiario ? 'El préstamo no se registró. Reduce el monto en el paso anterior para continuar.' : limite ? 'Reduce el monto en el paso anterior para continuar.' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Revisa el cronograma actualizado y confirma de nuevo.' : 'Revisa los datos o inténtalo nuevamente.'}
                         </p>
                       </div>
                     )}

@@ -2,6 +2,7 @@ package com.nexora.backend.prestamos.controladores;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
+import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoDetalle;
 import com.nexora.backend.prestamos.dto.PrestamoListado;
@@ -77,6 +78,12 @@ public class PrestamoControlador {
     @GetMapping("/capacidad")
     public CapacidadEndeudamiento capacidad(@RequestParam UUID clienteId) {
         return consultas.capacidad(clienteId);
+    }
+
+    /** Límite diario del asesor en sesión (colocado hoy y disponible). El asesor sale de la sesión, nunca de la URL. */
+    @GetMapping("/limite-diario")
+    public LimiteDiarioAsesor limiteDiario(HttpServletRequest request) {
+        return servicio.limiteDiario(perfilDe(request));
     }
 
     /** Detalle del préstamo + cronograma. Cualquier usuario autenticado (la matriz de permisos PQ-15 sigue pendiente). */

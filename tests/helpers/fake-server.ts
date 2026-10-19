@@ -36,6 +36,11 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
   /** Capacidad por cliente (GET /api/prestamos/capacidad). Sin entrada: cliente sin deuda. */
   const capacidades = new Map<string, typeof SIN_DEUDA | 'error'>();
   let retenerCapacidad: Promise<void> | null = null;
+  /** Capital que el asesor ya colocó hoy (GET /api/prestamos/limite-diario). Cada registro aceptado lo aumenta. */
+  let colocadoHoy = 0;
+  const limiteDiario = () => ({
+    fecha: '2026-10-18', limite: 50000, colocadoHoy, disponible: Math.max(0, Math.round((50000 - colocadoHoy) * 100) / 100), capitalMinimo: 1000
+  });
 
   const handler = vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
     const ruta = String(entrada);
@@ -110,6 +115,7 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     if (ruta.startsWith('/api/prestamos')) {
       if (!sesionDe) return json(401);
       if (ruta === '/api/prestamos/condiciones' && metodo === 'GET') return json(200, CONDICIONES);
+      if (ruta === '/api/prestamos/limite-diario' && metodo === 'GET') return json(200, limiteDiario());
       if (ruta === '/api/prestamos/simulacion' && metodo === 'POST') return json(200, armarSimulacion(cuerpo.capital, cuerpo.plazoMeses));
       if (ruta === '/api/prestamos' && metodo === 'GET') return json(200, LISTADO);
       if (ruta === '/api/prestamos' && metodo === 'POST') {
@@ -121,6 +127,13 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
         if (desactualizado || cuerpo.totalContractualEsperado !== armarSimulacion(cuerpo.capital, cuerpo.plazoMeses).totalContractual) {
           return json(409, { codigo: 'CONDICIONES_DESACTUALIZADAS', mensaje: 'Las condiciones cambiaron desde la revisión.' });
         }
+        // Como el backend real: lo colocado hoy más el monto nuevo no puede pasar de 50,000.
+        const dia = limiteDiario();
+        if (cuerpo.capital > dia.disponible) {
+          return json(422, { codigo: 'LIMITE_DIARIO_EXCEDIDO', mensaje: 'El préstamo no se registró: superarías tu límite diario.',
+            detalle: { limite: dia.limite, colocadoHoy: dia.colocadoHoy, disponible: dia.disponible, solicitado: cuerpo.capital } });
+        }
+        colocadoHoy += cuerpo.capital;
         return json(201, { ...DETALLE, capital: cuerpo.capital, plazoMeses: cuerpo.plazoMeses });
       }
       const id = ruta.slice('/api/prestamos/'.length);
@@ -147,6 +160,8 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
         disponible: Math.max(0, Math.round((10000 - capitalPendiente) * 100) / 100)
       });
     },
+    /** Fija cuánto colocó hoy el asesor (límite diario de 50,000). */
+    fijarColocadoHoy: (monto: number) => { colocadoHoy = monto; },
     /** Deja la consulta de capacidad esperando hasta llamar a la función devuelta. */
     retenerCapacidad: () => { let soltar!: () => void; retenerCapacidad = new Promise<void>((r) => { soltar = r; }); return () => { retenerCapacidad = null; soltar(); }; },
     retenerMe: () => { let soltar!: () => void; retenerMe = new Promise<void>((r) => { soltar = r; }); return () => { retenerMe = null; soltar(); }; }

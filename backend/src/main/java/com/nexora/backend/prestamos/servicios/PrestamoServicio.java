@@ -7,6 +7,7 @@ import com.nexora.backend.prestamos.dominio.CalculadoraCronograma;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.Cronograma;
 import com.nexora.backend.prestamos.dominio.EstadoCliente;
+import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import com.nexora.backend.prestamos.dominio.ReglasPrestamo;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
@@ -31,7 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * US-04 (registro), US-05 (límite acumulado) y simulación del cronograma. Las consultas (listado, detalle) viven en
+ * US-04 (registro), US-05 (límite acumulado), límite diario del asesor y simulación del cronograma. Las consultas (listado, detalle) viven en
  * PrestamoConsultaServicio. Simulación y registro usan la MISMA calculadora, la misma TEA y la misma fecha de Lima.
  */
 @Service
@@ -86,6 +87,11 @@ public class PrestamoServicio {
 
         // Fecha del día en Perú: el préstamo se registra cuando el cliente está en agencia.
         LocalDate hoy = LocalDate.now(reloj);
+
+        // Después el asesor, también bloqueado: dos registros suyos a la vez no pueden pasar juntos su límite del día.
+        // Siempre se bloquea primero al cliente y luego al asesor, así dos transacciones nunca se esperan en círculo.
+        prestamos.bloquearAsesor(asesor.getId());
+        verificarLimiteDiario(asesor.getId(), capital, hoy);
         Cronograma cronograma = CalculadoraCronograma.calcular(capital, plazo, ReglasPrestamo.TEA, hoy);
         verificarLoRevisado(solicitud, hoy, cronograma);
 
@@ -100,6 +106,16 @@ public class PrestamoServicio {
 
         Long numero = prestamos.obtenerNumero(prestamoId);
         return PrestamoRespuesta.de(prestamo, numero, cronograma);
+    }
+
+    /** Límite diario del asesor en sesión: cuánto colocó hoy y cuánto le queda. Cada asesor ve solo el suyo. */
+    @Transactional(readOnly = true)
+    public LimiteDiarioAsesor limiteDiario(Perfil asesor) {
+        if (asesor == null || !"asesor".equals(asesor.getRol())) {
+            throw new PrestamoException(Codigo.SIN_PERMISO, "Solo los asesores tienen límite diario de colocación.");
+        }
+        LocalDate hoy = LocalDate.now(reloj);
+        return LimiteDiarioAsesor.de(hoy, prestamos.capitalColocado(asesor.getId(), hoy));
     }
 
     /** Condiciones para una solicitud nueva: lo que el formulario muestra antes de que haya monto o plazo. */
@@ -226,6 +242,23 @@ public class PrestamoServicio {
         throw new PrestamoException(Codigo.LIMITE_EXCEDIDO, mensaje,
                 Map.of("acumulado", acumulado, "limite", limite, "excedente", excedente,
                         "disponible", capacidad.disponible()));
+    }
+
+    /**
+     * Límite diario del asesor: lo colocado hoy más el monto nuevo no puede pasar de S/ 50,000. Se suma con el asesor
+     * bloqueado y con la fecha de Lima. Es independiente de la capacidad del cliente: deben cumplirse las dos.
+     */
+    private void verificarLimiteDiario(UUID asesorId, BigDecimal nuevoCapital, LocalDate hoy) {
+        LimiteDiarioAsesor limite = LimiteDiarioAsesor.de(hoy, prestamos.capitalColocado(asesorId, hoy));
+        if (limite.permite(nuevoCapital)) {
+            return;
+        }
+        throw new PrestamoException(Codigo.LIMITE_DIARIO_EXCEDIDO,
+                "El préstamo no se registró: superarías tu límite diario de colocación de " + soles(limite.limite())
+                        + ". Hoy llevas " + soles(limite.colocadoHoy()) + " colocados y te quedan "
+                        + soles(limite.disponible()) + "; solicitaste " + soles(nuevoCapital) + ".",
+                Map.of("limite", limite.limite(), "colocadoHoy", limite.colocadoHoy(),
+                        "disponible", limite.disponible(), "solicitado", nuevoCapital));
     }
 
     private static String soles(BigDecimal importe) {

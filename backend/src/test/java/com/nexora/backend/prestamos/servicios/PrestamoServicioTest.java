@@ -2,6 +2,7 @@ package com.nexora.backend.prestamos.servicios;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -15,6 +16,7 @@ import com.nexora.backend.cuotas.repositorios.CuotaRepositorio;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.Evaluacion;
+import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
 import com.nexora.backend.prestamos.entidades.ClienteResumen;
@@ -312,5 +314,122 @@ class PrestamoServicioTest {
         PrestamoRespuesta r = servicio.registrar(asesor, new SolicitudPrestamo(clienteId, new BigDecimal("1000"), 12,
                 null, null, LocalDate.of(2026, 10, 17), new BigDecimal("1149.43")));
         assertEquals(12, r.cuotas().size());
+    }
+
+    // ------------------------------------------------------------ límite diario del asesor (S/ 50,000)
+
+    /** Hoy en Lima según el reloj de la prueba (22:00 del 17-oct, aunque en UTC ya sea 18). */
+    private static final LocalDate HOY = LocalDate.of(2026, 10, 17);
+
+    /** Capital que el asesor ya colocó hoy, tal como lo suma la base de datos. */
+    private void colocadoHoy(String valor) {
+        when(prestamos.capitalColocado(any(), eq(HOY))).thenReturn(new BigDecimal(valor));
+    }
+
+    @Test
+    void asesor_sin_prestamos_hoy_tiene_50000_disponibles() {
+        LimiteDiarioAsesor l = servicio.limiteDiario(asesor);
+        assertEquals(HOY, l.fecha());
+        assertEquals(new BigDecimal("0.00"), l.colocadoHoy());
+        assertEquals(new BigDecimal("50000.00"), l.disponible());
+        assertTrue(l.alcanzaElMinimo());
+    }
+
+    @Test
+    void el_limite_diario_se_suma_con_la_fecha_de_lima_y_no_con_la_de_utc() {
+        registrar("1000", 12, null);
+        verify(prestamos).capitalColocado(asesor.getId(), HOY);
+        verify(prestamos, never()).capitalColocado(any(), eq(LocalDate.of(2026, 10, 18)));
+    }
+
+    @Test
+    void caso_a_45000_mas_5000_llega_justo_al_limite_y_se_permite() {
+        colocadoHoy("45000");
+        assertDoesNotThrow(() -> registrar("5000", 12, null));
+    }
+
+    @Test
+    void caso_b_45000_mas_5000_01_se_rechaza_y_no_se_guarda_nada() {
+        colocadoHoy("45000");
+        PrestamoException ex = rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("5000.01", 12, null));
+        assertEquals(new BigDecimal("50000.00"), ex.getDetalle().get("limite"));
+        assertEquals(new BigDecimal("45000"), ex.getDetalle().get("colocadoHoy"));
+        assertEquals(new BigDecimal("5000.00"), ex.getDetalle().get("disponible"));
+        assertEquals(new BigDecimal("5000.01"), ex.getDetalle().get("solicitado"));
+        assertTrue(ex.getMessage().contains("no se registró"));
+    }
+
+    @Test
+    void caso_c_con_el_limite_agotado_no_pasa_ni_el_minimo() {
+        colocadoHoy("50000");
+        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("1000", 12, null));
+    }
+
+    @Test
+    void caso_d_con_32000_colocados_se_permiten_10000() {
+        colocadoHoy("32000");
+        assertDoesNotThrow(() -> registrar("10000", 12, null));
+    }
+
+    @Test
+    void caso_e_diez_prestamos_de_5000_completan_el_dia_y_el_siguiente_se_rechaza() {
+        for (int i = 0; i < 10; i++) {
+            colocadoHoy(String.valueOf(i * 5000));
+            assertDoesNotThrow(() -> registrar("5000", 12, null), "préstamo " + (i + 1));
+        }
+        colocadoHoy("50000");
+        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("5000", 12, null));
+    }
+
+    @Test
+    void con_49000_colocados_se_permite_exactamente_el_minimo() {
+        colocadoHoy("49000");
+        assertDoesNotThrow(() -> registrar("1000", 12, null));
+    }
+
+    @Test
+    void con_49500_colocados_no_se_puede_ni_el_minimo() {
+        colocadoHoy("49500");
+        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("1000", 12, null));
+        assertFalse(servicio.limiteDiario(asesor).alcanzaElMinimo());
+    }
+
+    @Test
+    void si_el_cliente_no_tiene_capacidad_se_rechaza_por_el_cliente_aunque_el_asesor_tenga_cupo() {
+        acumulado("9000"); // el cliente solo puede 1,000 más
+        colocadoHoy("0");
+        rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("5000", 12, null));
+    }
+
+    @Test
+    void si_el_cliente_tiene_capacidad_pero_el_asesor_no_se_rechaza_por_el_asesor() {
+        acumulado("0");
+        colocadoHoy("48000");
+        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("5000", 12, null));
+    }
+
+    @Test
+    void el_cupo_del_asesor_no_amplia_la_capacidad_del_cliente() {
+        acumulado("9000"); // capacidad del cliente: 1,000
+        colocadoHoy("45000"); // cupo del asesor: 5,000
+        rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1000.01", 12, null));
+        assertDoesNotThrow(() -> registrar("1000", 12, null));
+    }
+
+    @Test
+    void el_asesor_se_bloquea_despues_del_cliente_y_antes_de_sumar_lo_colocado() {
+        registrar("1000", 12, null);
+        InOrder orden = inOrder(clientes, prestamos);
+        orden.verify(clientes).buscarBloqueando(clienteId);
+        orden.verify(prestamos).bloquearAsesor(asesor.getId());
+        orden.verify(prestamos).capitalColocado(asesor.getId(), HOY);
+        orden.verify(prestamos).save(any(Prestamo.class));
+    }
+
+    @Test
+    void la_gerencia_no_tiene_limite_diario_de_colocacion() {
+        when(asesor.getRol()).thenReturn("gerencia");
+        assertEquals(Codigo.SIN_PERMISO,
+                assertThrows(PrestamoException.class, () -> servicio.limiteDiario(asesor)).getCodigo());
     }
 }

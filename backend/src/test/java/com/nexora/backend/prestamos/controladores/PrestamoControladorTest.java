@@ -1,6 +1,7 @@
 package com.nexora.backend.prestamos.controladores;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
+import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
 import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
 import com.nexora.backend.prestamos.dto.SimulacionRespuesta;
@@ -19,6 +20,8 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -121,5 +124,43 @@ class PrestamoControladorTest {
                         .contentType(MediaType.APPLICATION_JSON).content(JSON_OK))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.codigo").value("CONDICIONES_DESACTUALIZADAS"));
+    }
+
+    @Test
+    void limiteDiarioUsaElAsesorDeLaSesion() throws Exception {
+        Perfil asesor = mock(Perfil.class);
+        when(servicio.limiteDiario(asesor)).thenReturn(
+                LimiteDiarioAsesor.de(LocalDate.of(2026, 10, 19), new BigDecimal("49500.00")));
+
+        mvc.perform(get("/api/prestamos/limite-diario").requestAttr("nexora.perfil", asesor))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.limite").value(50000.00))
+                .andExpect(jsonPath("$.colocadoHoy").value(49500.00))
+                .andExpect(jsonPath("$.disponible").value(500.00))
+                .andExpect(jsonPath("$.capitalMinimo").value(1000.00))
+                .andExpect(jsonPath("$.fecha").value("2026-10-19"));
+    }
+
+    @Test
+    void limiteDiarioSinSesionDevuelve403() throws Exception {
+        mvc.perform(get("/api/prestamos/limite-diario"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.codigo").value("SIN_PERMISO"));
+        verify(servicio, never()).limiteDiario(any());
+    }
+
+    @Test
+    void limiteDiarioExcedidoDevuelve422ConLosImportes() throws Exception {
+        when(servicio.registrar(any(), any())).thenThrow(new PrestamoException(
+                PrestamoException.Codigo.LIMITE_DIARIO_EXCEDIDO, "Superarías tu límite diario.",
+                Map.of("limite", 50000, "colocadoHoy", 45000, "disponible", 5000, "solicitado", 5000.01)));
+
+        mvc.perform(post("/api/prestamos")
+                        .requestAttr("nexora.perfil", mock(Perfil.class))
+                        .contentType(MediaType.APPLICATION_JSON).content(JSON_OK))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.codigo").value("LIMITE_DIARIO_EXCEDIDO"))
+                .andExpect(jsonPath("$.detalle.colocadoHoy").value(45000))
+                .andExpect(jsonPath("$.detalle.disponible").value(5000));
     }
 }

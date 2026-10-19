@@ -16,6 +16,7 @@ export type CodigoPrestamo =
   | 'PLAZO_FUERA_DE_RANGO'
   | 'MONEDA_NO_PERMITIDA'
   | 'LIMITE_EXCEDIDO'
+  | 'LIMITE_DIARIO_EXCEDIDO'
   | 'CONDICIONES_DESACTUALIZADAS'
   | 'NO_AUTENTICADO'
   | 'RED'
@@ -102,6 +103,20 @@ export interface CapacidadApi {
   importePendiente: number;
   /** limite − capitalPendiente (nunca negativo). Máximo que puede solicitar ahora. */
   disponible: number;
+}
+
+/**
+ * GET /api/prestamos/limite-diario: límite diario de colocación del asesor en sesión (S/ 50,000 por día de Lima).
+ * Lo calcula el servidor con los préstamos que el asesor registró hoy; los pagos de cuotas no lo reponen.
+ */
+export interface LimiteDiarioApi {
+  fecha: string; // yyyy-MM-dd (Lima)
+  limite: number;
+  colocadoHoy: number;
+  /** limite − colocadoHoy (nunca negativo). */
+  disponible: number;
+  /** Monto mínimo de un préstamo: si lo disponible no llega, no se puede iniciar otra solicitud hoy. */
+  capitalMinimo: number;
 }
 
 /** POST /api/prestamos/simulacion: cronograma que se guardaría hoy. No se persiste nada. */
@@ -196,6 +211,14 @@ export interface DetalleLimite {
   disponible?: number;
 }
 
+/** Detalle que acompaña a LIMITE_DIARIO_EXCEDIDO. */
+export interface DetalleLimiteDiario {
+  limite: number;
+  colocadoHoy: number;
+  disponible: number;
+  solicitado: number;
+}
+
 export class PrestamoApiError extends Error {
   constructor(
     readonly codigo: CodigoPrestamo,
@@ -210,7 +233,8 @@ export class PrestamoApiError extends Error {
 
 const CODIGOS = new Set<string>([
   'DATOS_INVALIDOS', 'SIN_PERMISO', 'CLIENTE_NO_ENCONTRADO', 'PRESTAMO_NO_ENCONTRADO', 'CLIENTE_NO_APTO',
-  'CAPITAL_BAJO_MINIMO', 'PLAZO_FUERA_DE_RANGO', 'MONEDA_NO_PERMITIDA', 'LIMITE_EXCEDIDO', 'CONDICIONES_DESACTUALIZADAS'
+  'CAPITAL_BAJO_MINIMO', 'PLAZO_FUERA_DE_RANGO', 'MONEDA_NO_PERMITIDA', 'LIMITE_EXCEDIDO', 'LIMITE_DIARIO_EXCEDIDO',
+  'CONDICIONES_DESACTUALIZADAS'
 ]);
 
 const MSG_RED = 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo nuevamente.';
@@ -223,6 +247,14 @@ export function detalleLimite(e: unknown): DetalleLimite | null {
   const d = e.detalle as Partial<DetalleLimite> | null;
   if (!d || typeof d.acumulado !== 'number' || typeof d.limite !== 'number' || typeof d.excedente !== 'number') return null;
   return { acumulado: d.acumulado, limite: d.limite, excedente: d.excedente, disponible: typeof d.disponible === 'number' ? d.disponible : undefined };
+}
+
+/** Extrae el detalle si el error es LIMITE_DIARIO_EXCEDIDO; si no, devuelve null. */
+export function detalleLimiteDiario(e: unknown): DetalleLimiteDiario | null {
+  if (!(e instanceof PrestamoApiError) || e.codigo !== 'LIMITE_DIARIO_EXCEDIDO') return null;
+  const d = e.detalle as Partial<DetalleLimiteDiario> | null;
+  if (!d || typeof d.limite !== 'number' || typeof d.colocadoHoy !== 'number' || typeof d.disponible !== 'number' || typeof d.solicitado !== 'number') return null;
+  return { limite: d.limite, colocadoHoy: d.colocadoHoy, disponible: d.disponible, solicitado: d.solicitado };
 }
 
 function leerCookie(nombre: string): string | null {
@@ -311,6 +343,10 @@ export const prestamosApi = {
   /** Capacidad de endeudamiento del cliente (perfil y formulario de solicitud). */
   capacidad(clienteId: string): Promise<CapacidadApi> {
     return llamar<CapacidadApi>(`/capacidad?clienteId=${encodeURIComponent(clienteId)}`, { method: 'GET' });
+  },
+  /** Límite diario de colocación del asesor en sesión (el servidor sabe quién es por la sesión). */
+  limiteDiario(): Promise<LimiteDiarioApi> {
+    return llamar<LimiteDiarioApi>('/limite-diario', { method: 'GET' });
   },
   /** US-06: consulta el préstamo con el cronograma guardado. */
   consultar(id: string): Promise<PrestamoDetalleApi> {
