@@ -73,6 +73,10 @@ public class Cliente {
     @Column(name = "creado_en", insertable = false, updatable = false)
     private OffsetDateTime creadoEn;
 
+    /** ACTIVO | MOROSO | EXTRAJUDICIAL. La BD pone ACTIVO al registrar; solo EstadoClienteServicio lo actualiza. */
+    @Column(name = "estado", insertable = false, updatable = false)
+    private String estado;
+
     // Constructor requerido por JPA
     protected Cliente() {
     }

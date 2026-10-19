@@ -40,3 +40,5 @@ create table if not exists public.cuotas (
     estado varchar(20) not null default 'PENDIENTE',
     primary key (prestamo_id, numero)
 );
+-- clientes.estado (ACTIVO | MOROSO | EXTRAJUDICIAL): el registro de préstamos lo recalcula y lo guarda.
+alter table public.clientes add column if not exists estado text not null default 'ACTIVO';

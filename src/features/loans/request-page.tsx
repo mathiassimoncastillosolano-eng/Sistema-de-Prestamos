@@ -26,7 +26,8 @@ import { money } from '@/lib/format';
 import { DUR, EASE } from '@/lib/motion';
 import { cn, normalizar } from '@/lib/utils';
 import { codigoPrestamo } from './loan-utils';
-import { listarClientes, type ClienteListado } from '@/services/clientes-api';
+import { StatusBadge } from '@/components/data-display/status-badge';
+import { listarClientes, puedeSolicitarPrestamo, type ClienteListado } from '@/services/clientes-api';
 import { detalleLimite, prestamosApi, PrestamoApiError, type CondicionesApi } from '@/services/prestamos-api';
 import { CapacidadCliente } from './capacidad-cliente';
 import { ClienteCard } from './client-card';
@@ -138,14 +139,17 @@ export default function RequestPage() {
   /* /solicitud/:clienteId → preselecciona ese cliente y salta a las condiciones. */
   useEffect(() => {
     if (preseleccionado.current || !param || clientes.length === 0) return;
-    if (clientes.some((c) => c.id === param)) {
+    const elegido = clientes.find((c) => c.id === param);
+    if (elegido) {
       preseleccionado.current = true;
       setValue('clienteId', param, { shouldValidate: true });
-      setPaso(2);
+      // Un cliente MOROSO o EXTRAJUDICIAL se queda en el paso 1, con el aviso de que no puede solicitar.
+      if (puedeSolicitarPrestamo(elegido.estado)) setPaso(2);
     }
   }, [clientes, param, setValue]);
 
   const cliente = clientes.find((c) => c.id === valores.clienteId) ?? null;
+  const clienteBloqueado = !!cliente && !puedeSolicitarPrestamo(cliente.estado);
   const { capacidad, cargando: cargandoCapacidad, error: errorCapacidad, recargar: recargarCapacidad } = useCapacidad(cliente?.id);
   const disponible = capacidad?.disponible ?? null;
   const sinCapacidad = !!cond && disponible !== null && disponible < cond.capitalMinimo;
@@ -181,12 +185,13 @@ export default function RequestPage() {
   };
 
   const siguiente = async () => {
-    if (paso === 1) { if (await trigger('clienteId')) setPaso(2); return; }
+    if (paso === 1) { if (!clienteBloqueado && await trigger('clienteId')) setPaso(2); return; }
     if (paso === 2) { if (await trigger(['capital', 'plazo', 'observaciones'])) { setErrorServidor(null); setPaso(3); } }
   };
 
   const enviar = async () => {
     if (enviando.current) return; // evita envíos duplicados
+    if (clienteBloqueado) { setConfirmar(false); setPaso(1); return; }
     if (!simVigente || !sim || !capacidad || !esquema.safeParse(valores).success) { setConfirmar(false); if (!condicionesValidas) { setPaso(2); void trigger(); } return; }
     enviando.current = true;
     setGuardando(true);
@@ -227,8 +232,8 @@ export default function RequestPage() {
       <div className="flex flex-col-reverse gap-2 sm:flex-row">
         {paso > 1 && <Button onClick={() => setPaso(paso - 1)}>Atrás</Button>}
         {paso < 3
-          ? <Button variant="primary" onClick={siguiente} disabled={(paso === 1 && !valores.clienteId) || (paso === 2 && !simVigente)}>Continuar</Button>
-          : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || guardando}><Send className="size-4" />Registrar préstamo</Button>}
+          ? <Button variant="primary" onClick={siguiente} disabled={(paso === 1 && (!valores.clienteId || clienteBloqueado)) || (paso === 2 && (!simVigente || clienteBloqueado))}>Continuar</Button>
+          : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || clienteBloqueado || guardando}><Send className="size-4" />Registrar préstamo</Button>}
       </div>
     </div>
   );
@@ -276,6 +281,7 @@ export default function RequestPage() {
                                 <span className="num block truncate text-xs text-ink-muted">{c.tipoDocumento} {c.numeroDocumento}</span>
                               </span>
                               {c.telefono && <span className="num hidden shrink-0 text-sm text-ink-muted sm:block">{c.telefono}</span>}
+                              {!puedeSolicitarPrestamo(c.estado) && <StatusBadge estado={c.estado} className="shrink-0" />}
                               {sel && <Check className="size-5 shrink-0 text-teal-ink" aria-hidden />}
                             </button>
                           );
@@ -283,7 +289,12 @@ export default function RequestPage() {
                       </div>
                     )}
                     {errors.clienteId && <p role="alert" className="mt-3 text-sm font-medium text-danger-ink">{errors.clienteId.message}</p>}
-                    {cliente && (
+                    {cliente && clienteBloqueado && (
+                      <p role="alert" className="mt-4 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
+                        <b className="font-semibold">{cliente.nombre}</b> está en estado <b className="font-semibold">{cliente.estado}</b>: tiene cuotas vencidas sin pagar y no puede solicitar nuevos préstamos.
+                      </p>
+                    )}
+                    {cliente && !clienteBloqueado && (
                       <p className="mt-4 rounded-control bg-success-soft p-3 text-sm text-success-ink">
                         Cliente seleccionado: <b className="font-semibold">{cliente.nombre}</b>. {capacidad ? <>Capacidad disponible: <b className="num font-semibold">{money(capacidad.disponible)}</b></> : 'Su capacidad de endeudamiento se consulta en el siguiente paso'}, considerando sus préstamos en toda la empresa.
                       </p>
@@ -359,7 +370,7 @@ export default function RequestPage() {
 
                     {errorServidor && (
                       <div role="alert" className="mt-4 rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
-                        <p className="font-medium">{errorServidor.codigo === 'LIMITE_EXCEDIDO' ? 'Se supera el límite de endeudamiento' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Las condiciones cambiaron' : 'No se pudo registrar el préstamo'}</p>
+                        <p className="font-medium">{errorServidor.codigo === 'LIMITE_EXCEDIDO' ? 'Se supera el límite de endeudamiento' : errorServidor.codigo === 'CONDICIONES_DESACTUALIZADAS' ? 'Las condiciones cambiaron' : errorServidor.codigo === 'CLIENTE_NO_APTO' ? 'El cliente no puede solicitar nuevos préstamos' : 'No se pudo registrar el préstamo'}</p>
                         {limite ? (
                           <dl className="num mt-2 grid max-w-xs grid-cols-[1fr_auto] gap-x-4 gap-y-1">
                             <dt>Acumulado actual</dt><dd className="text-right font-semibold">{money(limite.acumulado)}</dd>

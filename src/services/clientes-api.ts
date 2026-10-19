@@ -1,6 +1,12 @@
 
 import type { TipoCliente } from '@/types';
 
+/** Estado del cliente (clientes.estado). Lo calcula el servidor con sus cuotas; solo ACTIVO puede pedir préstamos. */
+export type EstadoClienteApi = 'ACTIVO' | 'MOROSO' | 'EXTRAJUDICIAL';
+
+/** Un cliente MOROSO o EXTRAJUDICIAL no puede solicitar préstamos nuevos (el servidor también lo rechaza). */
+export const puedeSolicitarPrestamo = (estado: EstadoClienteApi) => estado === 'ACTIVO';
+
 /** Fila que devuelve GET /api/clientes. */
 export interface ClienteListado {
   id: string;
@@ -10,6 +16,7 @@ export interface ClienteListado {
   nombre: string;
   telefono: string | null;
   correo: string | null;
+  estado: EstadoClienteApi;
 }
 
 /** Ficha que devuelve GET /api/clientes/{id}. */
