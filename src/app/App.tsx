@@ -8,7 +8,7 @@ import LoginPage from '@/features/auth/login-page';
 import { PantallaCarga, PantallaErrorSesion, PantallaRolNoReconocido } from '@/features/auth/session-screens';
 import NotFoundPage from '@/features/not-found';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
-import { RUTA_INICIO, type Modulo } from '@/lib/permissions';
+import { rutaInicio, type Modulo } from '@/lib/permissions';
 import { ThemeProvider } from '@/hooks/use-theme';
 
 /* Carga diferida por pantalla: el dashboard (gráficos) no pesa en el resto de rutas.
@@ -20,12 +20,18 @@ const RequestPage = lazy(() => import('@/features/loans/request-page'));
 const LoansPage = lazy(() => import('@/features/loans/loans-page'));
 const LoanDetailPage = lazy(() => import('@/features/loans/loan-detail-page'));
 
-/** Guard de ruta: decide por URL (no por el menú). Sin permiso redirige al dashboard antes de montar el módulo. */
+/** Guard de ruta: decide por URL (no por el menú). Sin permiso redirige a la pantalla de inicio del rol. */
 function Protegida({ modulo }: { modulo: Modulo }) {
-  const { puede } = useAuth();
+  const { puede, usuario } = useAuth();
   const permitido = puede(modulo);
   useEffect(() => { if (!permitido) toast.info('Tu rol no tiene acceso a ese módulo.'); }, [permitido]);
-  return permitido ? <Outlet /> : <Navigate to={RUTA_INICIO} replace />;
+  return permitido ? <Outlet /> : <Navigate to={rutaInicio(usuario?.rol)} replace />;
+}
+
+/** «/» es el dashboard de la gerencia; el asesor no tiene dashboard y entra directo a Clientes. */
+function Inicio() {
+  const { puede } = useAuth();
+  return puede('dashboard') ? <DashboardPage /> : <Navigate to="/clientes" replace />;
 }
 
 function Rutas() {
@@ -39,9 +45,7 @@ function Rutas() {
   return (
     <Routes>
       <Route element={<AppShell />}>
-        <Route element={<Protegida modulo="dashboard" />}>
-          <Route index element={<DashboardPage />} />
-        </Route>
+        <Route index element={<Inicio />} />
         <Route element={<Protegida modulo="clientes" />}>
           <Route path="clientes" element={<ClientsPage />} />
           <Route path="clientes/:id" element={<ClientDetailPage />} />

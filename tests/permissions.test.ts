@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { esRolValido, moduloDeRuta, puedeAccederARuta, puedeAccederAModulo, type Modulo } from '@/lib/permissions';
+import { esRolValido, moduloDeRuta, puedeAccederARuta, puedeAccederAModulo, rutaInicio, type Modulo } from '@/lib/permissions';
 import { gruposPara } from '@/components/layout/nav';
 
 const MODULOS: Modulo[] = ['dashboard', 'clientes', 'solicitud', 'prestamos'];
 
 describe('permisos por rol', () => {
-  it('asesor accede a los cuatro módulos', () => {
-    MODULOS.forEach((m) => expect(puedeAccederAModulo('asesor', m)).toBe(true));
+  it('asesor accede a clientes, solicitud y préstamos, pero no al dashboard', () => {
+    (['clientes', 'solicitud', 'prestamos'] as Modulo[]).forEach((m) => expect(puedeAccederAModulo('asesor', m)).toBe(true));
+    expect(puedeAccederAModulo('asesor', 'dashboard')).toBe(false);
+  });
+  it('cada rol entra por su pantalla de inicio', () => {
+    expect(rutaInicio('gerencia')).toBe('/');
+    expect(rutaInicio('asesor')).toBe('/clientes');
   });
   it('gerencia solo accede al dashboard', () => {
     expect(puedeAccederAModulo('gerencia', 'dashboard')).toBe(true);
@@ -30,14 +35,15 @@ describe('permisos por rol', () => {
       expect(puedeAccederARuta('asesor', ruta)).toBe(true);
     }
     expect(puedeAccederARuta('gerencia', '/')).toBe(true);
+    expect(puedeAccederARuta('asesor', '/')).toBe(false);
     expect(puedeAccederARuta('auditor', '/')).toBe(false);
   });
 });
 
 describe('menú lateral', () => {
   const etiquetas = (rol: string) => gruposPara((m) => puedeAccederAModulo(rol, m)).flatMap((g) => g.items.map((i) => i.label));
-  it('asesor: Resumen, Clientes y Cartera completos', () => {
-    expect(etiquetas('asesor')).toEqual(['Dashboard', 'Clientes', 'Nueva solicitud', 'Préstamos']);
+  it('asesor: Clientes y Cartera, sin Dashboard', () => {
+    expect(etiquetas('asesor')).toEqual(['Clientes', 'Nueva solicitud', 'Préstamos']);
   });
   it('gerencia: solo Dashboard y sin grupos vacíos', () => {
     expect(etiquetas('gerencia')).toEqual(['Dashboard']);

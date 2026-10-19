@@ -1,19 +1,15 @@
 import { Menu } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useAuth, useUsuario } from '@/hooks/use-auth';
+import { useUsuario } from '@/hooks/use-auth';
 import { AgencyCard } from './agency-card';
 import { tituloDeRuta } from './nav';
-import { Notifications } from './notifications';
 import { ThemeToggle } from './theme-toggle';
 import { UserMenu } from './user-menu';
 
 export function Header({ onMenu }: { onMenu: () => void }) {
   const { pathname } = useLocation();
   const usuario = useUsuario();
-  const { puede } = useAuth();
-  // Los avisos recorren clientes y préstamos: solo se ofrecen a quien puede abrir esos módulos.
-  const veNegocio = puede('clientes') || puede('prestamos');
   return (
     <header className="no-print sticky top-0 z-30 border-b border-line bg-canvas/85 pt-[env(safe-area-inset-top)] backdrop-blur-md">
       <div className="mx-auto flex h-16 w-full max-w-[1400px] items-center gap-2 px-3 sm:gap-3 sm:px-6 lg:px-8">
@@ -24,7 +20,6 @@ export function Header({ onMenu }: { onMenu: () => void }) {
           <span className="truncate">{tituloDeRuta(pathname)}</span>
         </p>
         {usuario.agencia && <AgencyCard agencia={usuario.agencia} className="hidden md:inline-flex" />}
-        {veNegocio && <Notifications />}
         <ThemeToggle />
         <UserMenu />
       </div>

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { alcancesPara, calcularDashboard, resumenPorAgencia } from '@/lib/analytics';
 import { AGENCIAS, CFG } from '@/lib/config';
 import { addDays } from '@/lib/dates';
-import { construirSemilla } from '@/mocks/seed';
+import { construirSemilla } from './helpers/semilla';
 import { aCartera, type CarteraApi } from '@/services/dashboard-api';
 import { CARTERA } from './helpers/fake-server';
 
