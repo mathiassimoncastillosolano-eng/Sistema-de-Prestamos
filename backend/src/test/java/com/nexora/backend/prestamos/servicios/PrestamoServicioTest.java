@@ -102,7 +102,7 @@ class PrestamoServicioTest {
         assertEquals("PEN", r.moneda());
         assertEquals(0, new BigDecimal("0.30").compareTo(r.tea()));
         assertEquals(LocalDate.of(2026, 10, 17), r.fechaDesembolso());
-        assertEquals(LocalDate.of(2026, 11, 17), r.fechaPrimerVencimiento());
+        assertEquals(LocalDate.of(2026, 11, 16), r.fechaPrimerVencimiento());
         assertEquals(new BigDecimal("1149.43"), r.totalContractual());
         assertEquals(1001L, r.numero());
         verify(prestamos).save(any(Prestamo.class));
@@ -223,10 +223,10 @@ class PrestamoServicioTest {
     // ------------------------------------------------------------ condiciones y simulación
 
     @Test
-    void condiciones_usan_la_fecha_de_lima_y_la_primera_cuota_un_mes_calendario_despues() {
+    void condiciones_usan_la_fecha_de_lima_y_la_primera_cuota_30_dias_despues() {
         var c = servicio.condiciones();
         assertEquals(LocalDate.of(2026, 10, 17), c.fechaDesembolso()); // no el 18 de UTC
-        assertEquals(LocalDate.of(2026, 11, 17), c.fechaPrimerVencimiento());
+        assertEquals(LocalDate.of(2026, 11, 16), c.fechaPrimerVencimiento());
         assertEquals("America/Lima", c.zonaHoraria());
         assertEquals(0, new BigDecimal("1000.00").compareTo(c.capitalMinimo()));
         assertEquals(60, c.plazoMaximoMeses());

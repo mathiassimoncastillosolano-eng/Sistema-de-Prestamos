@@ -103,7 +103,7 @@ public class PrestamoServicio {
         LocalDate hoy = LocalDate.now(reloj);
         return new CondicionesRespuesta(ReglasPrestamo.MONEDA, ReglasPrestamo.TEA, ReglasPrestamo.CAPITAL_MINIMO,
                 ReglasPrestamo.LIMITE_ENDEUDAMIENTO, ReglasPrestamo.PLAZO_MINIMO_MESES,
-                ReglasPrestamo.PLAZO_MAXIMO_MESES, reloj.getZone().getId(), hoy, hoy.plusMonths(1));
+                ReglasPrestamo.PLAZO_MAXIMO_MESES, reloj.getZone().getId(), hoy, hoy.plusDays(30));
     }
 
     /** Calcula el cronograma que se guardaría hoy. No lee ni escribe en la base de datos. */
