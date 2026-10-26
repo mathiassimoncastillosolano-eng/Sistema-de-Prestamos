@@ -4,7 +4,9 @@ import { StatusBadge } from '@/components/data-display/status-badge';
 import { fecha } from '@/lib/dates';
 import { money } from '@/lib/format';
 import type { PrestamoListadoApi } from '@/services/prestamos-api';
+import { MenuAccionesPrestamo } from './loan-actions';
 import { ESTADOS_PRESTAMO, codigoPrestamo } from './loan-utils';
+import type { useAccionesPrestamo } from './use-contrato';
 
 const sinDato = <span className="text-ink-subtle" aria-label="No aplica">—</span>;
 const plural = (n: number) => `${n} ${n === 1 ? 'cuota vencida' : 'cuotas vencidas'}`;
@@ -18,7 +20,7 @@ export const textoBusquedaPrestamo = (p: PrestamoListadoApi) =>
  * código es además un enlace real. No hay icono de ojo. Código y fecha, cliente y documento, agencia y asesor comparten celda
  * para que la tabla quepa sin scroll horizontal; el total pendiente aparece desde pantallas anchas.
  */
-export function columnasPrestamo(): ColumnDef<PrestamoListadoApi>[] {
+export function columnasPrestamo(acciones: ReturnType<typeof useAccionesPrestamo>): ColumnDef<PrestamoListadoApi>[] {
   return [
     {
       id: 'codigo', header: 'Préstamo', accessorFn: (p) => p.numero, meta: { className: 'w-[7.5rem]' },
@@ -66,13 +68,18 @@ export function columnasPrestamo(): ColumnDef<PrestamoListadoApi>[] {
           {p.cuotasVencidas > 0 && <span className="num text-xs text-ink-muted">{plural(p.cuotasVencidas)}</span>}
         </div>
       )
+    },
+    {
+      id: 'acciones', header: () => <span className="sr-only">Acciones</span>, enableSorting: false, meta: { className: 'w-14' },
+      cell: ({ row: { original: p } }) => <MenuAccionesPrestamo id={p.id} numero={p.numero} acciones={acciones} />
     }
   ];
 }
 
 /** Tarjeta móvil: toda la tarjeta es un enlace al detalle. */
-export function TarjetaPrestamo({ p }: { p: PrestamoListadoApi }) {
+export function TarjetaPrestamo({ p, acciones }: { p: PrestamoListadoApi; acciones: ReturnType<typeof useAccionesPrestamo> }) {
   return (
+    <div className="relative">
     <Link to={`/prestamos/${p.id}`} className="block space-y-2.5 p-4 transition-colors active:bg-surface-2">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -90,5 +97,7 @@ export function TarjetaPrestamo({ p }: { p: PrestamoListadoApi }) {
       </dl>
       {p.cuotasVencidas > 0 && <p className="num text-xs font-medium text-danger-ink">{plural(p.cuotasVencidas)}</p>}
     </Link>
+    <div className="absolute bottom-2 right-2"><MenuAccionesPrestamo id={p.id} numero={p.numero} acciones={acciones} /></div>
+    </div>
   );
 }

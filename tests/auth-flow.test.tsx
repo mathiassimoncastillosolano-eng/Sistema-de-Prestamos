@@ -30,9 +30,9 @@ describe('A · login correcto como asesor', () => {
     montar();
     await iniciarSesion(ASESORA);
 
-    await waitFor(() => expect(etiquetasMenu()).toEqual(['Clientes', 'Nueva solicitud', 'Préstamos']));
-    // El asesor no tiene dashboard: entra directo a Clientes.
-    await waitFor(() => expect(window.location.hash).toBe('#/clientes'));
+    await waitFor(() => expect(etiquetasMenu()).toEqual(['Préstamos', 'Clientes', 'Nueva solicitud']));
+    // El asesor no tiene dashboard: entra directo a Préstamos.
+    await waitFor(() => expect(window.location.hash).toBe('#/prestamos'));
     expect(screen.getAllByText('Valeria Quintana').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /Agencia Sur Prueba/ })).toBeInTheDocument();
     expect(screen.getAllByText('Asesor de préstamos').length).toBeGreaterThan(0);
@@ -56,6 +56,9 @@ describe('A · login correcto como asesor', () => {
   it('abre la ficha con el UUID devuelto por el registro real', async () => {
     const servidor = montar();
     const usuario = await iniciarSesion(ASESORA);
+    // Tras el login el asesor aterriza en Préstamos; el alta de clientes está en Clientes.
+    await waitFor(() => expect(window.location.hash).toBe('#/prestamos'));
+    window.location.hash = '#/clientes';
     await usuario.click(await screen.findByRole('button', { name: 'Registrar cliente' }));
 
     const formulario = screen.getByRole('dialog', { name: 'Registrar cliente' });
@@ -160,7 +163,7 @@ describe('B · login correcto como gerencia', () => {
     window.location.hash = '#/';
     const srv = crearServidor([ASESORA]); srv.instalar(); srv.abrirSesion(ASESORA);
     render(<App />);
-    await waitFor(() => expect(window.location.hash).toBe('#/clientes'));
+    await waitFor(() => expect(window.location.hash).toBe('#/prestamos'));
     expect(screen.queryByRole('combobox', { name: 'Alcance de los indicadores' })).not.toBeInTheDocument();
     expect(srv.llamadas.some((l) => l.ruta.startsWith('/api/dashboard'))).toBe(false);
   });

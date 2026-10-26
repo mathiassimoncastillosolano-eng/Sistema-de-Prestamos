@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AnimatePresence, motion } from 'motion/react';
-import { CalendarClock, CalendarDays, Check, Percent, Search, Send, TriangleAlert, UserRound } from 'lucide-react';
+import { CalendarClock, CalendarDays, Check, Download, FileText, Percent, Search, Send, TriangleAlert, UserRound } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -33,6 +33,9 @@ import { detalleLimite, detalleLimiteDiario, prestamosApi, PrestamoApiError, typ
 import { CapacidadCliente } from './capacidad-cliente';
 import { LimiteDiario } from './limite-diario';
 import { ClienteCard } from './client-card';
+import { ContractViewerModal } from './contract-viewer';
+import { useContratoBorrador } from './use-contrato-borrador';
+import { useDescargaContrato } from './use-contrato';
 import { BotonPdfSimulacion, ResumenFinanciero, ScheduleReviewModal } from './schedule-review';
 import { aFilas } from './loan-utils';
 import { ScheduleTable } from './schedule-table';
@@ -194,6 +197,17 @@ export default function RequestPage() {
   const extras = { asesor: usuario.nombre, agencia: usuario.agencia?.nombre };
   const filasSim = useMemo(() => (sim ? aFilas(sim.cuotas) : []), [sim]);
 
+  // Borrador del contrato: solo en la confirmación y solo con el cronograma vigente; se regenera si cambia algo revisado.
+  const solicitudContrato = paso === 3 && simVigente && sim && valores.clienteId && !clienteBloqueado
+    ? { clienteId: valores.clienteId, capital: capitalNum, plazoMeses: plazoNum, observaciones: valores.observaciones.trim() || undefined, fechaDesembolsoEsperada: sim.fechaDesembolso, totalContractualEsperado: sim.totalContractual }
+    : null;
+  const borrador = useContratoBorrador(solicitudContrato);
+  const borradorListo = !!borrador.contrato;
+  // Si el día cambió, el servidor rechaza el borrador: se vuelve a calcular el cronograma vigente para revisarlo.
+  useEffect(() => { if (borrador.error?.codigo === 'CONDICIONES_DESACTUALIZADAS') recalcular(); }, [borrador.error, recalcular]);
+  const [verContrato, setVerContrato] = useState(false);
+  const { generando: descargandoContrato, descargar: descargarContrato } = useDescargaContrato();
+
   const elegir = (id: string) => {
     setErrorServidor(null);
     setValue('clienteId', id, { shouldValidate: true, shouldDirty: true });
@@ -209,7 +223,7 @@ export default function RequestPage() {
     if (enviando.current) return; // evita envíos duplicados
     if (clienteBloqueado) { setConfirmar(false); setPaso(1); return; }
     if (asesorSinCupo) { setConfirmar(false); return; }
-    if (!simVigente || !sim || !capacidad || !esquema.safeParse(valores).success) { setConfirmar(false); if (!condicionesValidas) { setPaso(2); void trigger(); } return; }
+    if (!simVigente || !sim || !capacidad || !borradorListo || !esquema.safeParse(valores).success) { setConfirmar(false); if (!condicionesValidas) { setPaso(2); void trigger(); } return; }
     enviando.current = true;
     setGuardando(true);
     setErrorServidor(null);
@@ -252,7 +266,7 @@ export default function RequestPage() {
         {paso > 1 && <Button onClick={() => setPaso(paso - 1)}>Atrás</Button>}
         {paso < 3
           ? <Button variant="primary" onClick={siguiente} disabled={asesorSinCupo || (paso === 1 && (!valores.clienteId || clienteBloqueado)) || (paso === 2 && (!simVigente || clienteBloqueado))}>Continuar</Button>
-          : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !valores.clienteId || clienteBloqueado || asesorSinCupo || guardando}><Send className="size-4" />Registrar préstamo</Button>}
+          : <Button variant="primary" onClick={() => setConfirmar(true)} disabled={!simVigente || !borradorListo || !valores.clienteId || clienteBloqueado || asesorSinCupo || guardando}><Send className="size-4" />Registrar préstamo</Button>}
       </div>
     </div>
   );
@@ -438,6 +452,29 @@ export default function RequestPage() {
                         </CardBody>
                       </Card>
 
+                      {/* Contrato (borrador) */}
+                      {simVigente && sim && (
+                        <Card aria-label="Contrato del préstamo">
+                          <CardHeader title="Contrato del préstamo" as="h3" description="Borrador para revisar antes de registrar. Se actualiza solo si cambian las condiciones; el préstamo no se registra hasta que confirmes." />
+                          <CardBody>
+                            {borrador.cargando && <p role="status" className="text-sm text-ink-muted">Preparando el borrador del contrato…</p>}
+                            {borrador.error && (
+                              <div role="alert" className="rounded-control bg-danger-soft p-3 text-sm text-danger-ink">
+                                <p>{borrador.error.message}</p>
+                                <button type="button" onClick={borrador.reintentar} className="mt-1 font-medium underline">Reintentar</button>
+                              </div>
+                            )}
+                            {borrador.contrato && (
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                <Button onClick={() => setVerContrato(true)}><FileText className="size-4" aria-hidden />Ver contrato</Button>
+                                <Button onClick={() => void descargarContrato(borrador.contrato!)} loading={descargandoContrato}><Download className="size-4" aria-hidden />Descargar borrador PDF</Button>
+                                <p className="text-xs text-ink-muted sm:ml-2">Estado: BORRADOR · sin valor contractual hasta registrar el préstamo.</p>
+                              </div>
+                            )}
+                          </CardBody>
+                        </Card>
+                      )}
+
                       {/* 3 · Resumen financiero */}
                       {simVigente && sim && <ResumenFinanciero sim={sim} />}
 
@@ -482,6 +519,8 @@ export default function RequestPage() {
           </motion.div>
         )}
         </div>
+
+      <ContractViewerModal contrato={verContrato && paso === 3 ? borrador.contrato : null} onClose={() => setVerContrato(false)} />
 
       <ScheduleReviewModal open={verCronograma} onOpenChange={setVerCronograma} sim={simVigente ? sim : null} cliente={cliente} extras={extras} />
 

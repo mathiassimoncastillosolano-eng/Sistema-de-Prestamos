@@ -9,10 +9,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
 import { PrestamoApiError, prestamosApi, type EstadoPrestamoApi, type PrestamoListadoApi } from '@/services/prestamos-api';
+import { VisorContratoPrestamo } from './loan-actions';
 import { TarjetaPrestamo, columnasPrestamo, textoBusquedaPrestamo } from './loan-columns';
 import { ESTADOS_PRESTAMO } from './loan-utils';
+import { useAccionesPrestamo } from './use-contrato';
 
-const columnas = columnasPrestamo();
 type FiltroEstado = 'todos' | EstadoPrestamoApi;
 
 /**
@@ -21,6 +22,8 @@ type FiltroEstado = 'todos' | EstadoPrestamoApi;
  */
 export default function LoansPage() {
   const navigate = useNavigate();
+  const acciones = useAccionesPrestamo();
+  const columnas = useMemo(() => columnasPrestamo(acciones), [acciones.ocupado]); // eslint-disable-line react-hooks/exhaustive-deps
   const [datos, setDatos] = useState<PrestamoListadoApi[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
@@ -67,13 +70,14 @@ export default function LoansPage() {
         ) : (
           <DataTable data={base} columns={columnas} getRowId={(p) => p.id} busqueda={q} filtros={filtros} tamanoPagina={10} cargando={datos === null}
             textoBusqueda={textoBusquedaPrestamo}
-            ordenInicial={[{ id: 'codigo', desc: true }]} alAbrir={(p) => navigate(`/prestamos/${p.id}`)} tarjeta={(p) => <TarjetaPrestamo p={p} />}
+            ordenInicial={[{ id: 'codigo', desc: true }]} alAbrir={(p) => navigate(`/prestamos/${p.id}`)} tarjeta={(p) => <TarjetaPrestamo p={p} acciones={acciones} />}
             etiqueta="Listado de préstamos" unidad="préstamos"
             vacio={hayFiltros
               ? <EmptyState icon={SearchX} title="No hay préstamos con estos filtros" description="Quita algún filtro o cambia la búsqueda." action={<Button onClick={() => { setQ(''); setSolo(false); setEstado('todos'); }}>Limpiar filtros</Button>} />
               : <EmptyState icon={Landmark} title="Aún no hay préstamos" description="Registra el primer préstamo para generar su cronograma." action={<Button variant="primary" onClick={() => navigate('/solicitud')}>Nueva solicitud</Button>} />} />
         )}
       </Card>
+      <VisorContratoPrestamo acciones={acciones} />
     </>
   );
 }

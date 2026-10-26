@@ -47,7 +47,7 @@ export function puedeAccederARuta(rol: unknown, pathname: string): boolean {
   return modulo === null ? esRolValido(rol) : puedeAccederAModulo(rol, modulo);
 }
 
-/** Pantalla de entrada de cada rol: la gerencia ve el dashboard; el asesor empieza en Clientes. */
+/** Pantalla de entrada de cada rol: la gerencia ve el dashboard; el asesor empieza en Préstamos. */
 export function rutaInicio(rol: unknown): string {
-  return puedeAccederAModulo(rol, 'dashboard') ? '/' : '/clientes';
+  return puedeAccederAModulo(rol, 'dashboard') ? '/' : '/prestamos';
 }

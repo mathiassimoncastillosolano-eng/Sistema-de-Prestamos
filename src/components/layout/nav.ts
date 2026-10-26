@@ -7,8 +7,8 @@ export interface NavGroup { titulo: string; items: NavItem[] }
 
 export const NAV_GROUPS: NavGroup[] = [
   { titulo: 'Resumen', items: [{ to: '/', label: 'Dashboard', icon: LayoutDashboard, modulo: 'dashboard', end: true }] },
-  { titulo: 'Clientes', items: [{ to: '/clientes', label: 'Clientes', icon: Users, modulo: 'clientes' }, { to: '/solicitud', label: 'Nueva solicitud', icon: FilePlus2, modulo: 'solicitud' }] },
-  { titulo: 'Cartera', items: [{ to: '/prestamos', label: 'Préstamos', icon: Landmark, modulo: 'prestamos' }] }
+  { titulo: 'Cartera', items: [{ to: '/prestamos', label: 'Préstamos', icon: Landmark, modulo: 'prestamos' }] },
+  { titulo: 'Clientes', items: [{ to: '/clientes', label: 'Clientes', icon: Users, modulo: 'clientes' }, { to: '/solicitud', label: 'Nueva solicitud', icon: FilePlus2, modulo: 'solicitud' }] }
 ];
 
 /** Menú que corresponde al rol: sin permiso no se renderiza (los grupos que quedan vacíos desaparecen). */

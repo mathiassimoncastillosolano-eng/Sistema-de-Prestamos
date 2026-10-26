@@ -124,6 +124,42 @@ Tokens en `src/styles/index.css` (paleta de marca: azul noche `#0B172A`, azul co
 - **Colores:** el turquesa puro `#00BFAE` no alcanza contraste AA como texto sobre blanco; en modo claro el texto turquesa usa `--teal-ink` y los rellenos turquesa llevan texto azul noche (`--on-teal`).
 - **Identificadores técnicos que conservan el nombre anterior a propósito** (cambiarlos rompería sesiones, datos guardados o el despliegue): paquete Java `com.nexora.backend`, cookie `NEXORA_SESION`, propiedades `nexora.seguridad.*`, atributo de sesión `nexora.perfil`, claves de localStorage `nexora-db-v5` / `nx-tema` / `nx-side`, y el nombre del paquete npm `nexora-finance`.
 
+## Deuda consolidada DNI ↔ RUC 10, perfil financiero y contrato (2026-10-25)
+
+### Consolidación del límite de S/ 10,000
+- **Grupo crediticio**: un cliente DNI y todos los clientes `RUC 10` cuyo `dni_titular` es ese DNI (el RUC 10 parte de su `dni_titular`). Un `RUC 20` **no** se consolida con nadie: solo guarda `representante_dni` y un representante no es necesariamente propietario. La definición vive en un único sitio (`GrupoCrediticioSql`).
+- **Cálculo** (misma fórmula de siempre): capital de las cuotas no PAGADA de los préstamos no Cancelados de todo el grupo, cada préstamo una sola vez. Ejemplo: empresa vinculada con S/ 8,000 pendientes → capacidad de la persona S/ 2,000; S/ 3,000 se rechaza y S/ 2,000 se acepta.
+- **Concurrencia**: al registrar, se bloquean las filas de todo el grupo en orden de `id` (`FOR UPDATE`) antes de leer la deuda. Dos registros del mismo grupo se serializan aunque lleguen por el DNI y por el RUC; grupos distintos no se esperan; sin interbloqueos.
+- Sigue pendiente: el estado MOROSO/EXTRAJUDICIAL del cliente se calcula por cliente, no por grupo.
+
+### Perfil financiero (`GET /api/prestamos/perfil-financiero?clienteId=`)
+Deuda consolidada (propia/vinculada), cuotas pendientes/vencidas/pagadas, límite y capacidad disponible, entidades vinculadas y sus préstamos. Los contadores de cuotas y los préstamos de un vinculado de **otra agencia** solo los ve la gerencia; el capital pendiente de cada vinculado sí se informa porque explica el límite del cliente consultado.
+
+### Contrato del préstamo
+- `POST /api/prestamos/contrato-preliminar`: **borrador** (mismas validaciones y mismo cronograma que el registro; no escribe nada). La confirmación lo regenera cuando cambia cualquier condición y no deja registrar sin borrador vigente.
+- Al registrar, el servidor guarda en la **misma transacción** el contrato definitivo en `contratos_prestamo` (versión 1): instantánea JSON + huella SHA-256, solo inserción (triggers), RLS activado. Si falla, no se registra el préstamo.
+- `GET /api/prestamos/{id}/contrato`: gerencia ve todos; el asesor solo los de su agencia. Los préstamos anteriores a esta función responden `CONTRATO_NO_DISPONIBLE`: **no se fabrica un contrato retroactivo**.
+- El PDF se dibuja en el navegador desde la instantánea (nunca se recalcula); no se guardan PDFs ni hay enlaces públicos. Lista/detalle: «Descargar cronograma PDF», «Ver contrato» y «Descargar contrato PDF» son documentos independientes.
+- **Lo que el contrato NO inventa**: mora, penalidades, comisiones, pagos anticipados, garantías, causales de resolución y jurisdicción figuran en un apartado «Aspectos no definidos» para revisión legal. Prevé firma **manuscrita**; no afirma firma electrónica. Datos del prestamista (RUC, domicilio, representante) vienen de `CONTRATO_PRESTAMISTA_*` (ver `backend/.env.example`); sin configurar, se declaran no definidos.
+
+### Navegación
+El menú del asesor empieza por **Préstamos** y esa es su pantalla de entrada tras el login (`rutaInicio`).
+
+### Despliegue (orden)
+1. Revisa con `backend/sql/verificar-esquema.sql` (solo lectura) y haz respaldo.
+2. Ejecuta `backend/sql/2026-10-25-contratos-y-consolidacion.sql` (idempotente, sin cambios destructivos) **antes** de desplegar el backend: sin la tabla, registrar un préstamo falla.
+3. Despliega backend y frontend. 4. Configura `CONTRATO_PRESTAMISTA_*`.
+
+### Discrepancias entre «ESTRUCTURA Y RELACIONES - BD.docx» y el código
+El documento no lista `clientes.estado` (el código la usa), ni índices, triggers o procedimientos; tampoco tiene las posiciones 8 y 12 de `clientes`. No se asumió nada: `verificar-esquema.sql` lo comprueba contra la base real.
+
+### Qué se verificó (2026-10-25)
+- Frontend: `tsc` sin errores, **182 pruebas Vitest pasan** (base: 144), `vite build` correcto.
+- SQL contra PostgreSQL 16 local: migración idempotente, restricciones e inmutabilidad, grupo (DNI/RUC 10/RUC 20), concurrencia y consultas del repositorio de contratos.
+- Dominio Java (`DeudaConsolidada`, `ContratoPrestamo`, cálculo): 11 pruebas ejecutadas con un ejecutor mínimo de JUnit.
+- **NO ejecutado**: el backend Spring completo, JUnit/Mockito (`PrestamoServicioTest` actualizado y nuevas pruebas de servicio) y `RegistroConcurrentePostgresTest`: no hubo acceso a Maven Central. Ejecuta `mvn test` (y la prueba de concurrencia con `PRUEBA_PG_URL`) antes de desplegar. Hubo además una revisión independiente del código Java sin compilar; sus hallazgos se corrigieron.
+- Observación: `GET /api/prestamos/{id}` (detalle) no comprueba la agencia del asesor; el contrato sí.
+
 ## Qué se verificó (y qué no)
 
 Verificado: `tsc` estricto sin errores; `vite build` correcto; **82 pruebas Vitest** pasan; PDF de 1, 12 y 60 cuotas generados y revisados visualmente (60 cuotas = 3 páginas); descarga real del PDF en Chromium; recorrido manual automatizado con Playwright/Chromium (escritorio 1440, tableta 820, móvil 390) de: login, alta de cliente, solicitudes con bloqueo por límite/mínimo/plazo, pago, referencia duplicada, cancelación anticipada, búsqueda por teclado, ordenación/paginación/filtros, tema persistente, restaurar datos, persistencia al recargar, drawer móvil; 0 errores de consola y 0 desbordes horizontales en las 7 pantallas × 3 tamaños.

@@ -25,7 +25,8 @@ import { money } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { contactoSchema, type ContactoForm } from '@/lib/validation';
 import { clientesApi, consultarCliente, puedeSolicitarPrestamo, type ClienteDetalle } from '@/services/clientes-api';
-import { prestamosApi, type PrestamoResumenApi } from '@/services/prestamos-api';
+import { prestamosApi, type IntegrantePerfilApi, type PrestamoResumenApi } from '@/services/prestamos-api';
+import { usePerfilFinanciero } from '@/hooks/use-perfil-financiero';
 import { useCapacidad } from '@/hooks/use-capacidad';
 import type { EstadoPrestamo } from '@/types';
 
@@ -99,6 +100,36 @@ function Indicador({ label, children, pie }: { label: string; children: ReactNod
       <p className="num mt-1 text-2xl font-semibold tracking-tight text-ink">{children}</p>
       <div className="mt-auto pt-4 text-xs leading-relaxed text-ink-muted">{pie}</div>
     </div>
+  );
+}
+
+const ETIQUETA_RELACION: Record<string, string> = { TITULAR: 'Titular (persona natural)', NEGOCIO_DEL_TITULAR: 'Negocio del titular', SIN_VINCULO: 'Sin vínculo' };
+
+/** Personas y negocios cuya deuda se suma con la de este cliente (DNI ↔ RUC 10 por dni_titular). */
+function Vinculados({ integrantes }: { integrantes: IntegrantePerfilApi[] }) {
+  const otros = integrantes.filter((i) => !i.consultado);
+  return (
+    <Card aria-label="Entidades vinculadas">
+      <CardHeader as="h2" title="Entidades vinculadas" description="Su deuda se suma a la de este cliente para el límite de endeudamiento (persona natural y sus negocios con RUC 10)." />
+      {otros.length === 0
+        ? <p className="px-5 pb-5 text-sm text-ink-muted">Este cliente no tiene personas ni negocios vinculados.</p>
+        : (
+          <ul className="divide-y divide-line border-t border-line">
+            {otros.map((i) => (
+              <li key={i.clienteId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-5 py-3">
+                <div className="min-w-0">
+                  <Link to={`/clientes/${i.clienteId}`} className="font-medium text-teal-ink hover:underline">{i.nombre}</Link>
+                  <p className="num text-xs text-ink-muted">{i.tipoDocumento} {i.numeroDocumento} · {ETIQUETA_RELACION[i.relacion] ?? i.relacion}</p>
+                </div>
+                <div className="text-right">
+                  <p className="num text-sm font-semibold text-ink">{money(i.capitalPendiente)}</p>
+                  <p className="text-xs text-ink-muted">capital pendiente</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+    </Card>
   );
 }
 
@@ -199,6 +230,7 @@ export default function ClientDetailPage() {
   // Capital pendiente, importe pendiente y capacidad disponible los calcula el servidor: es la misma cifra que usa
   // la solicitud de préstamo y la que se valida al registrar.
   const { capacidad, error: errorCapacidad } = useCapacidad(id);
+  const { perfil, error: errorPerfil } = usePerfilFinanciero(id);
 
   const resumen = useMemo(() => {
     const suma = (f: (p: PrestamoResumenApi) => number) => r2(prestamos.reduce((a, p) => a + f(p), 0));
@@ -240,6 +272,17 @@ export default function ClientDetailPage() {
   const { deuda, pendiente, totalContractual, usoCubierto, disponible, limite, desembolsado, ultimoDesembolso, conSaldo } = resumen;
   // MOROSO y EXTRAJUDICIAL no pueden pedir préstamos nuevos; el servidor también lo rechaza al registrar.
   const puedeSolicitar = puedeSolicitarPrestamo(cliente.estado);
+  // Con perfil consolidado, la tabla incluye los préstamos de los vinculados que el usuario puede ver, con su titular.
+  const filasPrestamos: PrestamoResumenApi[] = perfil ? perfil.prestamos : prestamos;
+  const columnasTabla = perfil?.consolidada
+    ? [{
+        id: 'titular', header: 'Cliente', accessorFn: (p: PrestamoResumenApi) => (p as { clienteNombre?: string }).clienteNombre ?? '',
+        cell: ({ row: { original: p } }: { row: { original: PrestamoResumenApi } }) => {
+          const c = p as PrestamoResumenApi & { clienteNombre?: string; clienteTipoDocumento?: string; clienteNumeroDocumento?: string };
+          return <div className="min-w-[8rem]"><p className="truncate text-ink">{c.clienteNombre}</p><p className="num truncate text-xs text-ink-muted">{c.clienteTipoDocumento} {c.clienteNumeroDocumento}</p></div>;
+        }
+      } as ColumnDef<PrestamoResumenApi>, ...columnas]
+    : columnas;
   const nuevaSolicitud = () => { if (puedeSolicitar) navigate(`/solicitud/${cliente.id}`); };
 
   return (
@@ -278,6 +321,27 @@ export default function ClientDetailPage() {
 
         {/* Resumen financiero y actividad crediticia */}
         <div className="flex min-w-0 flex-col gap-5">
+          {perfil ? (
+            <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-2 xl:grid-cols-4">
+              <Indicador label="Deuda consolidada"
+                pie={perfil.consolidada
+                  ? <>Propia {money(perfil.deudaPropia)} · Vinculada {money(perfil.deudaVinculada)}<br />Suma de {perfil.integrantes.length} clientes vinculados</>
+                  : 'Capital pendiente · base del límite de endeudamiento'}>
+                <AnimatedNumber value={perfil.capitalPendiente} format={money} duration={0.5} />
+              </Indicador>
+              <Indicador label="Cuotas pendientes"
+                pie={<>{perfil.cuotasVencidas} vencidas · {perfil.cuotasPagadas} pagadas<br />Importe pendiente (capital + intereses): <span className="num font-medium text-ink">{money(perfil.importePendiente)}</span></>}>
+                <AnimatedNumber value={perfil.cuotasPendientes + perfil.cuotasVencidas} format={(n) => String(Math.round(n))} duration={0.5} />
+              </Indicador>
+              <Indicador label="Límite de endeudamiento"
+                pie={<><LimitMeter deuda={perfil.capitalPendiente} showText={false} label="Uso del límite" /><p className="mt-1.5">{Math.round((perfil.capitalPendiente / perfil.limite) * 100)} % utilizado (toda la empresa{perfil.consolidada ? ' y vinculados' : ''})</p></>}>
+                <AnimatedNumber value={perfil.limite} format={money} duration={0.5} />
+              </Indicador>
+              <Indicador label="Capacidad disponible" pie="Máximo que puede solicitar ahora: límite − deuda consolidada">
+                <AnimatedNumber value={perfil.disponible} format={money} duration={0.5} />
+              </Indicador>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 gap-px overflow-hidden rounded-card border border-line bg-line shadow-card sm:grid-cols-3">
             <Indicador label="Capital pendiente" pie="Base del límite de endeudamiento">
               <AnimatedNumber value={deuda} format={money} duration={0.5} />
@@ -293,6 +357,9 @@ export default function ClientDetailPage() {
               <AnimatedNumber value={disponible} format={money} duration={0.5} />
             </Indicador>
           </div>
+          )}
+          {errorPerfil && <p role="alert" className="-mt-2 text-sm text-danger-ink">No se pudo consultar el perfil financiero consolidado: {errorPerfil}</p>}
+          {perfil && <Vinculados integrantes={perfil.integrantes} />}
           {errorCapacidad && <p role="alert" className="-mt-2 text-sm text-danger-ink">No se pudo consultar la capacidad de endeudamiento: {errorCapacidad}</p>}
 
           <Card>
@@ -308,7 +375,7 @@ export default function ClientDetailPage() {
       </div>
 
       <Card className="mt-5 overflow-hidden">
-        <CardHeader as="h2" title={`Préstamos · ${prestamos.length}`} description="Abre un préstamo para ver su cronograma completo" className="pb-4" />
+        <CardHeader as="h2" title={`Préstamos · ${filasPrestamos.length}`} description="Abre un préstamo para ver su cronograma completo" className="pb-4" />
         <div className="border-t border-line">
           {errorPrestamos ? (
             <div className="space-y-3 p-5" role="alert">
@@ -316,7 +383,7 @@ export default function ClientDetailPage() {
               <Button onClick={() => setIntentoPrestamos((valor) => valor + 1)}>Reintentar</Button>
             </div>
           ) : (
-            <DataTable data={prestamos} columns={columnas} getRowId={(p) => p.id} textoBusqueda={() => ''} ordenInicial={[{ id: 'numero', desc: true }]}
+            <DataTable data={filasPrestamos} columns={columnasTabla} getRowId={(p) => p.id} textoBusqueda={() => ''} ordenInicial={[{ id: 'numero', desc: true }]}
               cargando={cargandoPrestamos}
               alAbrir={(p) => navigate(`/prestamos/${p.id}`)} tarjeta={(p) => <TarjetaPrestamo p={p} />}
               etiqueta="Préstamos del cliente" unidad="préstamos"

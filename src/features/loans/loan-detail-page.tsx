@@ -16,9 +16,11 @@ import { fecha } from '@/lib/dates';
 import { money } from '@/lib/format';
 import { PrestamoApiError, prestamosApi, type PrestamoDetalleApi } from '@/services/prestamos-api';
 import { CuotaDialog } from './cuota-dialog';
+import { BotonesContrato, VisorContratoPrestamo } from './loan-actions';
 import { aFilas, codigoPrestamo } from './loan-utils';
 import { datosPdfRegistrado } from './pdf-datos';
 import { ScheduleTable } from './schedule-table';
+import { useAccionesPrestamo } from './use-contrato';
 import { useDescargaPdf } from './use-descarga-pdf';
 
 /** «2026-10-18 15:42» (hora de Lima, ya convertida por el servidor) → «18 oct 2026 · 15:42». */
@@ -61,6 +63,7 @@ export default function LoanDetailPage() {
   const [numeroCuota, setNumeroCuota] = useState<number | null>(null);
   const [mensaje, setMensaje] = useState(false);
   const { generando, descargar } = useDescargaPdf();
+  const acciones = useAccionesPrestamo();
 
   useEffect(() => {
     let vigente = true;
@@ -102,7 +105,8 @@ export default function LoanDetailPage() {
         title={<span className="flex flex-wrap items-center gap-x-3 gap-y-1">{codigoPrestamo(p.numero)}<StatusBadge estado={p.estado} className="text-[0.8125rem]" /></span>}
         description={<><Link to={`/clientes/${p.clienteId}`} className="font-medium text-teal-ink hover:underline">{p.clienteNombre}</Link> · {p.agenciaNombre} · Asesor {p.asesorNombre}</>}
         actions={<>
-          <Button variant="primary" onClick={() => void descargar(datosPdfRegistrado(p))} loading={generando}><FileDown className="size-4" />Descargar PDF</Button>
+          <Button variant="primary" onClick={() => void descargar(datosPdfRegistrado(p))} loading={generando}><FileDown className="size-4" />Descargar cronograma PDF</Button>
+          <BotonesContrato id={p.id} acciones={acciones} />
           <Button onClick={() => setMensaje(true)}><MessageSquareText className="size-4" />Mensaje para el cliente</Button>
         </>} />
 
@@ -159,6 +163,7 @@ export default function LoanDetailPage() {
         <ScheduleTable filas={filas} totales={{ capital: p.capital, intereses: p.totalIntereses, total: p.totalContractual }} conEstado onSelect={setNumeroCuota} />
       </Card>
 
+      <VisorContratoPrestamo acciones={acciones} />
       <CuotaDialog cuota={cuotaAbierta} totalCuotas={p.plazoMeses} onClose={() => setNumeroCuota(null)} />
       <MensajeDialog p={p} open={mensaje} onOpenChange={setMensaje} />
     </>

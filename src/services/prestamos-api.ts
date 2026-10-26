@@ -18,6 +18,7 @@ export type CodigoPrestamo =
   | 'LIMITE_EXCEDIDO'
   | 'LIMITE_DIARIO_EXCEDIDO'
   | 'CONDICIONES_DESACTUALIZADAS'
+  | 'CONTRATO_NO_DISPONIBLE'
   | 'NO_AUTENTICADO'
   | 'RED'
   | 'DESCONOCIDO';
@@ -103,6 +104,80 @@ export interface CapacidadApi {
   importePendiente: number;
   /** limite − capitalPendiente (nunca negativo). Máximo que puede solicitar ahora. */
   disponible: number;
+  /** Clientes cuyo endeudamiento se suma (DNI + sus RUC 10). 1 = sin vinculados; más de 1 = deuda consolidada. */
+  integrantes?: number;
+}
+
+export type RelacionApi = 'TITULAR' | 'NEGOCIO_DEL_TITULAR' | 'SIN_VINCULO';
+
+export interface IntegrantePerfilApi {
+  clienteId: string;
+  nombre: string;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  relacion: RelacionApi;
+  consultado: boolean;
+  /** Sin permiso de detalle, los contadores de cuotas vienen en null (el capital pendiente sí se informa). */
+  detalleVisible: boolean;
+  capitalPendiente: number;
+  importePendiente: number;
+  prestamosConSaldo: number;
+  cuotasPendientes: number | null;
+  cuotasVencidas: number | null;
+  cuotasPagadas: number | null;
+}
+
+export interface PrestamoConsolidadoApi {
+  id: string;
+  numero: number;
+  clienteId: string;
+  clienteNombre: string;
+  clienteTipoDocumento: string;
+  clienteNumeroDocumento: string;
+  capital: number;
+  plazoMeses: number;
+  fechaDesembolso: string;
+  estado: EstadoPrestamoApi;
+  totalContractual: number;
+  capitalPendiente: number;
+  totalPendiente: number;
+  proximoVencimiento: string | null;
+  cuotasPendientes: number;
+  cuotasVencidas: number;
+  cuotasPagadas: number;
+}
+
+/** GET /api/prestamos/perfil-financiero?clienteId=…: perfil consolidado DNI ↔ RUC 10 (la misma cifra que valida el registro). */
+export interface PerfilFinancieroApi {
+  clienteId: string;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  nombre: string;
+  limite: number;
+  /** Deuda consolidada del grupo. */
+  capitalPendiente: number;
+  importePendiente: number;
+  disponible: number;
+  deudaPropia: number;
+  deudaVinculada: number;
+  consolidada: boolean;
+  cuotasPendientes: number;
+  cuotasVencidas: number;
+  cuotasPagadas: number;
+  integrantes: IntegrantePerfilApi[];
+  prestamos: PrestamoConsolidadoApi[];
+}
+
+/** Contrato de un préstamo (borrador antes de confirmar, definitivo después). `datos` es el JSON de la instantánea. */
+export interface ContratoApi {
+  estado: 'BORRADOR' | 'DEFINITIVO';
+  codigo: string | null;
+  version: number;
+  totalVersiones: number;
+  plantillaVersion: string;
+  generadoEn: string;
+  huella: string;
+  datos: string;
 }
 
 /**
@@ -234,7 +309,7 @@ export class PrestamoApiError extends Error {
 const CODIGOS = new Set<string>([
   'DATOS_INVALIDOS', 'SIN_PERMISO', 'CLIENTE_NO_ENCONTRADO', 'PRESTAMO_NO_ENCONTRADO', 'CLIENTE_NO_APTO',
   'CAPITAL_BAJO_MINIMO', 'PLAZO_FUERA_DE_RANGO', 'MONEDA_NO_PERMITIDA', 'LIMITE_EXCEDIDO', 'LIMITE_DIARIO_EXCEDIDO',
-  'CONDICIONES_DESACTUALIZADAS'
+  'CONDICIONES_DESACTUALIZADAS', 'CONTRATO_NO_DISPONIBLE'
 ]);
 
 const MSG_RED = 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo nuevamente.';
@@ -347,6 +422,18 @@ export const prestamosApi = {
   /** Límite diario de colocación del asesor en sesión (el servidor sabe quién es por la sesión). */
   limiteDiario(): Promise<LimiteDiarioApi> {
     return llamar<LimiteDiarioApi>('/limite-diario', { method: 'GET' });
+  },
+  /** Perfil financiero consolidado del cliente (deuda, cuotas, límite, capacidad y vinculados). */
+  perfilFinanciero(clienteId: string): Promise<PerfilFinancieroApi> {
+    return llamar<PerfilFinancieroApi>(`/perfil-financiero?clienteId=${encodeURIComponent(clienteId)}`, { method: 'GET' });
+  },
+  /** Borrador del contrato con las condiciones revisadas. No registra nada. */
+  contratoPreliminar(solicitud: SolicitudPrestamoApi): Promise<ContratoApi> {
+    return llamar<ContratoApi>('/contrato-preliminar', { method: 'POST', body: solicitud });
+  },
+  /** Contrato guardado del préstamo (siempre el mismo: no se recalcula). */
+  contrato(id: string): Promise<ContratoApi> {
+    return llamar<ContratoApi>(`/${encodeURIComponent(id)}/contrato`, { method: 'GET' });
   },
   /** US-06: consulta el préstamo con el cronograma guardado. */
   consultar(id: string): Promise<PrestamoDetalleApi> {

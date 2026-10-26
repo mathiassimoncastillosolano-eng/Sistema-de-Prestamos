@@ -198,7 +198,9 @@ describe('Detalle del préstamo y cuotas', () => {
       montar(`#/prestamos/${DETALLE.id}`);
       expect(await screen.findByText('PR-1001')).toBeInTheDocument();
       expect(screen.getByText(/Sur Prueba · Asesor Valeria Quintana/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Descargar PDF/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Descargar cronograma PDF/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Ver contrato/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Descargar contrato PDF/ })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /Mensaje para el cliente/ })).toBeInTheDocument();
       for (const k of ['Capital original', 'Intereses pactados', 'Importe contractual total', 'Capital pendiente', 'Pendiente contractual']) {
         expect(screen.getByText(k)).toBeInTheDocument();

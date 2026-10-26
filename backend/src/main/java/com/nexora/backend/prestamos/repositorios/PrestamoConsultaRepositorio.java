@@ -5,9 +5,12 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -30,6 +33,11 @@ public class PrestamoConsultaRepositorio {
         public static Filtro todos() { return new Filtro("true", new Object[0]); }
         public static Filtro deAgencia(UUID agenciaId) { return new Filtro("p.agencia_id = ?", new Object[] { agenciaId }); }
         public static Filtro deCliente(UUID clienteId) { return new Filtro("p.cliente_id = ?", new Object[] { clienteId }); }
+        /** Préstamos de varios clientes (grupo crediticio). Solo se genera "?" por cliente: los ids siempre van enlazados. */
+        public static Filtro deClientes(List<UUID> clienteIds) {
+            String marcas = String.join(",", Collections.nCopies(clienteIds.size(), "?"));
+            return new Filtro("p.cliente_id in (" + marcas + ")", clienteIds.toArray());
+        }
         public static Filtro deUnPrestamo(UUID prestamoId) { return new Filtro("p.id = ?", new Object[] { prestamoId }); }
     }
 
@@ -55,7 +63,17 @@ public class PrestamoConsultaRepositorio {
             /** yyyy-MM-dd HH:mm en America/Lima. */
             String registradoEn) { }
 
+    /** Integrante del grupo crediticio de un cliente (él mismo incluido). */
+    public record IntegranteGrupo(UUID id, String nombre, String tipoDocumento, String numeroDocumento, UUID agenciaId) { }
+
     public record CuotaDePrestamo(UUID prestamoId, CuotaGuardada cuota) { }
+
+    /** Quiénes suman su deuda con la del cliente: ver GrupoCrediticioSql. Vacío si el cliente no existe. */
+    public List<IntegranteGrupo> integrantesDelGrupo(UUID clienteId) {
+        return new NamedParameterJdbcTemplate(jdbc).query(GrupoCrediticioSql.INTEGRANTES, Map.of("id", clienteId),
+                (rs, i) -> new IntegranteGrupo(uuid(rs, "id"), rs.getString("nombre"), rs.getString("tipo_documento"),
+                        rs.getString("numero_documento"), uuid(rs, "agencia_id")));
+    }
 
     public List<CabeceraPrestamo> cabeceras(Filtro filtro) {
         String sql = """

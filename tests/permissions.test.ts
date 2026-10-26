@@ -11,7 +11,7 @@ describe('permisos por rol', () => {
   });
   it('cada rol entra por su pantalla de inicio', () => {
     expect(rutaInicio('gerencia')).toBe('/');
-    expect(rutaInicio('asesor')).toBe('/clientes');
+    expect(rutaInicio('asesor')).toBe('/prestamos');
   });
   it('gerencia solo accede al dashboard', () => {
     expect(puedeAccederAModulo('gerencia', 'dashboard')).toBe(true);
@@ -42,8 +42,8 @@ describe('permisos por rol', () => {
 
 describe('menú lateral', () => {
   const etiquetas = (rol: string) => gruposPara((m) => puedeAccederAModulo(rol, m)).flatMap((g) => g.items.map((i) => i.label));
-  it('asesor: Clientes y Cartera, sin Dashboard', () => {
-    expect(etiquetas('asesor')).toEqual(['Clientes', 'Nueva solicitud', 'Préstamos']);
+  it('asesor: Cartera (Préstamos primero) y Clientes, sin Dashboard', () => {
+    expect(etiquetas('asesor')).toEqual(['Préstamos', 'Clientes', 'Nueva solicitud']);
   });
   it('gerencia: solo Dashboard y sin grupos vacíos', () => {
     expect(etiquetas('gerencia')).toEqual(['Dashboard']);

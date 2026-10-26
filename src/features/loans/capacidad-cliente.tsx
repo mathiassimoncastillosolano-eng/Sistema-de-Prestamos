@@ -49,6 +49,9 @@ export function CapacidadCliente({ capacidad, cargando, error, onReintentar, cla
           <dd className="text-sm sm:mt-0.5 font-semibold text-teal-ink">{money(capacidad.disponible)}</dd>
         </div>
       </dl>
+      {(capacidad.integrantes ?? 1) > 1 && (
+        <p className="mt-2 text-xs text-ink-muted">Deuda consolidada: incluye a los {(capacidad.integrantes ?? 1) - 1} cliente(s) vinculados por DNI / RUC 10.</p>
+      )}
       <Meter value={uso} tone={tono} label={`Uso del límite: ${Math.round(uso)} %`} className="mt-2" />
     </section>
   );

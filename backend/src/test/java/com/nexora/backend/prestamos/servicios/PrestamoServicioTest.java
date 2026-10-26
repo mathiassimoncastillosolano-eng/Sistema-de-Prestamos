@@ -17,6 +17,7 @@ import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.Evaluacion;
 import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
+import com.nexora.backend.prestamos.dto.ContratoRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
 import com.nexora.backend.prestamos.entidades.ClienteResumen;
@@ -45,6 +46,7 @@ class PrestamoServicioTest {
     private final ClienteResumenRepositorio clientes = mock(ClienteResumenRepositorio.class);
     private final PrestamoConsultaServicio consultas = mock(PrestamoConsultaServicio.class);
     private final EstadoClienteServicio estados = mock(EstadoClienteServicio.class);
+    private final ContratoServicio contratos = mock(ContratoServicio.class);
     // 22:00 del 17-oct en Lima = 03:00 UTC del 18-oct: prueba que se usa la fecha de Perú, no la de UTC.
     private final Clock reloj = Clock.fixed(Instant.parse("2026-10-18T03:00:00Z"), ZoneId.of("America/Lima"));
 
@@ -54,7 +56,7 @@ class PrestamoServicioTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new PrestamoServicio(prestamos, cuotas, clientes, consultas, estados, reloj);
+        servicio = new PrestamoServicio(prestamos, cuotas, clientes, consultas, estados, contratos, reloj);
 
         Agencia agencia = mock(Agencia.class);
         when(agencia.getId()).thenReturn(UUID.randomUUID());
@@ -247,6 +249,110 @@ class PrestamoServicioTest {
         assertEquals(new BigDecimal("8000.00"), consultas.capacidad(clienteId).disponible()); // lo que mostró la pantalla
         PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("8000", 12, null));
         assertEquals(new BigDecimal("5000.00"), ex.getDetalle().get("disponible"));
+    }
+
+    // ------------------------------------------------------------ consolidación DNI <-> RUC 10 y contrato
+
+    @Test
+    void se_bloquea_el_grupo_completo_antes_que_la_fila_del_cliente_y_antes_de_leer_la_deuda() {
+        registrar("1000", 12, null);
+        InOrder orden = inOrder(clientes, consultas, prestamos);
+        orden.verify(clientes).bloquearGrupo(clienteId);
+        orden.verify(clientes).buscarBloqueando(clienteId);
+        orden.verify(consultas).capacidad(clienteId);
+        orden.verify(prestamos).save(any(Prestamo.class));
+    }
+
+    /** Capacidad de un grupo: empresa vinculada con 8,000 y persona sin deuda. */
+    private void grupoConDeuda(String capital) {
+        BigDecimal v = new BigDecimal(capital);
+        when(consultas.capacidad(clienteId)).thenReturn(
+                CapacidadEndeudamiento.de(List.of(new Evaluacion("Vigente", v, v, v, null, 0, List.of())), 2));
+    }
+
+    @Test
+    void con_empresa_vinculada_de_8000_se_rechazan_3000_y_se_aceptan_2000() {
+        grupoConDeuda("8000");
+        PrestamoException ex = rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("3000", 12, null));
+        assertEquals(new BigDecimal("8000.00"), ex.getDetalle().get("acumulado"));
+        assertEquals(new BigDecimal("1000.00"), ex.getDetalle().get("excedente"));
+        assertTrue(ex.getMessage().contains("consolidado"), ex.getMessage());
+        assertDoesNotThrow(() -> registrar("2000", 12, null));
+    }
+
+    @Test
+    void el_prestamo_registrado_guarda_su_contrato_definitivo_despues_de_las_cuotas() {
+        registrar("1000", 12, null);
+        InOrder orden = inOrder(prestamos, cuotas, contratos);
+        orden.verify(prestamos).save(any(Prestamo.class));
+        orden.verify(cuotas).saveAll(any());
+        orden.verify(contratos).guardarDefinitivo(eq(asesor), any(Prestamo.class), eq(1001L), any());
+    }
+
+    @Test
+    void si_el_contrato_falla_el_registro_falla_y_la_transaccion_lo_revierte() {
+        org.mockito.Mockito.doThrow(new IllegalStateException("fallo al guardar contrato"))
+                .when(contratos).guardarDefinitivo(any(), any(), any(), any());
+        assertThrows(IllegalStateException.class, () -> registrar("1000", 12, null));
+    }
+
+    @Test
+    void un_rechazo_por_limite_no_guarda_contrato() {
+        acumulado("9500");
+        rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1000", 12, null));
+        verify(contratos, never()).guardarDefinitivo(any(), any(), any(), any());
+    }
+
+    @Test
+    void el_contrato_preliminar_valida_igual_que_el_registro_y_no_guarda_nada() {
+        ClienteResumen cliente = mock(ClienteResumen.class);
+        when(cliente.getId()).thenReturn(clienteId);
+        when(clientes.findById(clienteId)).thenReturn(Optional.of(cliente));
+        when(consultas.estadoCliente(clienteId)).thenReturn(EstadoCliente.ACTIVO);
+        when(contratos.preliminar(any(), any(), any(), any(), org.mockito.ArgumentMatchers.anyInt(), any(), any(), any(), any()))
+                .thenReturn(new ContratoRespuesta("BORRADOR", null, 0, 0, "P", "2026-10-17 22:00", "h", "{}"));
+        clearInvocations(prestamos, cuotas);
+
+        ContratoRespuesta r = servicio.contratoPreliminar(asesor,
+                new SolicitudPrestamo(clienteId, new BigDecimal("1000"), 12, null, null, null, null));
+
+        assertEquals("BORRADOR", r.estado());
+        verify(prestamos, never()).save(any());
+        verify(cuotas, never()).saveAll(any());
+        verify(clientes, never()).buscarBloqueando(any());
+        verify(estados, never()).actualizar(any());
+        verify(contratos, never()).guardarDefinitivo(any(), any(), any(), any());
+    }
+
+    @Test
+    void el_contrato_preliminar_rechaza_lo_que_el_registro_rechazaria() {
+        ClienteResumen cliente = mock(ClienteResumen.class);
+        when(cliente.getId()).thenReturn(clienteId);
+        when(clientes.findById(clienteId)).thenReturn(Optional.of(cliente));
+        when(consultas.estadoCliente(clienteId)).thenReturn(EstadoCliente.ACTIVO);
+        grupoConDeuda("8000");
+        PrestamoException ex = assertThrows(PrestamoException.class, () -> servicio.contratoPreliminar(asesor,
+                new SolicitudPrestamo(clienteId, new BigDecimal("3000"), 12, null, null, null, null)));
+        assertEquals(Codigo.LIMITE_EXCEDIDO, ex.getCodigo());
+
+        when(consultas.estadoCliente(clienteId)).thenReturn(EstadoCliente.MOROSO);
+        assertEquals(Codigo.CLIENTE_NO_APTO, assertThrows(PrestamoException.class, () -> servicio.contratoPreliminar(asesor,
+                new SolicitudPrestamo(clienteId, new BigDecimal("1000"), 12, null, null, null, null))).getCodigo());
+
+        when(asesor.getRol()).thenReturn("gerencia");
+        assertEquals(Codigo.SIN_PERMISO, assertThrows(PrestamoException.class, () -> servicio.contratoPreliminar(asesor,
+                new SolicitudPrestamo(clienteId, new BigDecimal("1000"), 12, null, null, null, null))).getCodigo());
+    }
+
+    @Test
+    void el_contrato_preliminar_rechaza_condiciones_revisadas_desactualizadas() {
+        ClienteResumen cliente = mock(ClienteResumen.class);
+        when(cliente.getId()).thenReturn(clienteId);
+        when(clientes.findById(clienteId)).thenReturn(Optional.of(cliente));
+        when(consultas.estadoCliente(clienteId)).thenReturn(EstadoCliente.ACTIVO);
+        assertEquals(Codigo.CONDICIONES_DESACTUALIZADAS, assertThrows(PrestamoException.class, () ->
+                servicio.contratoPreliminar(asesor, new SolicitudPrestamo(clienteId, new BigDecimal("1000"), 12, null, null,
+                        LocalDate.of(2026, 10, 16), null))).getCodigo());
     }
 
     // ------------------------------------------------------------ condiciones y simulación

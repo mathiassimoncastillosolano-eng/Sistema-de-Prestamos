@@ -42,3 +42,17 @@ create table if not exists public.cuotas (
 );
 -- clientes.estado (ACTIVO | MOROSO | EXTRAJUDICIAL): el registro de préstamos lo recalcula y lo guarda.
 alter table public.clientes add column if not exists estado text not null default 'ACTIVO';
+
+-- Contratos del préstamo (la tabla real además es de solo inserción con triggers; aquí basta la estructura que usa el registro).
+create table if not exists public.contratos_prestamo (
+    id                 uuid        primary key default gen_random_uuid(),
+    prestamo_id        uuid        not null references public.prestamos (id) on update no action on delete restrict,
+    version            integer     not null default 1,
+    plantilla_version  text        not null,
+    datos              text        not null,
+    huella_sha256      text        not null,
+    generado_por       uuid        not null references public.perfiles (id) on update no action on delete restrict,
+    generado_en        timestamptz not null default now(),
+    constraint contratos_prestamo_version_uq unique (prestamo_id, version),
+    constraint contratos_prestamo_huella_coincide_ck check (huella_sha256 = encode(sha256(convert_to(datos, 'UTF8')), 'hex'))
+);

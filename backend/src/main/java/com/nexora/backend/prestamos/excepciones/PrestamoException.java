@@ -17,7 +17,9 @@ public class PrestamoException extends RuntimeException {
         LIMITE_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY),
         LIMITE_DIARIO_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY),
         PRESTAMO_NO_ENCONTRADO(HttpStatus.NOT_FOUND),
-        CONDICIONES_DESACTUALIZADAS(HttpStatus.CONFLICT);
+        CONDICIONES_DESACTUALIZADAS(HttpStatus.CONFLICT),
+        /** Préstamo anterior a los contratos (o contrato aún no guardado): no se inventa uno a posteriori. */
+        CONTRATO_NO_DISPONIBLE(HttpStatus.NOT_FOUND);
 
         private final HttpStatus estado;
 

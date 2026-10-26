@@ -9,6 +9,7 @@ import com.nexora.backend.prestamos.dominio.Cronograma;
 import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import com.nexora.backend.prestamos.dominio.ReglasPrestamo;
+import com.nexora.backend.prestamos.dto.ContratoRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
 import com.nexora.backend.prestamos.dto.SimulacionRespuesta;
@@ -45,16 +46,18 @@ public class PrestamoServicio {
     private final ClienteResumenRepositorio clientes;
     private final PrestamoConsultaServicio consultas;
     private final EstadoClienteServicio estados;
+    private final ContratoServicio contratos;
     private final Clock reloj;
 
     public PrestamoServicio(PrestamoRepositorio prestamos, CuotaRepositorio cuotas,
                             ClienteResumenRepositorio clientes, PrestamoConsultaServicio consultas,
-                            EstadoClienteServicio estados, Clock reloj) {
+                            EstadoClienteServicio estados, ContratoServicio contratos, Clock reloj) {
         this.prestamos = prestamos;
         this.cuotas = cuotas;
         this.clientes = clientes;
         this.consultas = consultas;
         this.estados = estados;
+        this.contratos = contratos;
         this.reloj = reloj;
     }
 
@@ -64,10 +67,7 @@ public class PrestamoServicio {
      */
     @Transactional
     public PrestamoRespuesta registrar(Perfil asesor, SolicitudPrestamo solicitud) {
-        if (asesor == null || !"asesor".equals(asesor.getRol()) || asesor.getAgencia() == null) {
-            throw new PrestamoException(Codigo.SIN_PERMISO,
-                    "Solo un asesor con agencia asignada puede registrar préstamos.");
-        }
+        exigirAsesorConAgencia(asesor);
         if (solicitud == null || solicitud.clienteId() == null) {
             throw new PrestamoException(Codigo.DATOS_INVALIDOS, "Indica el cliente del préstamo.");
         }
@@ -77,8 +77,10 @@ public class PrestamoServicio {
         validarMoneda(solicitud.moneda());
         String observaciones = normalizarObservaciones(solicitud.observaciones());
 
-        // Bloquea al cliente hasta el final de la transacción: si otro asesor registra para el mismo cliente,
-        // espera aquí y luego lee la deuda ya actualizada (concurrencia del límite).
+        // Bloquea a todo el grupo crediticio del cliente (él, su DNI y sus RUC 10) en orden de id, hasta el final de la
+        // transacción: si otro asesor registra para cualquiera de ellos, espera aquí y luego lee la deuda ya actualizada
+        // (concurrencia del límite consolidado). Va ANTES que cualquier otro bloqueo de cliente para no cruzar esperas.
+        clientes.bloquearGrupo(solicitud.clienteId());
         ClienteResumen cliente = clientes.buscarBloqueando(solicitud.clienteId())
                 .orElseThrow(() -> new PrestamoException(Codigo.CLIENTE_NO_ENCONTRADO,
                         "El cliente indicado no existe."));
@@ -105,7 +107,56 @@ public class PrestamoServicio {
                 .toList());
 
         Long numero = prestamos.obtenerNumero(prestamoId);
+        // El contrato definitivo se guarda en ESTA transacción, con las condiciones recién registradas.
+        contratos.guardarDefinitivo(asesor, prestamo, numero, cronograma);
         return PrestamoRespuesta.de(prestamo, numero, cronograma);
+    }
+
+    /**
+     * Contrato PRELIMINAR (borrador) de una solicitud, para revisarlo antes de confirmar. Aplica las mismas validaciones
+     * que el registro (capital, plazo, cliente apto, capacidad consolidada, límite diario, condiciones revisadas) pero NO
+     * guarda nada ni bloquea filas; la decisión definitiva sigue siendo la de {@link #registrar}.
+     */
+    @Transactional(readOnly = true)
+    public ContratoRespuesta contratoPreliminar(Perfil asesor, SolicitudPrestamo solicitud) {
+        exigirAsesorConAgencia(asesor);
+        if (solicitud == null || solicitud.clienteId() == null) {
+            throw new PrestamoException(Codigo.DATOS_INVALIDOS, "Indica el cliente del préstamo.");
+        }
+        BigDecimal capital = validarCapital(solicitud.capital());
+        int plazo = validarPlazo(solicitud.plazoMeses());
+        validarMoneda(solicitud.moneda());
+        String observaciones = normalizarObservaciones(solicitud.observaciones());
+
+        ClienteResumen cliente = clientes.findById(solicitud.clienteId())
+                .orElseThrow(() -> new PrestamoException(Codigo.CLIENTE_NO_ENCONTRADO, "El cliente indicado no existe."));
+        String estado = consultas.estadoCliente(cliente.getId()); // lectura: el borrador no escribe el estado
+        if (!EstadoCliente.permiteNuevoPrestamo(estado)) {
+            throw new PrestamoException(Codigo.CLIENTE_NO_APTO,
+                    "El cliente está en estado " + estado + ": tiene cuotas vencidas sin pagar y no puede solicitar "
+                            + "nuevos préstamos.",
+                    Map.of("estado", estado));
+        }
+        verificarLimite(cliente.getId(), capital);
+        LocalDate hoy = LocalDate.now(reloj);
+        verificarLimiteDiario(asesor.getId(), capital, hoy);
+        Cronograma cronograma = CalculadoraCronograma.calcular(capital, plazo, ReglasPrestamo.TEA, hoy);
+        verificarLoRevisado(solicitud, hoy, cronograma);
+        return contratos.preliminar(cliente.getId(), asesor.getAgencia().getId(), asesor.getId(), capital, plazo,
+                ReglasPrestamo.TEA, hoy, observaciones, cronograma);
+    }
+
+    /** Contrato guardado de un préstamo ya registrado (autorización por agencia dentro de ContratoServicio). */
+    @Transactional(readOnly = true)
+    public ContratoRespuesta contrato(Perfil perfil, UUID prestamoId) {
+        return contratos.obtener(perfil, prestamoId);
+    }
+
+    private static void exigirAsesorConAgencia(Perfil asesor) {
+        if (asesor == null || !"asesor".equals(asesor.getRol()) || asesor.getAgencia() == null) {
+            throw new PrestamoException(Codigo.SIN_PERMISO,
+                    "Solo un asesor con agencia asignada puede registrar préstamos.");
+        }
     }
 
     /** Límite diario del asesor en sesión: cuánto colocó hoy y cuánto le queda. Cada asesor ve solo el suyo. */
@@ -235,10 +286,13 @@ public class PrestamoServicio {
         BigDecimal acumulado = capacidad.capitalPendiente();
         BigDecimal limite = capacidad.limite();
         BigDecimal excedente = acumulado.add(nuevoCapital).subtract(limite);
+        String grupo = capacidad.consolidada()
+                ? " (endeudamiento consolidado con sus " + (capacidad.integrantes() - 1) + " cliente(s) vinculado(s) por DNI/RUC 10)"
+                : "";
         String mensaje = capacidad.alcanzaElMinimo()
-                ? "El monto supera la capacidad disponible del cliente (" + soles(capacidad.disponible()) + "). "
+                ? "El monto supera la capacidad disponible del cliente" + grupo + " (" + soles(capacidad.disponible()) + "). "
                         + "Capital pendiente: " + soles(acumulado) + "; excedente: " + soles(excedente) + "."
-                : "El cliente no tiene capacidad suficiente para un préstamo nuevo: dispone de "
+                : "El cliente no tiene capacidad suficiente para un préstamo nuevo" + grupo + ": dispone de "
                         + soles(capacidad.disponible()) + " y el mínimo es " + soles(ReglasPrestamo.CAPITAL_MINIMO) + ".";
         throw new PrestamoException(Codigo.LIMITE_EXCEDIDO, mensaje,
                 Map.of("acumulado", acumulado, "limite", limite, "excedente", excedente,

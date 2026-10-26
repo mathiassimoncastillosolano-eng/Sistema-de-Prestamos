@@ -2,6 +2,9 @@ package com.nexora.backend.prestamos.servicios;
 
 import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
+import com.nexora.backend.prestamos.dominio.DeudaConsolidada;
+import com.nexora.backend.prestamos.dominio.DeudaConsolidada.Aporte;
+import com.nexora.backend.prestamos.dominio.DeudaConsolidada.Integrante;
 import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.CuotaEvaluada;
@@ -10,6 +13,9 @@ import com.nexora.backend.prestamos.dominio.EvaluadorCartera.Evaluacion;
 import com.nexora.backend.prestamos.dto.PrestamoDetalle;
 import com.nexora.backend.prestamos.dto.PrestamoDetalle.CuotaDetalle;
 import com.nexora.backend.prestamos.dto.PrestamoDetalle.EventoHistorial;
+import com.nexora.backend.prestamos.dto.PerfilFinancieroRespuesta;
+import com.nexora.backend.prestamos.dto.PerfilFinancieroRespuesta.IntegranteRespuesta;
+import com.nexora.backend.prestamos.dto.PerfilFinancieroRespuesta.PrestamoConsolidadoRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoListado;
 import com.nexora.backend.prestamos.dto.PrestamoResumen;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
@@ -18,6 +24,7 @@ import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio;
 import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio.CabeceraPrestamo;
 import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio.CuotaDePrestamo;
 import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio.Filtro;
+import com.nexora.backend.prestamos.repositorios.PrestamoConsultaRepositorio.IntegranteGrupo;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -110,14 +117,117 @@ public class PrestamoConsultaServicio {
     }
 
     /**
-     * Capacidad de endeudamiento del cliente con sus préstamos de TODAS las agencias. La muestran el perfil y la
-     * solicitud, y el registro la vuelve a calcular dentro de su transacción (con el cliente bloqueado).
+     * Capacidad de endeudamiento del cliente con sus préstamos de TODAS las agencias Y los de su grupo crediticio (su DNI
+     * y sus negocios RUC 10, ver GrupoCrediticioSql). La muestran el perfil y la solicitud, y el registro la vuelve a
+     * calcular dentro de su transacción (con el grupo bloqueado). Un cliente sin vinculados cuenta solo.
      */
     @Transactional(readOnly = true)
     public CapacidadEndeudamiento capacidad(UUID clienteId) {
-        List<PrestamoEvaluado> prestamos = evaluarPrestamosDe(clienteId);
+        exigirCliente(clienteId);
+        List<UUID> grupo = idsDelGrupo(clienteId, repositorio.integrantesDelGrupo(clienteId));
+        List<PrestamoEvaluado> prestamos = evaluarPrestamosDeGrupo(clienteId, grupo);
         prestamos.forEach(PrestamoConsultaServicio::avisarSiHayDatosRaros);
-        return CapacidadEndeudamiento.de(prestamos.stream().map(PrestamoConsultaServicio::paraElLimite).toList());
+        return CapacidadEndeudamiento.de(prestamos.stream().map(PrestamoConsultaServicio::paraElLimite).toList(),
+                Math.max(1, grupo.size()));
+    }
+
+    /**
+     * Perfil financiero consolidado: la MISMA capacidad que valida el registro más el detalle por integrante. Los
+     * préstamos y contadores de cuotas de un integrante vinculado solo se incluyen si el usuario es de gerencia o de la
+     * agencia de ese cliente; el cliente consultado siempre se muestra completo (igual que su ficha). El capital pendiente
+     * de cada vinculado sí se informa: explica por qué el cliente tiene o no capacidad.
+     */
+    @Transactional(readOnly = true)
+    public PerfilFinancieroRespuesta perfilFinanciero(Perfil perfil, UUID clienteId) {
+        exigirCliente(clienteId);
+        if (perfil == null) {
+            throw new PrestamoException(Codigo.SIN_PERMISO, "No se pudo identificar al usuario de la sesión.");
+        }
+        List<IntegranteGrupo> filas = repositorio.integrantesDelGrupo(clienteId);
+        IntegranteGrupo consultado = filas.stream().filter(f -> clienteId.equals(f.id())).findFirst()
+                .orElseThrow(() -> new PrestamoException(Codigo.CLIENTE_NO_ENCONTRADO, "El cliente indicado no existe."));
+        List<UUID> grupo = idsDelGrupo(clienteId, filas);
+        List<PrestamoEvaluado> evaluados = evaluarPrestamosDeGrupo(clienteId, grupo);
+        evaluados.forEach(PrestamoConsultaServicio::avisarSiHayDatosRaros);
+
+        List<Integrante> integrantes = filas.stream()
+                .map(f -> new Integrante(f.id(), f.nombre(), f.tipoDocumento(), f.numeroDocumento(), f.agenciaId()))
+                .toList();
+        List<DeudaConsolidada.PrestamoEvaluado> aportes = evaluados.stream()
+                .map(p -> new DeudaConsolidada.PrestamoEvaluado(p.cabecera().id(), p.cabecera().clienteId(), paraElLimite(p)))
+                .toList();
+        DeudaConsolidada.Resultado r = DeudaConsolidada.consolidar(clienteId, integrantes, aportes,
+                i -> puedeVerDetalle(perfil, i));
+        Map<UUID, Boolean> visibles = new HashMap<>();
+        for (Aporte a : r.aportes()) {
+            visibles.put(a.integrante().clienteId(), a.detalleVisible());
+        }
+
+        List<IntegranteRespuesta> integrantesRespuesta = r.aportes().stream()
+                .map(a -> new IntegranteRespuesta(a.integrante().clienteId(), a.integrante().nombre(),
+                        a.integrante().tipoDocumento(), a.integrante().numeroDocumento(), a.relacion(), a.consultado(),
+                        a.detalleVisible(), a.capitalPendiente(), a.importePendiente(), a.prestamosConSaldo(),
+                        a.cuotasPendientes(), a.cuotasVencidas(), a.cuotasPagadas()))
+                .toList();
+
+        Map<UUID, Integrante> porId = new HashMap<>();
+        integrantes.forEach(i -> porId.putIfAbsent(i.clienteId(), i));
+        List<PrestamoConsolidadoRespuesta> prestamos = new ArrayList<>();
+        Set<UUID> vistos = new java.util.HashSet<>();
+        for (PrestamoEvaluado p : evaluados) {
+            CabeceraPrestamo c = p.cabecera();
+            if (!Boolean.TRUE.equals(visibles.get(c.clienteId())) || !vistos.add(c.id())) {
+                continue;
+            }
+            Evaluacion e = p.evaluacion();
+            int pend = 0;
+            int venc = 0;
+            int pag = 0;
+            if (EvaluadorCartera.PRESTAMO_CANCELADO.equals(e.estado())) {
+                pag = e.cuotas().size();
+            } else {
+                for (CuotaEvaluada q : e.cuotas()) {
+                    switch (q.estado()) {
+                        case EvaluadorCartera.CUOTA_PAGADA -> pag++;
+                        case EvaluadorCartera.CUOTA_VENCIDA -> venc++;
+                        default -> pend++;
+                    }
+                }
+            }
+            Integrante dueno = porId.get(c.clienteId());
+            prestamos.add(new PrestamoConsolidadoRespuesta(c.id(), c.numero(), c.clienteId(),
+                    dueno != null ? dueno.nombre() : c.clienteNombre(),
+                    dueno != null ? dueno.tipoDocumento() : c.clienteTipoDocumento(),
+                    dueno != null ? dueno.numeroDocumento() : c.clienteNumeroDocumento(),
+                    c.capital(), c.plazoMeses(), c.fechaDesembolso(), e.estado(), e.totalContractual(),
+                    e.capitalPendiente(), e.totalPendiente(), e.proximoVencimiento(), pend, venc, pag));
+        }
+
+        CapacidadEndeudamiento cap = r.capacidad();
+        return new PerfilFinancieroRespuesta(consultado.id(), consultado.tipoDocumento(), consultado.numeroDocumento(),
+                consultado.nombre(), cap.limite(), cap.capitalPendiente(), cap.importePendiente(), cap.disponible(),
+                r.deudaPropia(), r.deudaVinculada(), cap.consolidada(), r.cuotasPendientes(), r.cuotasVencidas(),
+                r.cuotasPagadas(), integrantesRespuesta, List.copyOf(prestamos));
+    }
+
+    /** Gerencia ve todo; el asesor, el detalle de los clientes de su agencia. El consultado lo decide el dominio. */
+    private static boolean puedeVerDetalle(Perfil perfil, Integrante i) {
+        if ("gerencia".equals(perfil.getRol())) {
+            return true;
+        }
+        return perfil.getAgencia() != null && i.agenciaId() != null && i.agenciaId().equals(perfil.getAgencia().getId());
+    }
+
+    private static void exigirCliente(UUID clienteId) {
+        if (clienteId == null) {
+            throw new PrestamoException(Codigo.DATOS_INVALIDOS, "Indica el cliente.");
+        }
+    }
+
+    /** Ids del grupo; si la consulta no devuelve nada (cliente inexistente) se evalúa el cliente solo. */
+    private static List<UUID> idsDelGrupo(UUID clienteId, List<IntegranteGrupo> filas) {
+        List<UUID> ids = filas.stream().map(IntegranteGrupo::id).distinct().toList();
+        return ids.isEmpty() ? List.of(clienteId) : ids;
     }
 
     /** Estado del cliente (ACTIVO, MOROSO o EXTRAJUDICIAL) con sus préstamos de TODAS las agencias. No escribe nada. */
@@ -163,10 +273,16 @@ public class PrestamoConsultaServicio {
     private record PrestamoEvaluado(CabeceraPrestamo cabecera, List<CuotaGuardada> cuotas, Evaluacion evaluacion) { }
 
     private List<PrestamoEvaluado> evaluarPrestamosDe(UUID clienteId) {
-        if (clienteId == null) {
-            throw new PrestamoException(Codigo.DATOS_INVALIDOS, "Indica el cliente.");
-        }
-        Filtro filtro = Filtro.deCliente(clienteId);
+        exigirCliente(clienteId);
+        return evaluarConFiltro(Filtro.deCliente(clienteId));
+    }
+
+    /** Un solo cliente: la consulta de siempre. Varios (grupo crediticio): todos sus préstamos, cada uno una vez. */
+    private List<PrestamoEvaluado> evaluarPrestamosDeGrupo(UUID clienteId, List<UUID> grupo) {
+        return grupo.size() <= 1 ? evaluarPrestamosDe(clienteId) : evaluarConFiltro(Filtro.deClientes(grupo));
+    }
+
+    private List<PrestamoEvaluado> evaluarConFiltro(Filtro filtro) {
         LocalDate hoy = LocalDate.now(reloj);
         Map<UUID, List<CuotaGuardada>> cuotas = cuotasPorPrestamo(repositorio.cuotas(filtro));
         return repositorio.cabeceras(filtro).stream().map(c -> {

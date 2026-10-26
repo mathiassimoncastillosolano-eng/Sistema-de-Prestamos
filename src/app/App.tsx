@@ -28,10 +28,10 @@ function Protegida({ modulo }: { modulo: Modulo }) {
   return permitido ? <Outlet /> : <Navigate to={rutaInicio(usuario?.rol)} replace />;
 }
 
-/** «/» es el dashboard de la gerencia; el asesor no tiene dashboard y entra directo a Clientes. */
+/** «/» es el dashboard de la gerencia; el asesor no tiene dashboard y entra directo a Préstamos. */
 function Inicio() {
-  const { puede } = useAuth();
-  return puede('dashboard') ? <DashboardPage /> : <Navigate to="/clientes" replace />;
+  const { puede, usuario } = useAuth();
+  return puede('dashboard') ? <DashboardPage /> : <Navigate to={rutaInicio(usuario?.rol)} replace />;
 }
 
 function Rutas() {

@@ -4,6 +4,8 @@ import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import com.nexora.backend.prestamos.dto.CondicionesRespuesta;
+import com.nexora.backend.prestamos.dto.ContratoRespuesta;
+import com.nexora.backend.prestamos.dto.PerfilFinancieroRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoDetalle;
 import com.nexora.backend.prestamos.dto.PrestamoListado;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
@@ -78,6 +80,27 @@ public class PrestamoControlador {
     @GetMapping("/capacidad")
     public CapacidadEndeudamiento capacidad(@RequestParam UUID clienteId) {
         return consultas.capacidad(clienteId);
+    }
+
+    /**
+     * Perfil financiero consolidado (DNI ↔ RUC 10): deuda consolidada, límite, capacidad, cuotas e integrantes. Misma cifra
+     * que valida el registro. El detalle de integrantes ajenos a la agencia del usuario se omite (ver PrestamoConsultaServicio).
+     */
+    @GetMapping("/perfil-financiero")
+    public PerfilFinancieroRespuesta perfilFinanciero(HttpServletRequest request, @RequestParam UUID clienteId) {
+        return consultas.perfilFinanciero(perfilDe(request), clienteId);
+    }
+
+    /** Contrato PRELIMINAR (borrador) de una solicitud, para revisarlo antes de confirmar. No registra nada. */
+    @PostMapping("/contrato-preliminar")
+    public ContratoRespuesta contratoPreliminar(HttpServletRequest request, @RequestBody SolicitudPrestamo solicitud) {
+        return servicio.contratoPreliminar(perfilDe(request), solicitud);
+    }
+
+    /** Contrato guardado del préstamo (gerencia: todos; asesor: los de su agencia). */
+    @GetMapping("/{id}/contrato")
+    public ContratoRespuesta contrato(HttpServletRequest request, @PathVariable UUID id) {
+        return servicio.contrato(perfilDe(request), id);
     }
 
     /** Límite diario del asesor en sesión (colocado hoy y disponible). El asesor sale de la sesión, nunca de la URL. */

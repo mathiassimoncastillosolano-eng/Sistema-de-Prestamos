@@ -15,6 +15,7 @@ export interface CuentaFalsa {
 const json = (status: number, cuerpo?: unknown) =>
   new Response(cuerpo === undefined ? null : JSON.stringify(cuerpo), { status, headers: { 'Content-Type': 'application/json' } });
 
+import { armarContrato } from './contrato';
 export const CSRF = 'token-csrf-de-prueba';
 
 export function crearServidor(cuentas: CuentaFalsa[]) {
@@ -36,6 +37,8 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
   /** Capacidad por cliente (GET /api/prestamos/capacidad). Sin entrada: cliente sin deuda. */
   const capacidades = new Map<string, typeof SIN_DEUDA | 'error'>();
   let retenerCapacidad: Promise<void> | null = null;
+  const perfiles = new Map<string, Record<string, unknown> | 'error'>();
+  let contratoFalla = false;
   /** Capital que el asesor ya colocó hoy (GET /api/prestamos/limite-diario). Cada registro aceptado lo aumenta. */
   let colocadoHoy = 0;
   const limiteDiario = () => ({
@@ -109,6 +112,24 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
       const c = capacidades.get(new URL(ruta, 'http://localhost').searchParams.get('clienteId') ?? '') ?? SIN_DEUDA;
       return c === 'error' ? json(500) : json(200, c);
     }
+    if (ruta.startsWith('/api/prestamos/perfil-financiero?clienteId=') && metodo === 'GET') {
+      if (!sesionDe) return json(401);
+      const id = new URL(ruta, 'http://localhost').searchParams.get('clienteId') ?? '';
+      const fijado = perfiles.get(id);
+      if (fijado === 'error') return json(500);
+      if (fijado) return json(200, fijado);
+      const c = capacidades.get(id) ?? SIN_DEUDA;
+      if (c === 'error') return json(500);
+      const propio = clientes.find((x) => x.id === id);
+      if (!propio) return json(404, { codigo: 'CLIENTE_NO_ENCONTRADO', mensaje: 'x' });
+      return json(200, {
+        clienteId: id, tipoDocumento: propio.tipoDocumento, numeroDocumento: propio.numeroDocumento, nombre: propio.nombre,
+        limite: c.limite, capitalPendiente: c.capitalPendiente, importePendiente: c.importePendiente, disponible: c.disponible,
+        deudaPropia: c.capitalPendiente, deudaVinculada: 0, consolidada: false, cuotasPendientes: 0, cuotasVencidas: 0, cuotasPagadas: 0,
+        integrantes: [{ clienteId: id, nombre: propio.nombre, tipoDocumento: propio.tipoDocumento, numeroDocumento: propio.numeroDocumento, relacion: 'TITULAR', consultado: true, detalleVisible: true, capitalPendiente: c.capitalPendiente, importePendiente: c.importePendiente, prestamosConSaldo: 0, cuotasPendientes: 0, cuotasVencidas: 0, cuotasPagadas: 0 }],
+        prestamos: []
+      });
+    }
     if (ruta.startsWith('/api/prestamos?clienteId=') && metodo === 'GET') {
       return sesionDe ? json(200, []) : json(401);
     }
@@ -116,6 +137,18 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
       if (!sesionDe) return json(401);
       if (ruta === '/api/prestamos/condiciones' && metodo === 'GET') return json(200, CONDICIONES);
       if (ruta === '/api/prestamos/limite-diario' && metodo === 'GET') return json(200, limiteDiario());
+      if (ruta === '/api/prestamos/contrato-preliminar' && metodo === 'POST') {
+        if (contratoFalla) return json(500);
+        if (desactualizado || cuerpo.totalContractualEsperado !== armarSimulacion(cuerpo.capital, cuerpo.plazoMeses).totalContractual) {
+          return json(409, { codigo: 'CONDICIONES_DESACTUALIZADAS', mensaje: 'Las condiciones cambiaron desde la revisión.' });
+        }
+        return json(200, armarContrato('BORRADOR', cuerpo.capital, cuerpo.plazoMeses));
+      }
+      if (/^\/api\/prestamos\/[^/?]+\/contrato$/.test(ruta) && metodo === 'GET') {
+        const idc = ruta.split('/')[3];
+        if (idc === DETALLE.id) return json(200, armarContrato('DEFINITIVO', DETALLE.capital, DETALLE.plazoMeses));
+        return json(404, { codigo: 'CONTRATO_NO_DISPONIBLE', mensaje: 'Este préstamo no tiene contrato guardado: se registró antes de que existiera esta función.' });
+      }
       if (ruta === '/api/prestamos/simulacion' && metodo === 'POST') return json(200, armarSimulacion(cuerpo.capital, cuerpo.plazoMeses));
       if (ruta === '/api/prestamos' && metodo === 'GET') return json(200, LISTADO);
       if (ruta === '/api/prestamos' && metodo === 'POST') {
@@ -160,6 +193,10 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
         disponible: Math.max(0, Math.round((10000 - capitalPendiente) * 100) / 100)
       });
     },
+    /** Perfil financiero consolidado a medida para un cliente (o 'error'). */
+    fijarPerfil: (clienteId: string, perfil: Record<string, unknown> | 'error') => { perfiles.set(clienteId, perfil); },
+    /** El borrador del contrato responde 500 (para probar el reintento y el bloqueo del registro). */
+    fallarContrato: (v: boolean) => { contratoFalla = v; },
     /** Fija cuánto colocó hoy el asesor (límite diario de 50,000). */
     fijarColocadoHoy: (monto: number) => { colocadoHoy = monto; },
     /** Deja la consulta de capacidad esperando hasta llamar a la función devuelta. */
