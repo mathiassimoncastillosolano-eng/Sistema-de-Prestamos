@@ -16,7 +16,8 @@ export type CodigoPrestamo =
   | 'PLAZO_FUERA_DE_RANGO'
   | 'MONEDA_NO_PERMITIDA'
   | 'LIMITE_EXCEDIDO'
-  | 'LIMITE_DIARIO_EXCEDIDO'
+  | 'SALDO_CAJA_INSUFICIENTE'
+  | 'CAJA_CERRADA'
   | 'CONDICIONES_DESACTUALIZADAS'
   | 'CONTRATO_NO_DISPONIBLE'
   | 'NO_AUTENTICADO'
@@ -180,20 +181,6 @@ export interface ContratoApi {
   datos: string;
 }
 
-/**
- * GET /api/prestamos/limite-diario: límite diario de colocación del asesor en sesión (S/ 50,000 por día de Lima).
- * Lo calcula el servidor con los préstamos que el asesor registró hoy; los pagos de cuotas no lo reponen.
- */
-export interface LimiteDiarioApi {
-  fecha: string; // yyyy-MM-dd (Lima)
-  limite: number;
-  colocadoHoy: number;
-  /** limite − colocadoHoy (nunca negativo). */
-  disponible: number;
-  /** Monto mínimo de un préstamo: si lo disponible no llega, no se puede iniciar otra solicitud hoy. */
-  capitalMinimo: number;
-}
-
 /** POST /api/prestamos/simulacion: cronograma que se guardaría hoy. No se persiste nada. */
 export interface SimulacionApi {
   moneda: string;
@@ -286,12 +273,11 @@ export interface DetalleLimite {
   disponible?: number;
 }
 
-/** Detalle que acompaña a LIMITE_DIARIO_EXCEDIDO. */
-export interface DetalleLimiteDiario {
-  limite: number;
-  colocadoHoy: number;
-  disponible: number;
+/** Detalle que acompaña a SALDO_CAJA_INSUFICIENTE: el efectivo que hay, lo pedido y lo que falta. */
+export interface DetalleSaldoCaja {
+  saldo: number;
   solicitado: number;
+  falta: number;
 }
 
 export class PrestamoApiError extends Error {
@@ -308,7 +294,7 @@ export class PrestamoApiError extends Error {
 
 const CODIGOS = new Set<string>([
   'DATOS_INVALIDOS', 'SIN_PERMISO', 'CLIENTE_NO_ENCONTRADO', 'PRESTAMO_NO_ENCONTRADO', 'CLIENTE_NO_APTO',
-  'CAPITAL_BAJO_MINIMO', 'PLAZO_FUERA_DE_RANGO', 'MONEDA_NO_PERMITIDA', 'LIMITE_EXCEDIDO', 'LIMITE_DIARIO_EXCEDIDO',
+  'CAPITAL_BAJO_MINIMO', 'PLAZO_FUERA_DE_RANGO', 'MONEDA_NO_PERMITIDA', 'LIMITE_EXCEDIDO', 'SALDO_CAJA_INSUFICIENTE', 'CAJA_CERRADA',
   'CONDICIONES_DESACTUALIZADAS', 'CONTRATO_NO_DISPONIBLE'
 ]);
 
@@ -324,12 +310,12 @@ export function detalleLimite(e: unknown): DetalleLimite | null {
   return { acumulado: d.acumulado, limite: d.limite, excedente: d.excedente, disponible: typeof d.disponible === 'number' ? d.disponible : undefined };
 }
 
-/** Extrae el detalle si el error es LIMITE_DIARIO_EXCEDIDO; si no, devuelve null. */
-export function detalleLimiteDiario(e: unknown): DetalleLimiteDiario | null {
-  if (!(e instanceof PrestamoApiError) || e.codigo !== 'LIMITE_DIARIO_EXCEDIDO') return null;
-  const d = e.detalle as Partial<DetalleLimiteDiario> | null;
-  if (!d || typeof d.limite !== 'number' || typeof d.colocadoHoy !== 'number' || typeof d.disponible !== 'number' || typeof d.solicitado !== 'number') return null;
-  return { limite: d.limite, colocadoHoy: d.colocadoHoy, disponible: d.disponible, solicitado: d.solicitado };
+/** Extrae el detalle si el error es SALDO_CAJA_INSUFICIENTE; si no, devuelve null. */
+export function detalleSaldoCaja(e: unknown): DetalleSaldoCaja | null {
+  if (!(e instanceof PrestamoApiError) || e.codigo !== 'SALDO_CAJA_INSUFICIENTE') return null;
+  const d = e.detalle as Partial<DetalleSaldoCaja> | null;
+  if (!d || typeof d.saldo !== 'number' || typeof d.solicitado !== 'number' || typeof d.falta !== 'number') return null;
+  return { saldo: d.saldo, solicitado: d.solicitado, falta: d.falta };
 }
 
 function leerCookie(nombre: string): string | null {
@@ -418,10 +404,6 @@ export const prestamosApi = {
   /** Capacidad de endeudamiento del cliente (perfil y formulario de solicitud). */
   capacidad(clienteId: string): Promise<CapacidadApi> {
     return llamar<CapacidadApi>(`/capacidad?clienteId=${encodeURIComponent(clienteId)}`, { method: 'GET' });
-  },
-  /** Límite diario de colocación del asesor en sesión (el servidor sabe quién es por la sesión). */
-  limiteDiario(): Promise<LimiteDiarioApi> {
-    return llamar<LimiteDiarioApi>('/limite-diario', { method: 'GET' });
   },
   /** Perfil financiero consolidado del cliente (deuda, cuotas, límite, capacidad y vinculados). */
   perfilFinanciero(clienteId: string): Promise<PerfilFinancieroApi> {

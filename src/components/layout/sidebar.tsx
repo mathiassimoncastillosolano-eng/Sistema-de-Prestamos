@@ -3,6 +3,7 @@ import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { Tip } from '@/components/ui/tooltip';
 import { useAuth } from '@/hooks/use-auth';
+import { usePendientes } from '@/hooks/use-caja';
 import { DUR, EASE } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { BrandLockup, BrandMark } from './brand-mark';
@@ -18,6 +19,8 @@ interface ContentProps {
 export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps) {
   const { puede } = useAuth();
   const grupos = gruposPara(puede);
+  // Avisos de «hay algo por hacer»: consulta periódica al servidor (cada minuto y al volver a la pestaña), no tiempo real.
+  const { pendientes } = usePendientes(puede('caja') || puede('reposiciones') || puede('supervision'));
   return (
     <div className="pattern-grid flex h-full flex-col bg-side text-side-ink">
       <div className={cn('flex h-16 shrink-0 items-center gap-3 px-[1.125rem]', colapsado && 'justify-center px-0')}>
@@ -43,6 +46,15 @@ export function SidebarContent({ colapsado, onToggle, onNavigate }: ContentProps
                           )}
                           <it.icon className={cn('relative size-5 shrink-0 transition-colors', isActive ? 'text-side-accent' : 'text-side-muted group-hover:text-side-ink')} aria-hidden />
                           {!colapsado && <span className="relative truncate">{it.label}</span>}
+                          {pendientes && it.aviso && it.aviso(pendientes) > 0 && (
+                            <span
+                              role="status"
+                              aria-label={`${it.aviso(pendientes)} pendiente${it.aviso(pendientes) === 1 ? '' : 's'}`}
+                              className={cn('relative grid min-w-5 place-items-center rounded-full bg-side-accent px-1.5 text-[0.6875rem] font-semibold leading-5 text-black', colapsado ? 'absolute right-1.5 top-1.5 min-w-4 px-1 leading-4' : 'ml-auto')}
+                            >
+                              {it.aviso(pendientes) > 99 ? '99+' : it.aviso(pendientes)}
+                            </span>
+                          )}
                         </>
                       )}
                     </NavLink>

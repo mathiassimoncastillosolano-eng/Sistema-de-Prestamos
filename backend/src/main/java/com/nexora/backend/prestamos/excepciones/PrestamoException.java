@@ -15,7 +15,9 @@ public class PrestamoException extends RuntimeException {
         PLAZO_FUERA_DE_RANGO(HttpStatus.UNPROCESSABLE_ENTITY),
         MONEDA_NO_PERMITIDA(HttpStatus.UNPROCESSABLE_ENTITY),
         LIMITE_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY),
-        LIMITE_DIARIO_EXCEDIDO(HttpStatus.UNPROCESSABLE_ENTITY),
+        /** El desembolso supera el efectivo de la caja del asesor: debe solicitar una reposición. */
+        SALDO_CAJA_INSUFICIENTE(HttpStatus.UNPROCESSABLE_ENTITY),
+        CAJA_CERRADA(HttpStatus.CONFLICT),
         PRESTAMO_NO_ENCONTRADO(HttpStatus.NOT_FOUND),
         CONDICIONES_DESACTUALIZADAS(HttpStatus.CONFLICT),
         /** Préstamo anterior a los contratos (o contrato aún no guardado): no se inventa uno a posteriori. */

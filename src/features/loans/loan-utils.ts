@@ -1,5 +1,4 @@
-import { CFG } from '@/lib/config';
-import type { EstadoCuotaApi, EstadoPrestamoApi, LimiteDiarioApi } from '@/services/prestamos-api';
+import type { EstadoCuotaApi, EstadoPrestamoApi } from '@/services/prestamos-api';
 
 /** Los únicos estados de un préstamo formalizado (CHECK `prestamos_estado_ck`), en el orden de los filtros. */
 export const ESTADOS_PRESTAMO: readonly EstadoPrestamoApi[] = ['Vigente', 'En mora', 'Cancelado'];
@@ -73,16 +72,3 @@ export function paginasVisibles(actual: number, paginas: number): Array<number |
   });
   return salida;
 }
-
-/** Cómo está el límite diario del asesor. Solo orienta la pantalla: el servidor vuelve a validar cada registro. */
-export type EstadoLimiteDiario = 'disponible' | 'cerca' | 'insuficiente' | 'agotado';
-
-export function estadoLimiteDiario(l: LimiteDiarioApi): EstadoLimiteDiario {
-  if (l.disponible <= 0) return 'agotado';
-  if (l.disponible < l.capitalMinimo) return 'insuficiente';
-  if (l.colocadoHoy / l.limite >= CFG.alertaLimite) return 'cerca';
-  return 'disponible';
-}
-
-/** Con menos del monto mínimo disponible no existe ningún préstamo válido: no se puede iniciar otra solicitud hoy. */
-export const puedeIniciarSolicitud = (l: LimiteDiarioApi) => l.disponible >= l.capitalMinimo;

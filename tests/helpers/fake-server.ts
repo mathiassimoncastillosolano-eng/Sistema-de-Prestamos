@@ -40,9 +40,15 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
   const perfiles = new Map<string, Record<string, unknown> | 'error'>();
   let contratoFalla = false;
   /** Capital que el asesor ya colocó hoy (GET /api/prestamos/limite-diario). Cada registro aceptado lo aumenta. */
-  let colocadoHoy = 0;
-  const limiteDiario = () => ({
-    fecha: '2026-10-18', limite: 50000, colocadoHoy, disponible: Math.max(0, Math.round((50000 - colocadoHoy) * 100) / 100), capitalMinimo: 1000
+  // Caja del asesor (como el backend: arranca con S/ 50,000; cada desembolso la baja; nunca queda negativa).
+  let saldoCaja = 50000;
+  let cajaEstado: 'ABIERTA' | 'CERRADA' = 'ABIERTA';
+  const cajaResumen = () => ({
+    cajaId: 'caja-1', asesorId: 'p1', asesor: 'Valeria Quintana', agenciaId: 'a1', agencia: 'Sur Prueba', estado: cajaEstado,
+    limite: 50000, saldo: saldoCaja, saldoInicial: 50000,
+    capacidadHastaLimite: Math.round((50000 - saldoCaja) * 100) / 100, autorizadoPendienteRecepcion: 0,
+    capacidadLibre: Math.round((50000 - saldoCaja) * 100) / 100, saldoProyectado: saldoCaja,
+    reposicionAbierta: null, ultimaRecepcion: null, incidenciasAbiertas: 0, abiertaEn: '2026-10-01T15:00:00Z', ahora: '2026-10-18T15:00:00Z'
   });
 
   const handler = vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
@@ -130,13 +136,16 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
         prestamos: []
       });
     }
+    if (ruta === '/api/caja' && metodo === 'GET') return sesionDe ? json(200, cajaResumen()) : json(401);
+    if (ruta === '/api/caja/pendientes' && metodo === 'GET') {
+      return sesionDe ? json(200, { solicitudesPorRevisar: 0, recepcionesPorRegistrar: 0, observadas: 0, porConciliar: 0, incidenciasAbiertas: 0, enTransito: 0, ahora: '2026-10-18T15:00:00Z' }) : json(401);
+    }
     if (ruta.startsWith('/api/prestamos?clienteId=') && metodo === 'GET') {
       return sesionDe ? json(200, []) : json(401);
     }
     if (ruta.startsWith('/api/prestamos')) {
       if (!sesionDe) return json(401);
       if (ruta === '/api/prestamos/condiciones' && metodo === 'GET') return json(200, CONDICIONES);
-      if (ruta === '/api/prestamos/limite-diario' && metodo === 'GET') return json(200, limiteDiario());
       if (ruta === '/api/prestamos/contrato-preliminar' && metodo === 'POST') {
         if (contratoFalla) return json(500);
         if (desactualizado || cuerpo.totalContractualEsperado !== armarSimulacion(cuerpo.capital, cuerpo.plazoMeses).totalContractual) {
@@ -160,13 +169,13 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
         if (desactualizado || cuerpo.totalContractualEsperado !== armarSimulacion(cuerpo.capital, cuerpo.plazoMeses).totalContractual) {
           return json(409, { codigo: 'CONDICIONES_DESACTUALIZADAS', mensaje: 'Las condiciones cambiaron desde la revisión.' });
         }
-        // Como el backend real: lo colocado hoy más el monto nuevo no puede pasar de 50,000.
-        const dia = limiteDiario();
-        if (cuerpo.capital > dia.disponible) {
-          return json(422, { codigo: 'LIMITE_DIARIO_EXCEDIDO', mensaje: 'El préstamo no se registró: superarías tu límite diario.',
-            detalle: { limite: dia.limite, colocadoHoy: dia.colocadoHoy, disponible: dia.disponible, solicitado: cuerpo.capital } });
+        // Como el backend real: el desembolso sale del efectivo de la caja y no puede dejarla en negativo.
+        if (cajaEstado !== 'ABIERTA') return json(409, { codigo: 'CAJA_CERRADA', mensaje: 'Tu caja está cerrada.' });
+        if (cuerpo.capital > saldoCaja) {
+          return json(422, { codigo: 'SALDO_CAJA_INSUFICIENTE', mensaje: 'El préstamo no se registró: tu caja no tiene efectivo suficiente.',
+            detalle: { saldo: saldoCaja, solicitado: cuerpo.capital, falta: Math.round((cuerpo.capital - saldoCaja) * 100) / 100 } });
         }
-        colocadoHoy += cuerpo.capital;
+        saldoCaja = Math.round((saldoCaja - cuerpo.capital) * 100) / 100;
         return json(201, { ...DETALLE, capital: cuerpo.capital, plazoMeses: cuerpo.plazoMeses });
       }
       const id = ruta.slice('/api/prestamos/'.length);
@@ -197,8 +206,12 @@ export function crearServidor(cuentas: CuentaFalsa[]) {
     fijarPerfil: (clienteId: string, perfil: Record<string, unknown> | 'error') => { perfiles.set(clienteId, perfil); },
     /** El borrador del contrato responde 500 (para probar el reintento y el bloqueo del registro). */
     fallarContrato: (v: boolean) => { contratoFalla = v; },
-    /** Fija cuánto colocó hoy el asesor (límite diario de 50,000). */
-    fijarColocadoHoy: (monto: number) => { colocadoHoy = monto; },
+    /** Fija el efectivo que tiene la caja del asesor (0–50,000). */
+    fijarSaldoCaja: (monto: number) => { saldoCaja = monto; },
+    /** Abre o cierra la caja del asesor. */
+    fijarEstadoCaja: (estado: 'ABIERTA' | 'CERRADA') => { cajaEstado = estado; },
+    /** Efectivo actual de la caja (para comprobar que un registro la descontó). */
+    saldoCajaActual: () => saldoCaja,
     /** Deja la consulta de capacidad esperando hasta llamar a la función devuelta. */
     retenerCapacidad: () => { let soltar!: () => void; retenerCapacidad = new Promise<void>((r) => { soltar = r; }); return () => { retenerCapacidad = null; soltar(); }; },
     retenerMe: () => { let soltar!: () => void; retenerMe = new Promise<void>((r) => { soltar = r; }); return () => { retenerMe = null; soltar(); }; }

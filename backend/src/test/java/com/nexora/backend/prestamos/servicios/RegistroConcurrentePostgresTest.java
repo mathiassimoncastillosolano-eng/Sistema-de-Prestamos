@@ -9,10 +9,7 @@ import com.nexora.backend.autenticacion.entidades.Perfil;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
 import com.nexora.backend.prestamos.excepciones.PrestamoException;
 import com.nexora.backend.prestamos.excepciones.PrestamoException.Codigo;
-import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -27,6 +24,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -34,7 +32,7 @@ import org.springframework.test.context.DynamicPropertySource;
 
 /**
  * Pruebas de concurrencia contra un PostgreSQL REAL (no simulado): dos asesores registran a la vez para el mismo cliente,
- * y un mismo asesor registra dos préstamos a la vez cerca de su límite diario.
+ * y un mismo asesor registra préstamos a la vez contra el efectivo de su caja.
  * Solo corre si se define PRUEBA_PG_URL y apunta a una base local (nunca a Supabase). Ejemplo:
  * {@code PRUEBA_PG_URL=jdbc:postgresql://localhost:5432/postgres PRUEBA_PG_USER=postgres mvn test}
  */
@@ -66,6 +64,9 @@ class RegistroConcurrentePostgresTest {
     @BeforeEach
     void preparar() {
         new ResourceDatabasePopulator(new ClassPathResource("esquema-prueba-concurrencia.sql"))
+                .execute(jdbc.getDataSource());
+        // Migración de caja (aditiva e idempotente) sobre la base LOCAL de prueba; se ejecuta desde backend/.
+        new ResourceDatabasePopulator(new FileSystemResource("sql/2026-10-26-caja-y-reposiciones.sql"))
                 .execute(jdbc.getDataSource());
         UUID ubicacion = jdbc.queryForObject("insert into public.ubicaciones (departamento, provincia, distrito) "
                 + "values ('Piura', 'Piura', 'Piura') returning id", UUID.class);
@@ -145,9 +146,7 @@ class RegistroConcurrentePostgresTest {
         }
     }
 
-    // ------------------------------------------------------------ límite diario del asesor
-
-    private static final LocalDate HOY_LIMA = LocalDate.now(ZoneId.of("America/Lima"));
+    // ------------------------------------------------------------ efectivo de la caja del asesor
 
     private UUID nuevoAsesor() {
         return jdbc.queryForObject("insert into public.perfiles (nombres, apellidos, correo, rol, agencia_id, clave_hash) "
@@ -160,40 +159,61 @@ class RegistroConcurrentePostgresTest {
                 UUID.class, agenciaId, asesorId);
     }
 
-    /** Préstamo guardado directo en la tabla (sin cuotas): solo sirve para sumar lo colocado por un asesor. */
-    private void prestamoDe(UUID asesor, String capital, LocalDate fecha, String estado) {
-        jdbc.update("insert into public.prestamos (cliente_id, agencia_id, asesor_id, capital, plazo_meses, tea, "
-                + "fecha_desembolso, estado) values (?, ?, ?, ?, 12, 0.3, ?, ?)",
-                clienteSinDeuda(), agenciaId, asesor, new BigDecimal(capital), fecha, estado);
+    private BigDecimal saldoCaja(UUID asesor) {
+        return jdbc.queryForObject("select saldo from public.cajas where asesor_id = ?", BigDecimal.class, asesor);
     }
 
     @Test
-    void soloCuentaLoColocadoHoyPorEseAsesorAunqueYaEsteCancelado() {
-        UUID otro = nuevoAsesor();
-        prestamoDe(asesorId, "9000", HOY_LIMA.minusDays(1), "Vigente"); // ayer: no cuenta
-        prestamoDe(otro, "9000", HOY_LIMA, "Vigente");                  // otro asesor: no cuenta
-        prestamoDe(asesorId, "4000", HOY_LIMA, "Vigente");
-        prestamoDe(asesorId, "3000", HOY_LIMA, "Cancelado");            // ya pagado: igual cuenta
-
-        LimiteDiarioAsesor l = servicio.limiteDiario(asesor());
-        assertEquals(0, new BigDecimal("7000").compareTo(l.colocadoHoy()));
-        assertEquals(0, new BigDecimal("43000").compareTo(l.disponible()));
-        assertEquals(0, new BigDecimal("9000").compareTo(servicio.limiteDiario(asesor(otro)).colocadoHoy()));
-        // El préstamo de ayer sigue guardado: el límite se reinicia sin borrar nada.
-        Integer historicos = jdbc.queryForObject("select count(*) from public.prestamos where asesor_id = ? "
-                + "and fecha_desembolso < ?", Integer.class, asesorId, HOY_LIMA);
-        assertEquals(1, historicos);
+    void la_primera_vez_se_abre_la_caja_con_50000_y_el_desembolso_queda_en_el_libro() {
+        UUID id = nuevoAsesor();
+        servicio.registrar(asesor(id), new SolicitudPrestamo(clienteSinDeuda(), new BigDecimal("4000"), 12,
+                null, null, null, null));
+        assertEquals(0, new BigDecimal("46000").compareTo(saldoCaja(id)));
+        assertEquals(1, jdbc.queryForObject("select count(*) from public.caja_movimientos m join public.cajas c "
+                + "on c.id = m.caja_id where c.asesor_id = ? and m.tipo = 'APERTURA'", Integer.class, id));
+        assertEquals(1, jdbc.queryForObject("select count(*) from public.caja_movimientos m join public.cajas c "
+                + "on c.id = m.caja_id where c.asesor_id = ? and m.tipo = 'DESEMBOLSO'", Integer.class, id));
+        // El saldo coincide con el libro de movimientos.
+        assertEquals(0, new BigDecimal("46000").compareTo(jdbc.queryForObject(
+                "select coalesce(sum(case sentido when 'ENTRADA' then importe else -importe end), 0) "
+                        + "from public.caja_movimientos m join public.cajas c on c.id = m.caja_id where c.asesor_id = ?",
+                BigDecimal.class, id)));
     }
 
     @Test
-    void dosRegistrosSimultaneosDelMismoAsesorNoPasanSuLimiteDiario() throws Exception {
+    void el_saldo_se_arrastra_entre_dias_y_no_hay_tope_diario() {
+        UUID id = nuevoAsesor();
+        // Tres desembolsos de 10,000 en el mismo día (30,000) y uno más: antes lo frenaba el tope diario de 50,000
+        // solo al pasar de ahí; ahora manda el efectivo.
+        for (int i = 0; i < 4; i++) {
+            servicio.registrar(asesor(id), new SolicitudPrestamo(clienteSinDeuda(), new BigDecimal("10000"), 12,
+                    null, null, null, null));
+        }
+        assertEquals(0, new BigDecimal("10000").compareTo(saldoCaja(id)));
+        // El saldo no se reinicia: se conserva hasta que llegue una reposición.
+        PrestamoException ex = null;
+        try {
+            servicio.registrar(asesor(id), new SolicitudPrestamo(clienteSinDeuda(), new BigDecimal("10000.01"), 12,
+                    null, null, null, null));
+        } catch (PrestamoException e) {
+            ex = e;
+        }
+        assertEquals(Codigo.SALDO_CAJA_INSUFICIENTE, ex.getCodigo());
+        assertEquals(0, new BigDecimal("10000").compareTo(saldoCaja(id)));
+    }
+
+    @Test
+    void dosRegistrosSimultaneosDelMismoAsesorNoGastanMasEfectivoDelQueTiene() throws Exception {
         ExecutorService hilos = Executors.newFixedThreadPool(2);
         try {
             for (int ronda = 0; ronda < RONDAS; ronda++) {
                 UUID id = nuevoAsesor();
+                // Deja la caja con 5,000: abre la caja con un desembolso de 45,000 repartido en 5 préstamos de 9,000.
                 for (int i = 0; i < 5; i++) {
-                    prestamoDe(id, "9000", HOY_LIMA, "Vigente"); // 45,000 colocados hoy: le quedan 5,000
+                    servicio.registrar(asesor(id), new SolicitudPrestamo(clienteSinDeuda(), new BigDecimal("9000"), 12,
+                            null, null, null, null));
                 }
+                assertEquals(0, new BigDecimal("5000").compareTo(saldoCaja(id)), "ronda " + ronda);
                 Perfil asesor = asesor(id);
                 CyclicBarrier salida = new CyclicBarrier(2);
                 // Dos clientes distintos, sin deuda: cada préstamo de 5,000 cabe solo, los dos juntos no.
@@ -207,7 +227,7 @@ class RegistroConcurrentePostgresTest {
                                     null, null, null, null));
                             return true;
                         } catch (PrestamoException e) {
-                            assertEquals(Codigo.LIMITE_DIARIO_EXCEDIDO, e.getCodigo());
+                            assertEquals(Codigo.SALDO_CAJA_INSUFICIENTE, e.getCodigo());
                             return false;
                         }
                     };
@@ -219,9 +239,13 @@ class RegistroConcurrentePostgresTest {
                 }
 
                 assertEquals(1, aceptados, "ronda " + ronda + ": solo uno de los dos registros debe pasar");
-                BigDecimal colocado = jdbc.queryForObject("select sum(capital) from public.prestamos where asesor_id = ? "
-                        + "and fecha_desembolso = ?", BigDecimal.class, id, HOY_LIMA);
-                assertEquals(0, new BigDecimal("50000").compareTo(colocado), "ronda " + ronda);
+                assertEquals(0, BigDecimal.ZERO.compareTo(saldoCaja(id)), "ronda " + ronda + ": la caja queda en cero, nunca negativa");
+                BigDecimal desembolsado = jdbc.queryForObject("select sum(capital) from public.prestamos where asesor_id = ?",
+                        BigDecimal.class, id);
+                assertEquals(0, new BigDecimal("50000").compareTo(desembolsado), "ronda " + ronda);
+                // Un movimiento DESEMBOLSO por préstamo guardado, ni uno más ni uno menos.
+                assertEquals(6, jdbc.queryForObject("select count(*) from public.caja_movimientos m join public.cajas c "
+                        + "on c.id = m.caja_id where c.asesor_id = ? and m.tipo = 'DESEMBOLSO'", Integer.class, id));
             }
         } finally {
             hilos.shutdownNow();

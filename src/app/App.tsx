@@ -19,6 +19,10 @@ const ClientDetailPage = lazy(() => import('@/features/clients/client-detail-pag
 const RequestPage = lazy(() => import('@/features/loans/request-page'));
 const LoansPage = lazy(() => import('@/features/loans/loans-page'));
 const LoanDetailPage = lazy(() => import('@/features/loans/loan-detail-page'));
+const CajaPage = lazy(() => import('@/features/caja/caja-page'));
+const GestionPage = lazy(() => import('@/features/caja/gestion-page'));
+const SupervisionPage = lazy(() => import('@/features/caja/supervision-page'));
+const ReposicionDetallePage = lazy(() => import('@/features/caja/reposicion-detalle-page'));
 
 /** Guard de ruta: decide por URL (no por el menú). Sin permiso redirige a la pantalla de inicio del rol. */
 function Protegida({ modulo }: { modulo: Modulo }) {
@@ -59,6 +63,17 @@ function Rutas() {
           <Route path="prestamos/:id" element={<LoanDetailPage />} />
           {/* Enlace antiguo (favoritos) del módulo eliminado: el cronograma vive en el detalle de cada préstamo. */}
           <Route path="cuotas" element={<Navigate to="/prestamos" replace />} />
+        </Route>
+        <Route element={<Protegida modulo="caja" />}>
+          <Route path="caja" element={<CajaPage />} />
+          <Route path="caja/:id" element={<ReposicionDetallePage />} />
+        </Route>
+        <Route element={<Protegida modulo="reposiciones" />}>
+          <Route path="reposiciones" element={<GestionPage />} />
+          <Route path="reposiciones/:id" element={<ReposicionDetallePage />} />
+        </Route>
+        <Route element={<Protegida modulo="supervision" />}>
+          <Route path="supervision" element={<SupervisionPage />} />
         </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>

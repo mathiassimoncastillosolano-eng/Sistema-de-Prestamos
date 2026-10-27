@@ -12,11 +12,14 @@ import static org.mockito.Mockito.when;
 
 import com.nexora.backend.autenticacion.entidades.Agencia;
 import com.nexora.backend.autenticacion.entidades.Perfil;
+import com.nexora.backend.caja.repositorios.CajaRepositorio;
+import com.nexora.backend.caja.repositorios.CajaRepositorio.CajaFila;
+import com.nexora.backend.caja.repositorios.ReposicionRepositorio;
+import com.nexora.backend.caja.servicios.CajaServicio;
 import com.nexora.backend.cuotas.repositorios.CuotaRepositorio;
 import com.nexora.backend.prestamos.dominio.CapacidadEndeudamiento;
 import com.nexora.backend.prestamos.dominio.EstadoCliente;
 import com.nexora.backend.prestamos.dominio.EvaluadorCartera.Evaluacion;
-import com.nexora.backend.prestamos.dominio.LimiteDiarioAsesor;
 import com.nexora.backend.prestamos.dto.ContratoRespuesta;
 import com.nexora.backend.prestamos.dto.PrestamoRespuesta;
 import com.nexora.backend.prestamos.dto.SolicitudPrestamo;
@@ -47,16 +50,22 @@ class PrestamoServicioTest {
     private final PrestamoConsultaServicio consultas = mock(PrestamoConsultaServicio.class);
     private final EstadoClienteServicio estados = mock(EstadoClienteServicio.class);
     private final ContratoServicio contratos = mock(ContratoServicio.class);
+    private final CajaRepositorio cajaRepo = mock(CajaRepositorio.class);
+    private final ReposicionRepositorio reposRepo = mock(ReposicionRepositorio.class);
     // 22:00 del 17-oct en Lima = 03:00 UTC del 18-oct: prueba que se usa la fecha de Perú, no la de UTC.
     private final Clock reloj = Clock.fixed(Instant.parse("2026-10-18T03:00:00Z"), ZoneId.of("America/Lima"));
 
     private final UUID clienteId = UUID.randomUUID();
+    private final UUID cajaId = UUID.randomUUID();
+    private CajaFila caja;
     private PrestamoServicio servicio;
     private Perfil asesor;
 
     @BeforeEach
     void preparar() {
-        servicio = new PrestamoServicio(prestamos, cuotas, clientes, consultas, estados, contratos, reloj);
+        // La caja es REAL (con repositorios simulados): así se prueban sus reglas dentro del registro del préstamo.
+        servicio = new PrestamoServicio(prestamos, cuotas, clientes, consultas, estados, contratos,
+                new CajaServicio(cajaRepo, reposRepo, reloj), reloj);
 
         Agencia agencia = mock(Agencia.class);
         when(agencia.getId()).thenReturn(UUID.randomUUID());
@@ -73,6 +82,17 @@ class PrestamoServicioTest {
         when(prestamos.obtenerNumero(any())).thenReturn(1001L);
         when(estados.actualizar(clienteId)).thenReturn(EstadoCliente.ACTIVO);
         acumulado("0");
+
+        // Caja abierta con S/ 50,000 (la que existe tras la apertura).
+        saldoCaja("50000.00");
+        when(cajaRepo.crearSiNoExiste(any(), any(), any())).thenReturn(false);
+        when(cajaRepo.bloquearPorAsesor(any())).thenAnswer(i -> Optional.of(caja));
+        when(cajaRepo.porAsesor(any())).thenAnswer(i -> Optional.of(caja));
+    }
+
+    private void saldoCaja(String saldo) {
+        caja = new CajaFila(cajaId, UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("50000.00"),
+                new BigDecimal(saldo), new BigDecimal("50000.00"), "ABIERTA", Instant.EPOCH);
     }
 
     /** Capital pendiente del cliente en toda la empresa, tal como lo calcula la consulta de capacidad. */
@@ -424,120 +444,119 @@ class PrestamoServicioTest {
         assertEquals(12, r.cuotas().size());
     }
 
-    // ------------------------------------------------------------ límite diario del asesor (S/ 50,000)
-
-    /** Hoy en Lima según el reloj de la prueba (22:00 del 17-oct, aunque en UTC ya sea 18). */
-    private static final LocalDate HOY = LocalDate.of(2026, 10, 17);
-
-    /** Capital que el asesor ya colocó hoy, tal como lo suma la base de datos. */
-    private void colocadoHoy(String valor) {
-        when(prestamos.capitalColocado(any(), eq(HOY))).thenReturn(new BigDecimal(valor));
-    }
+    // ------------------------------------------------------------ efectivo de la caja del asesor (reemplaza al límite diario)
 
     @Test
-    void asesor_sin_prestamos_hoy_tiene_50000_disponibles() {
-        LimiteDiarioAsesor l = servicio.limiteDiario(asesor);
-        assertEquals(HOY, l.fecha());
-        assertEquals(new BigDecimal("0.00"), l.colocadoHoy());
-        assertEquals(new BigDecimal("50000.00"), l.disponible());
-        assertTrue(l.alcanzaElMinimo());
-    }
-
-    @Test
-    void el_limite_diario_se_suma_con_la_fecha_de_lima_y_no_con_la_de_utc() {
+    void el_desembolso_sale_de_la_caja_en_un_movimiento_auditable() {
         registrar("1000", 12, null);
-        verify(prestamos).capitalColocado(asesor.getId(), HOY);
-        verify(prestamos, never()).capitalColocado(any(), eq(LocalDate.of(2026, 10, 18)));
+        verify(cajaRepo).insertarMovimiento(eq(cajaId), eq("DESEMBOLSO"), eq("SALIDA"), eq(new BigDecimal("1000.00")),
+                eq(new BigDecimal("50000.00")), eq(new BigDecimal("49000.00")), any(), eq(null), eq(null), any(), any(), any());
+        verify(reposRepo).auditar(eq(cajaId), eq(null), any(), eq("DESEMBOLSO"), eq(new BigDecimal("1000.00")), any(), any());
     }
 
     @Test
-    void caso_a_45000_mas_5000_llega_justo_al_limite_y_se_permite() {
-        colocadoHoy("45000");
-        assertDoesNotThrow(() -> registrar("5000", 12, null));
-    }
-
-    @Test
-    void caso_b_45000_mas_5000_01_se_rechaza_y_no_se_guarda_nada() {
-        colocadoHoy("45000");
-        PrestamoException ex = rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("5000.01", 12, null));
-        assertEquals(new BigDecimal("50000.00"), ex.getDetalle().get("limite"));
-        assertEquals(new BigDecimal("45000"), ex.getDetalle().get("colocadoHoy"));
-        assertEquals(new BigDecimal("5000.00"), ex.getDetalle().get("disponible"));
-        assertEquals(new BigDecimal("5000.01"), ex.getDetalle().get("solicitado"));
-        assertTrue(ex.getMessage().contains("no se registró"));
-    }
-
-    @Test
-    void caso_c_con_el_limite_agotado_no_pasa_ni_el_minimo() {
-        colocadoHoy("50000");
-        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("1000", 12, null));
-    }
-
-    @Test
-    void caso_d_con_32000_colocados_se_permiten_10000() {
-        colocadoHoy("32000");
+    void ya_no_hay_tope_de_50000_por_dia_mientras_haya_efectivo() {
+        // Antes se rechazaba al pasar S/ 50,000 colocados en el día; ahora manda el efectivo de la caja.
+        saldoCaja("50000.00");
+        assertDoesNotThrow(() -> registrar("10000", 12, null));
+        saldoCaja("30000.00"); // tras una reposición recibida el asesor puede seguir desembolsando
         assertDoesNotThrow(() -> registrar("10000", 12, null));
     }
 
     @Test
-    void caso_e_diez_prestamos_de_5000_completan_el_dia_y_el_siguiente_se_rechaza() {
-        for (int i = 0; i < 10; i++) {
-            colocadoHoy(String.valueOf(i * 5000));
-            assertDoesNotThrow(() -> registrar("5000", 12, null), "préstamo " + (i + 1));
-        }
-        colocadoHoy("50000");
-        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("5000", 12, null));
+    void un_desembolso_igual_al_efectivo_se_permite_y_deja_la_caja_en_cero() {
+        saldoCaja("5000.00");
+        registrar("5000", 12, null);
+        verify(cajaRepo).insertarMovimiento(eq(cajaId), eq("DESEMBOLSO"), eq("SALIDA"), eq(new BigDecimal("5000.00")),
+                eq(new BigDecimal("5000.00")), eq(new BigDecimal("0.00")), any(), eq(null), eq(null), any(), any(), any());
     }
 
     @Test
-    void con_49000_colocados_se_permite_exactamente_el_minimo() {
-        colocadoHoy("49000");
-        assertDoesNotThrow(() -> registrar("1000", 12, null));
+    void un_desembolso_mayor_al_efectivo_se_rechaza_sin_guardar_nada_y_explica_cuanto_falta() {
+        saldoCaja("4999.99");
+        PrestamoException ex = rechaza(Codigo.SALDO_CAJA_INSUFICIENTE, () -> registrar("5000", 12, null));
+        assertEquals(new BigDecimal("4999.99"), ex.getDetalle().get("saldo"));
+        assertEquals(new BigDecimal("5000.00"), ex.getDetalle().get("solicitado"));
+        assertEquals(new BigDecimal("0.01"), ex.getDetalle().get("falta"));
+        assertTrue(ex.getMessage().contains("no se registró"));
+        assertTrue(ex.getMessage().contains("reposición"));
+        verify(cajaRepo, never()).insertarMovimiento(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void con_49500_colocados_no_se_puede_ni_el_minimo() {
-        colocadoHoy("49500");
-        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("1000", 12, null));
-        assertFalse(servicio.limiteDiario(asesor).alcanzaElMinimo());
+    void con_la_caja_en_cero_no_se_puede_desembolsar_ni_el_minimo() {
+        saldoCaja("0.00");
+        rechaza(Codigo.SALDO_CAJA_INSUFICIENTE, () -> registrar("1000", 12, null));
     }
 
     @Test
-    void si_el_cliente_no_tiene_capacidad_se_rechaza_por_el_cliente_aunque_el_asesor_tenga_cupo() {
+    void una_caja_cerrada_no_permite_desembolsos() {
+        caja = new CajaFila(cajaId, UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("50000.00"),
+                new BigDecimal("50000.00"), new BigDecimal("50000.00"), "CERRADA", Instant.EPOCH);
+        rechaza(Codigo.CAJA_CERRADA, () -> registrar("1000", 12, null));
+    }
+
+    @Test
+    void si_el_cliente_no_tiene_capacidad_se_rechaza_por_el_cliente_aunque_la_caja_tenga_efectivo() {
         acumulado("9000"); // el cliente solo puede 1,000 más
-        colocadoHoy("0");
         rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("5000", 12, null));
     }
 
     @Test
-    void si_el_cliente_tiene_capacidad_pero_el_asesor_no_se_rechaza_por_el_asesor() {
-        acumulado("0");
-        colocadoHoy("48000");
-        rechaza(Codigo.LIMITE_DIARIO_EXCEDIDO, () -> registrar("5000", 12, null));
-    }
-
-    @Test
-    void el_cupo_del_asesor_no_amplia_la_capacidad_del_cliente() {
-        acumulado("9000"); // capacidad del cliente: 1,000
-        colocadoHoy("45000"); // cupo del asesor: 5,000
+    void el_efectivo_de_la_caja_no_amplia_la_capacidad_del_cliente_ni_al_reves() {
+        acumulado("9000");              // capacidad del cliente: 1,000
+        saldoCaja("45000.00");          // efectivo suficiente
         rechaza(Codigo.LIMITE_EXCEDIDO, () -> registrar("1000.01", 12, null));
         assertDoesNotThrow(() -> registrar("1000", 12, null));
+        acumulado("0");
+        saldoCaja("500.00");            // el cliente puede, pero la caja no
+        rechaza(Codigo.SALDO_CAJA_INSUFICIENTE, () -> registrar("1000", 12, null));
     }
 
     @Test
-    void el_asesor_se_bloquea_despues_del_cliente_y_antes_de_sumar_lo_colocado() {
+    void la_caja_se_bloquea_despues_del_cliente_y_antes_de_guardar_el_prestamo() {
         registrar("1000", 12, null);
-        InOrder orden = inOrder(clientes, prestamos);
+        InOrder orden = inOrder(clientes, cajaRepo, prestamos);
         orden.verify(clientes).buscarBloqueando(clienteId);
-        orden.verify(prestamos).bloquearAsesor(asesor.getId());
-        orden.verify(prestamos).capitalColocado(asesor.getId(), HOY);
+        orden.verify(cajaRepo).bloquearPorAsesor(asesor.getId());
         orden.verify(prestamos).save(any(Prestamo.class));
+        orden.verify(cajaRepo).insertarMovimiento(any(), eq("DESEMBOLSO"), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void la_gerencia_no_tiene_limite_diario_de_colocacion() {
+    void la_gerencia_no_tiene_caja_ni_registra_desembolsos() {
         when(asesor.getRol()).thenReturn("gerencia");
-        assertEquals(Codigo.SIN_PERMISO,
-                assertThrows(PrestamoException.class, () -> servicio.limiteDiario(asesor)).getCodigo());
+        rechaza(Codigo.SIN_PERMISO, () -> registrar("1000", 12, null));
+        verify(cajaRepo, never()).bloquearPorAsesor(any());
+    }
+
+    @Test
+    void el_borrador_del_contrato_tambien_exige_efectivo_pero_no_toca_la_caja() {
+        ClienteResumen cliente = mock(ClienteResumen.class);
+        when(cliente.getId()).thenReturn(clienteId);
+        when(clientes.findById(clienteId)).thenReturn(Optional.of(cliente));
+        when(consultas.estadoCliente(clienteId)).thenReturn(EstadoCliente.ACTIVO);
+        saldoCaja("999.00");
+        PrestamoException ex = assertThrows(PrestamoException.class, () -> servicio.contratoPreliminar(asesor,
+                new SolicitudPrestamo(clienteId, new BigDecimal("1000"), 12, null, null, null, null)));
+        assertEquals(Codigo.SALDO_CAJA_INSUFICIENTE, ex.getCodigo());
+        verify(cajaRepo, never()).crearSiNoExiste(any(), any(), any());
+        verify(cajaRepo, never()).bloquearPorAsesor(any());
+        verify(cajaRepo, never()).insertarMovimiento(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void la_primera_vez_la_caja_se_abre_con_50000_como_primer_movimiento() {
+        saldoCaja("0.00");
+        when(cajaRepo.crearSiNoExiste(any(), any(), any())).thenReturn(true);
+        // tras la apertura la caja ya tiene S/ 50,000
+        when(cajaRepo.bloquearPorAsesor(any())).thenReturn(Optional.of(caja)).thenAnswer(i -> {
+            saldoCaja("50000.00");
+            return Optional.of(caja);
+        });
+        registrar("1000", 12, null);
+        verify(cajaRepo).insertarMovimiento(eq(cajaId), eq("APERTURA"), eq("ENTRADA"), eq(new BigDecimal("50000.00")),
+                eq(new BigDecimal("0.00")), eq(new BigDecimal("50000.00")), eq(null), eq(null), eq(null), any(), any(), any());
+        verify(reposRepo).auditar(eq(cajaId), eq(null), any(), eq("CAJA_ABIERTA"), eq(new BigDecimal("50000.00")), any(), any());
     }
 }
