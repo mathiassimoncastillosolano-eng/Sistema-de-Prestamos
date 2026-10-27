@@ -250,6 +250,10 @@ const CODIGOS = new Set<string>([
 
 const MSG_RED = 'No se pudo conectar con el servidor. Revisa tu conexión e inténtalo nuevamente.';
 const MSG_SESION = 'Tu sesión ha expirado. Inicia sesión nuevamente.';
+const MSG_HERMES: Partial<Record<string, string>> = {
+  HERMES_NO_CONFIGURADO: 'Hermes no está configurado en el servidor: todavía no se pueden aprobar reposiciones con código. Avisa al administrador del sistema.',
+  HERMES_NO_DISPONIBLE: 'No se pudo contactar con Hermes para validar el código. Inténtalo en unos minutos.'
+};
 const MSG_GENERICO = 'No se pudo completar la operación. Inténtalo nuevamente.';
 
 function leerCookie(nombre: string): string | null {
@@ -294,7 +298,8 @@ async function enviar(ruta: string, init: { method: 'GET' | 'POST'; body?: unkno
   try {
     const j = (await r.json()) as { codigo?: string; mensaje?: string; detalle?: unknown };
     if (j.codigo && CODIGOS.has(j.codigo)) codigo = j.codigo as CodigoCaja;
-    if (r.status < 500 && typeof j.mensaje === 'string' && j.mensaje) mensaje = j.mensaje;
+    if (MSG_HERMES[codigo]) mensaje = MSG_HERMES[codigo]!;
+    else if (r.status < 500 && typeof j.mensaje === 'string' && j.mensaje) mensaje = j.mensaje;
     if (j.detalle && typeof j.detalle === 'object') detalle = j.detalle as Record<string, unknown>;
   } catch {
     /* cuerpo no JSON */

@@ -180,7 +180,7 @@ Módulo "Solicitud, aprobación, reposición y conciliación de caja". La caja d
 
 - Asesor: **Caja y reposiciones** (saldo, solicitar, recibir, reportar incidencias). Gerencia: **Gestión de reposiciones** y **Supervisión de cajas**.
 - Importes siempre separados: solicitado, autorizado, enviado, recibido, conciliado.
-- Aprobar exige un código Hermes de 8 dígitos verificado en backend (huella HMAC, un solo uso, máx. 5 intentos). Hermes es solo interfaz: sin adaptador real la aprobación responde `HERMES_NO_CONFIGURADO`.
+- Aprobar exige un código Hermes de 8 dígitos verificado en backend (huella HMAC, un solo uso, máx. 5 intentos). **Hermes es simulado de forma permanente** (`HermesSimulado`, activo por defecto): acepta cualquier código de 8 dígitos; `00000000` = inválido y `99999999` = vencido. `HERMES_SIMULADO=false` rechaza toda aprobación.
 - Migración **preparada, no aplicada**: `backend/sql/2026-10-26-caja-y-reposiciones.sql`. Detalle, rollback y matriz de pruebas en `INFORME-CAJA-REPOSICIONES.md`.
 - Pruebas: `./mvnw test` (con `PRUEBA_PG_URL`, `PRUEBA_PG_USER` para las de PostgreSQL), `npm test`, y `psql -f backend/sql/pruebas/caja-integridad.sql` sobre una base limpia.
 - Las notificaciones son por sondeo (60 s), no en tiempo real.

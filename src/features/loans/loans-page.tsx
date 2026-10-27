@@ -5,6 +5,7 @@ import { DataTable } from '@/components/data-display/data-table';
 import { PageHeader } from '@/components/layout/page-header';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
@@ -56,9 +57,7 @@ export default function LoansPage() {
 
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
         <div className="w-full lg:max-w-sm"><Input type="search" aria-label="Buscar préstamos" placeholder="Buscar por código, cliente o documento" prefix={<Search className="size-4" />} value={q} onChange={(e) => setQ(e.target.value)} /></div>
-        <label className="flex min-h-10 cursor-pointer items-center gap-2.5 text-sm text-ink">
-          <input type="checkbox" checked={solo} onChange={(e) => setSolo(e.target.checked)} className="size-4 accent-[var(--teal)]" />Solo mis préstamos
-        </label>
+        <Checkbox checked={solo} onChange={(e) => setSolo(e.target.checked)}>Solo mis préstamos</Checkbox>
       </div>
       <div className="mb-4">
         <Segmented aria-label="Filtrar por estado" size="sm" value={estado} onValueChange={setEstado} options={opciones} className="sm:w-full" />

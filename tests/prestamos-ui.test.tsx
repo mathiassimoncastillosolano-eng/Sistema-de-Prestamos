@@ -305,7 +305,8 @@ describe('Paginación del cronograma', () => {
       expect(within(dialogo).getByRole('button', { name: 'Página siguiente' })).toBeDisabled();
       expect(within(dialogo).getByText('Totales')).toBeInTheDocument(); // los totales siguen siendo los del cronograma completo
 
-      await u.selectOptions(within(dialogo).getByLabelText('Por página'), '30');
+      await u.click(within(dialogo).getByRole('combobox', { name: 'Filas por página' }));
+      await u.click(within(await screen.findByRole('listbox')).getByRole('option', { name: '30' }));
       expect(within(dialogo).getByText('Mostrando cuotas 1–30 de 60')).toBeInTheDocument(); // vuelve a la primera página
       expect(numeros()).toHaveLength(30);
     });

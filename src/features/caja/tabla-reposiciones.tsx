@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { money } from '@/lib/format';
 import type { ReposicionFilaApi } from '@/services/caja-api';
 import { codigoRep, fechaHora } from './caja-utils';
@@ -15,6 +15,7 @@ interface Props {
 
 /** Tabla de reposiciones. Los importes solicitado/autorizado/recibido van en columnas separadas: nunca se mezclan. */
 export function TablaReposiciones({ filas, base, conAsesor, caption }: Props) {
+  const navegar = useNavigate();
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[44rem] text-left text-sm">
@@ -32,7 +33,15 @@ export function TablaReposiciones({ filas, base, conAsesor, caption }: Props) {
         </thead>
         <tbody className="divide-y divide-line">
           {filas.map((f) => (
-            <tr key={f.id} className="hover:bg-surface-2/60">
+            <tr
+              key={f.id}
+              className="cursor-pointer hover:bg-surface-2/60"
+              onClick={(e) => {
+                // El enlace del número ya navega solo (teclado y clic derecho); aquí se hace clicable el resto de la fila.
+                if ((e.target as HTMLElement).closest('a,button')) return;
+                navegar(`${base}/${f.id}`);
+              }}
+            >
               <td className="px-4 py-3">
                 <Link to={`${base}/${f.id}`} className="font-medium text-teal-ink underline-offset-4 hover:underline">{codigoRep(f.numero)}</Link>
                 {f.incidenciasAbiertas > 0 && (

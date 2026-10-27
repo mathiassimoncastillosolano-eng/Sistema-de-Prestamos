@@ -5,7 +5,7 @@
 |---|---|
 | Código backend (`com.nexora.backend.caja`) y frontend (`src/features/caja`) | Implementado |
 | Migración `backend/sql/2026-10-26-caja-y-reposiciones.sql` | **Preparada, NO aplicada a producción** |
-| Adaptador Hermes real | **Pendiente (integración externa)**. Sin él, aprobar responde `HERMES_NO_CONFIGURADO` |
+| Hermes | **Simulado de forma permanente** por decisión del proyecto (`HermesSimulado`, activo por defecto; no hay integración real). Controles de formato, un solo uso, intentos, huella y autorizador distinto sí son reales |
 | Pruebas Java (Spring/Mockito/PostgreSQL) y vitest | **Escritas, NO ejecutadas** (Maven y npm bloqueados en el entorno de desarrollo) |
 | Pruebas SQL de integridad | Ejecutadas: 33/33 OK en base local limpia |
 | Migración idempotente y rollback | Ejecutados solo en base de prueba local |
@@ -20,7 +20,7 @@ Siete tablas nuevas (caja, libro de movimientos, reposiciones, recepciones, inci
 
 Aplicar: ejecutar el `.sql` (idempotente). Revertir: sección de rollback del mismo archivo (verificada solo en base de prueba). **Respaldar antes de aplicar en producción.**
 
-Variables de entorno: `HERMES_HUELLA_SECRETO` (obligatoria al conectar Hermes real).
+Variables de entorno: `HERMES_SIMULADO` (por defecto `true`) y `HERMES_HUELLA_SECRETO` (tiene valor de demostración; cámbialo en producción).
 
 ## 3. Endpoints
 `/api/caja` (resumen, `/movimientos`, `/pendientes`, `/reportes/resumen`, `/reportes/reposiciones.csv`), `/api/reposiciones` (listar, solicitar, `/{id}`, `aprobar`, `rechazar`, `observar`, `responder`, `cancelar`, `despachar`, `recepciones`, `incidencias`, `cerrar-remanente`, `conciliar`, `incidencias/{id}/resolver`), `/api/supervision/cajas`. Registro de préstamo (`POST /api/prestamos`) ahora descuenta de la caja (`SALDO_CAJA_INSUFICIENTE` 422, `CAJA_CERRADA` 409).
@@ -56,5 +56,5 @@ Los escenarios marcados **N** no deben darse por aprobados hasta ejecutar: `./mv
 
 ## 7. Limitaciones
 - Código Java y TSX no compilados ni probados aquí; pueden existir errores de compilación.
-- Hermes no está simulado en el flujo final; solo hay un doble de prueba en tests.
+- Hermes es simulado: el código no se valida contra ningún servicio; no es un control de seguridad real.
 - Sondeo, no tiempo real.

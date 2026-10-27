@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
+import { DatePicker } from '@/components/ui/date-picker';
+import { OtpInput } from '@/components/ui/otp-input';
 import { Input, Textarea } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { NumericInput } from '@/components/ui/numeric-input';
@@ -127,6 +129,7 @@ export function DialogoAprobar({ open, onOpenChange, detalle, onHecho, onRecarga
     // El código se envía una sola vez y se borra de la pantalla pase lo que pase: nunca queda guardado ni se repite.
     const enviado = codigo;
     setCodigo('');
+    setTocado(false);
     void ejecutar(() => cajaApi.aprobar(f.id, { montoAutorizado: monto, justificacion: justificacion.trim() || undefined, codigoHermes: enviado, version: detalle.version }),
       `Reposición ${codigoRep(f.numero)} aprobada`);
   };
@@ -153,8 +156,7 @@ export function DialogoAprobar({ open, onOpenChange, detalle, onHecho, onRecarga
         </Field>
         <Field label="Código Hermes" error={tocado ? errCodigo : undefined}
           hint="Lo emite Hermes para esta autorización. El sistema no lo guarda: solo lo envía a Hermes para verificarlo.">
-          <Input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={CODIGO_HERMES_LARGO} value={codigo}
-            onChange={(e) => setCodigo(e.target.value.replace(/[^0-9]/g, '').slice(0, CODIGO_HERMES_LARGO))} spellCheck={false} />
+          <OtpInput value={codigo} onChange={setCodigo} largo={CODIGO_HERMES_LARGO} aria-label="Código Hermes" />
         </Field>
       </div>
       {error && <Alerta>{error}</Alerta>}
@@ -247,7 +249,7 @@ export function DialogoRecibir({ open, onOpenChange, detalle, onHecho, onRecarga
           <NumericInput value={importe} onValueChange={setImporte} decimals={2} prefix="S/" maxIntegerDigits={9} inputMode="decimal" />
         </Field>
         <Field label="Fecha y hora de recepción" optional hint="Si la dejas vacía se usa el momento del registro.">
-          <Input type="datetime-local" value={cuando} max={ahoraLocalInput()} onChange={(e) => setCuando(e.target.value)} />
+          <DatePicker conHora value={cuando} max={ahoraLocalInput()} onChange={setCuando} placeholder="Elegir fecha y hora" />
         </Field>
         <Field label="Referencia" optional><Input value={referencia} onChange={(e) => setReferencia(e.target.value)} maxLength={LIMITES_TEXTO.referenciaMax} /></Field>
         <Field label="Comentarios" optional><Textarea value={comentarios} onChange={(e) => setComentarios(e.target.value)} rows={2} maxLength={LIMITES_TEXTO.max} /></Field>

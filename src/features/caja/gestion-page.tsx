@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Field } from '@/components/ui/field';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/ui/segmented';
 import { Select } from '@/components/ui/select';
@@ -136,8 +137,8 @@ export default function GestionPage() {
             <Field label="Buscar" hint="Asesor, agencia o REP-0001.">
               <Input value={texto} onChange={(e) => setTexto(e.target.value)} prefix={<Search className="size-4" aria-hidden />} maxLength={80} />
             </Field>
-            <Field label="Desde"><Input type="date" value={desde} onChange={(e) => { setDesde(e.target.value); setPagina(1); }} /></Field>
-            <Field label="Hasta" error={rangoInvalido ? '«Desde» no puede ser posterior a «Hasta».' : undefined}><Input type="date" value={hasta} onChange={(e) => { setHasta(e.target.value); setPagina(1); }} /></Field>
+            <Field label="Desde"><DatePicker value={desde} max={hasta || undefined} onChange={(v) => { setDesde(v); setPagina(1); }} /></Field>
+            <Field label="Hasta" error={rangoInvalido ? '«Desde» no puede ser posterior a «Hasta».' : undefined}><DatePicker value={hasta} min={desde || undefined} onChange={(v) => { setHasta(v); setPagina(1); }} /></Field>
             <Field label="Ordenar por">
               <Select value={orden} onChange={(e) => { setOrden(e.target.value); setPagina(1); }}>
                 <option value="">Prioridad (lo urgente primero)</option>
